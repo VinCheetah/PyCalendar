@@ -1,0 +1,96 @@
+# ============================================================================
+# PyCalendar - Système de Planification Automatique de Matchs
+# ============================================================================
+
+# -----------------------------------------------------------------------------
+# Python
+# -----------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+pip-log.txt
+pip-delete-this-directory.txt
+
+# -----------------------------------------------------------------------------
+# IDE / Éditeurs
+# -----------------------------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+*.sublime-project
+*.sublime-workspace
+
+# -----------------------------------------------------------------------------
+# Données Réelles (à exclure pour confidentialité)
+# -----------------------------------------------------------------------------
+data_volley/
+data_hand/
+!data_volley/.gitkeep
+!data_hand/.gitkeep
+
+# -----------------------------------------------------------------------------
+# Résultats / Fichiers Générés
+# -----------------------------------------------------------------------------
+results/
+solutions/
+test_solutions/
+temp_poules/
+*.log
+orchestration.log
+
+# Fichiers Excel générés
+Calendrier_Genere*.xlsx
+planning_optimise*.xlsx
+matchs_non_planifies*.xlsx
+Matchs_Semaine_*.xlsx
+
+# -----------------------------------------------------------------------------
+# Fichiers Temporaires Excel
+# -----------------------------------------------------------------------------
+~$*.xlsx
+~$*.ods
+.~lock.*
+
+# -----------------------------------------------------------------------------
+# Fichiers de Tests Temporaires
+# -----------------------------------------------------------------------------
+exemple/config_test_erreurs.xlsx
+test_actualiser_display.py
+test_formatage_visuel.py
+
+# -----------------------------------------------------------------------------
+# Environnement Local
+# -----------------------------------------------------------------------------
+.env
+.env.local
+local_config.yaml
+
+# -----------------------------------------------------------------------------
+# Documentation Temporaire
+# -----------------------------------------------------------------------------
+TODO.md
+NOTES_PERSO.md

@@ -1,0 +1,28 @@
+# Configuration PyCalendar - Handball avec CP-SAT
+# ====================================
+# Seules les valeurs différentes des défauts sont spécifiées
+
+# Fichiers
+fichiers:
+  donnees: "data_hand/config_handball.xlsx"
+  sortie: "data_hand/calendrier_handball_cpsat.xlsx"
+
+# Paramètres de planification (seulement valeurs différentes des défauts)
+planification:
+  strategie: "cpsat"  # Défaut: "greedy" - Force l'utilisation de CP-SAT
+
+# Configuration Greedy (fallback)
+greedy:
+  nb_essais: 5        # Défaut: 10 - Réduit pour fallback plus rapide
+
+# Configuration CP-SAT (OR-Tools)
+cpsat:
+  temps_max_secondes: 60    # Défaut: 300 - Limite temps pour tests rapides
+  niveau_log: 0             # Défaut: 1 - Plus de détails dans les logs
+  warm_start: true
+  warm_start_file: "handball"  # Solutions spécifiques au handball
+
+# Poids des contraintes (seulement valeurs différentes des défauts)
+contraintes:
+  poids_capacite_gymnase: 1500.0        # Défaut: 500.0 - Augmenté pour plus d'importance
+  

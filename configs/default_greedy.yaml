@@ -1,0 +1,6 @@
+fichiers:
+  sortie: "exemple/calendrier_greedy.xlsx"
+greedy:
+  nb_essais: 5
+planification:
+  strategie: greedy

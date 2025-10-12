@@ -1,0 +1,10 @@
+cpsat:
+  temps_max_secondes: 600
+fichiers:
+  donnees: data_volley/config_volley.xlsx
+  sortie: data_volley/calendrier_volley_greedy.xlsx
+greedy:
+  nb_essais: 5
+planification:
+  nb_semaines: 10
+  strategie: greedy

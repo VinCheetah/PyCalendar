@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PyCalendar - Calendrier Sportif</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- STYLES_PLACEHOLDER -->
+</head>
+<body>
+    <div class="app-container">
+        <!-- ==================== HEADER ==================== -->
+        <header class="header">
+            <h1 class="header-title">📅 PyCalendar</h1>
+            <p class="header-subtitle">Système de création de calendriers sportifs</p>
+            
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value" id="totalMatches">0</div>
+                    <div class="stat-label">Matchs planifiés</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="totalUnscheduled">0</div>
+                    <div class="stat-label">Non planifiés</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="totalWeeks">0</div>
+                    <div class="stat-label">Semaines</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="totalPools">0</div>
+                    <div class="stat-label">Poules</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="totalVenues">0</div>
+                    <div class="stat-label">Gymnases</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="totalAvailableSlots">0</div>
+                    <div class="stat-label">Créneaux libres</div>
+                </div>
+            </div>
+        </header>
+        
+        <!-- ==================== CONTROLS ==================== -->
+        <section class="controls-section">
+            <!-- Filtres de données -->
+            <div class="control-group">
+                <h3 class="control-group-title">
+                    <span>🔍 Filtres</span>
+                    <button class="btn btn-primary btn-reset btn-reset-compact">🔄</button>
+                    <button class="collapse-btn" id="collapseFilters" title="Replier/Déplier">
+                        <span class="collapse-icon">▼</span>
+                    </button>
+                </h3>
+                <div class="controls-grid collapsible-content" id="filtersContent">
+                    <!-- Genre -->
+                    <div class="control-item">
+                        <label class="control-label">⚧️ Genre</label>
+                        <div class="gender-filter">
+                            <button class="gender-btn active" data-gender="">Tous</button>
+                            <button class="gender-btn male" data-gender="M">♂ Masculin</button>
+                            <button class="gender-btn female" data-gender="F">♀ Féminin</button>
+                        </div>
+                    </div>
+                    
+                    <!-- Semaine -->
+                    <div class="control-item">
+                        <label class="control-label" for="filterWeek">📅 Semaine</label>
+                        <select id="filterWeek">
+                            <option value="">Toutes les semaines</option>
+                        </select>
+                    </div>
+                    
+                    <!-- Gymnase -->
+                    <div class="control-item">
+                        <label class="control-label" for="filterVenue">🏢 Gymnase</label>
+                        <select id="filterVenue">
+                            <option value="">Tous les gymnases</option>
+                        </select>
+                    </div>
+                    
+                    <!-- Poule -->
+                    <div class="control-item">
+                        <label class="control-label" for="filterPool">🎯 Poule</label>
+                        <select id="filterPool">
+                            <option value="">Toutes les poules</option>
+                        </select>
+                    </div>
+                    
+                    <!-- Institution -->
+                    <div class="control-item">
+                        <label class="control-label" for="filterInstitution">🏛️ Institution</label>
+                        <select id="filterInstitution">
+                            <option value="">Toutes les institutions</option>
+                        </select>
+                    </div>
+                    
+                    <!-- Équipe -->
+                    <div class="control-item">
+                        <label class="control-label" for="filterTeam">👥 Équipe</label>
+                        <select id="filterTeam">
+                            <option value="">Toutes les équipes</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Séparateur -->
+            <div class="controls-separator"></div>
+            
+            <!-- Options d'affichage -->
+            <div class="control-group">
+                <h3 class="control-group-title">
+                    <span>⚙️ Affichage</span>
+                    <button class="btn btn-primary btn-reset btn-reset-compact" id="btnResetDisplay">🔄</button>
+                    <button class="collapse-btn" id="collapseOptions" title="Replier/Déplier">
+                        <span class="collapse-icon">▼</span>
+                    </button>
+                </h3>
+                <div class="collapsible-content" id="optionsContent">
+                <div class="display-options">
+                    <div class="toggle-container" id="togglePreferences" data-visible-tabs="calendar,pools,venues,unscheduled">
+                        <div class="toggle-switch"></div>
+                        <span class="toggle-label">⏰ Horaires préférés</span>
+                    </div>
+                    <div class="toggle-container" id="toggleInstitutions" data-visible-tabs="calendar,pools,venues,unscheduled">
+                        <div class="toggle-switch"></div>
+                        <span class="toggle-label">🏛️ Institutions</span>
+                    </div>
+                    <div class="toggle-container" id="toggleGenreBadges" data-visible-tabs="calendar,pools,venues,unscheduled">
+                        <div class="toggle-switch"></div>
+                        <span class="toggle-label">⚧️ Badges genre</span>
+                    </div>
+                    <div class="toggle-container" id="toggleAvailableSlots" data-visible-tabs="grid">
+                        <div class="toggle-switch"></div>
+                        <span class="toggle-label">📅 Créneaux libres</span>
+                    </div>
+                </div>
+                
+                <!-- Contrôles compacts -->
+                <div class="compact-controls">
+                    <!-- Colonnes pour les vues en liste -->
+                    <div class="compact-control" id="zoomCardControl" data-visible-tabs="calendar,pools,venues,unscheduled">
+                        <button class="compact-btn" id="zoomCardOut" title="Moins de colonnes">−</button>
+                        <span class="compact-value" id="zoomCardValue">3 colonnes</span>
+                        <button class="compact-btn" id="zoomCardIn" title="Plus de colonnes">+</button>
+                    </div>
+                    
+                    <!-- Granularité pour la vue grille -->
+                    <div class="compact-control" id="zoomGridControl" data-visible-tabs="grid">
+                        <button class="compact-btn" id="zoomGridOut" title="Moins détaillé">−</button>
+                        <span class="compact-value" id="zoomGridValue">60min</span>
+                        <button class="compact-btn" id="zoomGridIn" title="Plus détaillé">+</button>
+                    </div>
+                </div>
+                </div>
+            </div>
+        </section>
+        
+        <!-- ==================== FILTER INFO ==================== -->
+        <div id="filterInfo" class="filter-info"></div>
+        
+        <!-- ==================== CONTENT ==================== -->
+        <main class="content-section">
+            <!-- TABS -->
+            <nav class="tabs-nav">
+                <button class="tab-btn active" data-tab="grid">&#x1F4CA; Calendrier</button>
+                <button class="tab-btn" data-tab="calendar">&#x1F4C5; Par semaines</button>
+                <button class="tab-btn" data-tab="pools">&#x1F3AF; Par Poule</button>
+                <button class="tab-btn" data-tab="venues">&#x1F3E2; Par Gymnase</button>
+                <button class="tab-btn" data-tab="penalized">&#x1F4B0; Matchs Pénalisés</button>
+                <button class="tab-btn" data-tab="unscheduled" id="unscheduledTab">&#x26A0;&#xFE0F; Non Planifiés</button>
+            </nav>
+            
+            <!-- TAB CONTENTS -->
+            <div id="gridContent" class="tab-content active"></div>
+            <div id="calendarContent" class="tab-content"></div>
+            <div id="poolsContent" class="tab-content"></div>
+            <div id="venuesContent" class="tab-content"></div>
+            <div id="penalizedContent" class="tab-content"></div>
+            <div id="unscheduledContent" class="tab-content"></div>
+        </main>
+    </div>
+    
+    <!-- SCRIPTS -->
+    <!-- SCRIPTS_PLACEHOLDER -->
+    
+    <script>
+        // ==================== DONNÉES ====================
+        const matchsData = {{MATCHES_DATA}};
+        const unscheduledData = {{UNSCHEDULED_DATA}};
+        const availableSlotsData = {{AVAILABLE_SLOTS_DATA}};
+        
+        // Rendre accessible globalement
+        window.matchsData = matchsData;
+        window.unscheduledData = unscheduledData;
+        window.availableSlotsData = availableSlotsData;
+        
+        // ==================== INITIALISATION ====================
+        class PyCalendarApp {
+            constructor() {
+                this.filterManager = new FilterManager();
+                this.calendarGridView = new CalendarGridView();
+                this.currentTab = 'grid';
+            }
+            
+            init() {
+                console.log('🚀 Initialisation PyCalendar Pro V2');
+                console.log('  Matchs planifiés:', matchsData.length);
+                console.log('  Matchs non planifiés:', unscheduledData.length);
+                console.log('  Créneaux disponibles:', availableSlotsData.length);
+                
+                const stats = Utils.calculateStats(matchsData);
+                
+                // Update header stats
+                document.getElementById('totalMatches').textContent = stats.totalMatches;
+                document.getElementById('totalUnscheduled').textContent = unscheduledData.length;
+                document.getElementById('totalWeeks').textContent = stats.totalWeeks;
+                document.getElementById('totalPools').textContent = stats.totalPools;
+                document.getElementById('totalVenues').textContent = stats.totalVenues;
+                document.getElementById('totalAvailableSlots').textContent = availableSlotsData.length;
+                
+                // Update unscheduled tab
+                if (unscheduledData.length > 0) {
+                    document.getElementById('unscheduledTab').textContent = `⚠️ Non Planifiés (${unscheduledData.length})`;
+                }
+                
+                // Initialize filter manager
+                this.filterManager.initializeUI(stats);
+                
+                // Listen to filter changes
+                this.filterManager.onChange((filters, preferences) => {
+                    this.render(filters, preferences);
+                });
+                
+                // Setup tabs
+                this.setupTabs();
+                
+                // Update display options visibility for initial tab
+                this.filterManager.updateDisplayOptionsVisibility(this.currentTab);
+                
+                // Initial render
+                this.render(this.filterManager.filters, this.filterManager.preferences);
+                
+                console.log('✅ Initialisation terminée');
+            }
+            
+            setupTabs() {
+                const tabs = document.querySelectorAll('.tab-btn');
+                tabs.forEach(tab => {
+                    tab.addEventListener('click', () => {
+                        // Remove active
+                        tabs.forEach(t => t.classList.remove('active'));
+                        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                        
+                        // Add active
+                        tab.classList.add('active');
+                        this.currentTab = tab.dataset.tab;
+                        const contentId = tab.dataset.tab + 'Content';
+                        document.getElementById(contentId).classList.add('active');
+                        
+                        // Update display options visibility based on active tab
+                        this.filterManager.updateDisplayOptionsVisibility(this.currentTab);
+                        
+                        // Re-render current tab
+                        this.render(this.filterManager.filters, this.filterManager.preferences);
+                    });
+                });
+            }
+            
+            render(filters, preferences) {
+                const filtered = this.filterManager.getFilteredMatches(matchsData);
+                const unscheduledFiltered = this.filterManager.getFilteredUnscheduled(unscheduledData);
+                
+                // Update filter info
+                CalendarView.updateFilterInfo(filtered, unscheduledFiltered, filters);
+                
+                // Render based on current tab
+                switch (this.currentTab) {
+                    case 'calendar':
+                        // Vue calendrier originale (par semaine avec cartes)
+                        CalendarView.renderByWeek(filtered, filters, preferences);
+                        break;
+                    case 'grid':
+                        // Nouvelle vue grille type Google Calendar
+                        // IMPORTANT: Utiliser matchsData (tous les matchs) et non filtered
+                        // Car la vue grille gère elle-même le filtrage par semaine
+                        const container = document.getElementById('gridContent');
+                        console.log('🔄 Render grid - Tab actif:', this.currentTab);
+                        console.log('  Total matchs:', matchsData.length);
+                        console.log('  Container:', container);
+                        this.calendarGridView.render(container, matchsData, availableSlotsData, filters, preferences);
+                        break;
+                    case 'pools':
+                        CalendarView.renderByPool(filtered, filters, preferences);
+                        break;
+                    case 'venues':
+                        CalendarView.renderByVenue(filtered, filters, preferences);
+                        break;
+                    case 'penalized':
+                        PenaltiesView.render(filtered, filters, preferences);
+                        break;
+                    case 'unscheduled':
+                        CalendarView.renderUnscheduled(unscheduledFiltered, filters, preferences);
+                        break;
+                }
+            }
+        }
+        
+        // ==================== LANCEMENT ====================
+        const app = new PyCalendarApp();
+        
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => app.init());
+        } else {
+            app.init();
+        }
+    </script>
+</body>
+</html>
