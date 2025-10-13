@@ -1,0 +1,610 @@
+# Prompt 1.4 : Schémas Pydantic pour l'API# Prompt 1.4 : Schémas Pydantic pour l'API
+
+
+
+## Contexte global## Contexte global
+
+PyCalendar V2 expose une API REST pour la gestion des projets, équipes, gymnases et matchs. Les schémas Pydantic assurent la validation des données entrantes et la sérialisation des réponses, en cohérence avec les modèles SQLAlchemy.PyCalendar V2 expose une API REST pour la gestion des projets, équipes, gymnases et matchs. Les schémas Pydantic assurent la validation des données entrantes et la sérialisation des réponses, en cohérence avec les modèles SQLAlchemy.
+
+
+
+**RAPPEL - Double configuration** :## Contexte technique
+
+- **Fichier YAML** : Hyperparamètres (chargé par `core/config.py`)Cette tâche concerne la définition des schémas Pydantic pour chaque entité (Match, Project, Team, Venue), en respectant le pattern Base/Create/Update/Response et en assurant la correspondance avec les modèles de base de données.
+
+- **Fichier Excel** : Données détaillées avec feuilles Equipes, Gymnases, etc. (chargé par `core/config_manager.py`)
+
+- **Base de données** : Stocke les données importées depuis YAML+Excel, puis évolue indépendamment## Résumé du travail précédent
+
+- Les modèles SQLAlchemy sont en place (`backend/database/models.py`) avec toutes les relations.
+
+## Contexte technique- Le modèle métier (`core/models.py`) définit la logique des matchs.
+
+Cette tâche définit les schémas Pydantic pour chaque entité (Match, Project, Team, Venue), en respectant le pattern Base/Create/Update/Response et en assurant la correspondance avec les modèles SQLAlchemy créés en Tâche 1.3.- Les besoins d'échange de données via API REST sont identifiés.
+
+
+
+## Résumé du travail précédent## Objectifs
+
+- Les modèles SQLAlchemy sont en place (`backend/database/models.py`) avec toutes les relations - Tâche 1.3- Définir des schémas Pydantic clairs et complets pour chaque entité.
+
+- Le model Project stocke les chemins et données des configs YAML+Excel- S'assurer de la cohérence entre schémas, modèles SQLAlchemy et logique métier.
+
+- Le modèle métier (`core/models.py`) définit la logique des matchs avec champs enrichis - Tâche 1.1- Prévoir l'extensibilité des schémas pour de futurs champs.
+
+- Les besoins d'échange de données via API REST sont identifiés
+
+## Détails techniques
+
+## Objectifs
+
+1. Définir des schémas Pydantic clairs et complets pour chaque entité### Sous-tâche 1 : Schemas Match
+
+2. Assurer la correspondance exacte avec les modèles SQLAlchemy (Tâche 1.3)**Fichier à créer** : `backend/schemas/match.py`
+
+3. Supporter la double configuration (YAML + Excel) dans les schémas
+
+4. Prévoir l'extensibilité des schémas pour de futurs champs**Schémas requis** :
+
+
+
+## Détails techniques1. **MatchBase** (BaseModel Pydantic) :
+
+   - Champs : equipe1_nom, equipe1_institution, equipe1_genre, equipe2_nom, equipe2_institution, equipe2_genre
+
+### Sous-tâche 1.4.1 : Schemas Match   - poule, semaine (Optional[int]), horaire (Optional[str]), gymnase (Optional[str])
+
+   - est_fixe (bool = False), statut (str = "a_planifier"), priorite (int = 0)
+
+**📁 Fichier à créer** : `backend/schemas/match.py`   - Valeurs par défaut identiques au model DB
+
+
+
+**Imports requis** :2. **MatchCreate** (hérite MatchBase) :
+
+```python   - Ajouter : `project_id: int`
+
+from pydantic import BaseModel, ConfigDict
+
+from typing import Optional3. **MatchUpdate** (BaseModel) :
+
+from datetime import datetime   - Tous champs optionnels : semaine, horaire, gymnase, est_fixe, statut, priorite, score_equipe1, score_equipe2, notes
+
+```   - Permet updates partiels
+
+
+
+**Schémas requis** :4. **MatchResponse** (hérite MatchBase) :
+
+   - Ajouter : id, project_id, score_equipe1, score_equipe2, notes, created_at, updated_at
+
+**1. MatchBase** (schéma de base commun) :   - Config : `from_attributes = True` (pour conversion depuis ORM)
+
+```python
+
+class MatchBase(BaseModel):5. **MatchMove** (BaseModel) :
+
+    # Équipes (dénormalisées - depuis modèle DB)   - Champs : semaine (int), horaire (str), gymnase (str)
+
+    equipe1_nom: str   - Pour endpoint de déplacement drag & drop
+
+    equipe1_institution: Optional[str] = None
+
+    equipe1_genre: Optional[str] = None### Sous-tâche 2 : Schemas Project
+
+    **Fichier à créer** : `backend/schemas/project.py`
+
+    equipe2_nom: str
+
+    equipe2_institution: Optional[str] = None**Schémas requis** :
+
+    equipe2_genre: Optional[str] = None- **ProjectBase** : nom, sport, config_yaml_path (Optional), nb_semaines (int = 26), semaine_min (int = 1)
+
+    - **ProjectCreate** (hérite ProjectBase)
+
+    # Poule- **ProjectUpdate** : tous champs optionnels
+
+    poule: Optional[str] = None- **ProjectResponse** : ajouter id, config_data (Optional), created_at, updated_at, avec `from_attributes = True`
+
+    
+
+    # Créneau (optionnel si non planifié)### Sous-tâche 3 : Schemas Team
+
+    semaine: Optional[int] = None**Fichier à créer** : `backend/schemas/team.py`
+
+    horaire: Optional[str] = None
+
+    gymnase: Optional[str] = None**Schémas requis** :
+
+    - **TeamBase** : nom, institution, numero_equipe (Optional), genre, poule, horaires_preferes (List[str]), lieux_preferes (List[str])
+
+    # État (valeurs par défaut identiques au model DB)- **TeamCreate** : ajouter project_id
+
+    est_fixe: bool = False- **TeamUpdate** : tous champs optionnels
+
+    statut: str = "a_planifier"- **TeamResponse** : ajouter id, project_id, created_at, avec `from_attributes = True`
+
+    priorite: int = 0
+
+```### Sous-tâche 4 : Schemas Venue
+
+**Fichier à créer** : `backend/schemas/venue.py`
+
+**2. MatchCreate** (création d'un match) :
+
+```python**Schémas requis** :
+
+class MatchCreate(MatchBase):- **VenueBase** : nom, capacite (int = 1), horaires_disponibles (List[str])
+
+    project_id: int  # Référence au projet- **VenueCreate** : ajouter project_id
+
+```- **VenueUpdate** : tous champs optionnels
+
+- **VenueResponse** : ajouter id, project_id, created_at, avec `from_attributes = True`
+
+**3. MatchUpdate** (mise à jour partielle) :
+
+```python### Consignes d'organisation
+
+class MatchUpdate(BaseModel):- Utiliser `Optional[T]` pour champs nullables
+
+    # Tous champs optionnels pour updates partiels- Import `datetime` pour typage timestamps
+
+    semaine: Optional[int] = None- Import `List` de `typing` pour listes
+
+    horaire: Optional[str] = None- Config `from_attributes = True` nécessaire pour réponses ORM
+
+    gymnase: Optional[str] = None- Valider la correspondance avec les modèles SQLAlchemy
+
+    est_fixe: Optional[bool] = None
+
+    statut: Optional[str] = None### Impact et liens
+
+    priorite: Optional[int] = None- Les routes API (`backend/api/routes/`) utiliseront ces schémas pour validation/sérialisation.
+
+    score_equipe1: Optional[int] = None- Les modèles SQLAlchemy (`backend/database/models.py`) seront convertis via `from_attributes`.
+
+    score_equipe2: Optional[int] = None- Le service de synchronisation (`backend/services/sync_service.py`) créera des instances compatibles.
+
+    notes: Optional[str] = None
+
+```## À faire/vérifier
+
+- Proposer la structure de chaque schéma (Base, Create, Update, Response)
+
+**4. MatchResponse** (réponse API) :- Vérifier la correspondance avec les modèles SQLAlchemy
+
+```python- S'assurer que la validation est stricte mais extensible
+
+class MatchResponse(MatchBase):- Tester la sérialisation : `MatchResponse.model_validate(match_orm_instance)`
+
+    id: int
+
+    project_id: int## Questions
+
+    Poser des questions si des points sur la structure, la validation ou la correspondance avec les modèles ne sont pas clairs.
+
+    # Scores et notes (ajoutés Tâche 1.1)
+
+    score_equipe1: Optional[int] = None## Documentation
+
+    score_equipe2: Optional[int] = NoneRester concis, ne pas ajouter de documentation excessive. Commenter brièvement les schémas si besoin pour clarifier leur usage.
+
+    notes: Optional[str] = None
+    
+    # Timestamps
+    created_at: datetime
+    updated_at: datetime
+    
+    model_config = ConfigDict(from_attributes=True)  # Pour conversion ORM → Pydantic
+```
+
+**5. MatchMove** (déplacement drag & drop) :
+```python
+class MatchMove(BaseModel):
+    semaine: int
+    horaire: str
+    gymnase: str
+```
+
+**Points clés** :
+- `from_attributes=True` (Pydantic V2) permet conversion directe depuis modèle SQLAlchemy
+- Valeurs par défaut identiques au modèle DB (cohérence)
+- `MatchUpdate` : tous champs optionnels pour PATCH partiel
+
+---
+
+### Sous-tâche 1.4.2 : Schemas Project
+
+**📁 Fichier à créer** : `backend/schemas/project.py`
+
+**Imports requis** :
+```python
+from pydantic import BaseModel, ConfigDict
+from typing import Optional, Dict, Any
+from datetime import datetime
+```
+
+**Schémas requis** :
+
+**1. ProjectBase** :
+```python
+class ProjectBase(BaseModel):
+    nom: str
+    sport: str
+    
+    # Chemins des fichiers de configuration (optionnels)
+    config_yaml_path: Optional[str] = None
+    config_excel_path: Optional[str] = None
+    
+    # Paramètres planification (depuis YAML)
+    nb_semaines: int = 26
+    semaine_min: int = 1  # De "semaine_minimum" dans YAML
+```
+
+**2. ProjectCreate** :
+```python
+class ProjectCreate(ProjectBase):
+    # Données complètes optionnelles (JSON)
+    config_yaml_data: Optional[Dict[str, Any]] = None
+    config_excel_data: Optional[Dict[str, Any]] = None
+```
+
+**3. ProjectUpdate** :
+```python
+class ProjectUpdate(BaseModel):
+    # Tous champs optionnels pour updates partiels
+    nom: Optional[str] = None
+    sport: Optional[str] = None
+    config_yaml_path: Optional[str] = None
+    config_excel_path: Optional[str] = None
+    config_yaml_data: Optional[Dict[str, Any]] = None
+    config_excel_data: Optional[Dict[str, Any]] = None
+    nb_semaines: Optional[int] = None
+    semaine_min: Optional[int] = None
+```
+
+**4. ProjectResponse** :
+```python
+class ProjectResponse(ProjectBase):
+    id: int
+    
+    # Données JSON (optionnelles)
+    config_yaml_data: Optional[Dict[str, Any]] = None
+    config_excel_data: Optional[Dict[str, Any]] = None
+    
+    # Timestamps
+    created_at: datetime
+    updated_at: datetime
+    
+    model_config = ConfigDict(from_attributes=True)
+```
+
+**5. ProjectStats** (statistiques) :
+```python
+class ProjectStats(BaseModel):
+    """Statistiques d'un projet"""
+    nb_matchs_total: int
+    nb_matchs_planifies: int
+    nb_matchs_fixes: int
+    nb_matchs_a_planifier: int
+    nb_equipes: int
+    nb_gymnases: int
+```
+
+**Points clés** :
+- `config_yaml_data` et `config_excel_data` : Stockage JSON complet des configurations
+- `semaine_min` : Reproduit `semaine_minimum` du YAML (cohérence avec DB)
+- `ProjectStats` : Schéma spécifique pour endpoint statistiques
+
+---
+
+### Sous-tâche 1.4.3 : Schemas Team
+
+**📁 Fichier à créer** : `backend/schemas/team.py`
+
+**Imports requis** :
+```python
+from pydantic import BaseModel, ConfigDict
+from typing import Optional, List
+from datetime import datetime
+```
+
+**Schémas requis** :
+
+**1. TeamBase** :
+```python
+class TeamBase(BaseModel):
+    # Informations équipe (depuis feuille Excel "Equipes")
+    nom: str
+    institution: Optional[str] = None
+    numero_equipe: Optional[str] = None
+    genre: Optional[str] = None
+    poule: Optional[str] = None
+    
+    # Préférences (depuis Excel ou calculées)
+    horaires_preferes: Optional[List[str]] = None  # Depuis "Horaire_Prefere"
+    lieux_preferes: Optional[List[str]] = None     # Depuis feuille "Preferences_Gymnases"
+```
+
+**2. TeamCreate** :
+```python
+class TeamCreate(TeamBase):
+    project_id: int
+```
+
+**3. TeamUpdate** :
+```python
+class TeamUpdate(BaseModel):
+    # Tous champs optionnels
+    nom: Optional[str] = None
+    institution: Optional[str] = None
+    numero_equipe: Optional[str] = None
+    genre: Optional[str] = None
+    poule: Optional[str] = None
+    horaires_preferes: Optional[List[str]] = None
+    lieux_preferes: Optional[List[str]] = None
+```
+
+**4. TeamResponse** :
+```python
+class TeamResponse(TeamBase):
+    id: int
+    project_id: int
+    created_at: datetime
+    
+    model_config = ConfigDict(from_attributes=True)
+```
+
+**Points clés** :
+- Source Excel documentée en commentaires (Equipes, Preferences_Gymnases)
+- Listes JSON pour horaires_preferes et lieux_preferes
+
+---
+
+### Sous-tâche 1.4.4 : Schemas Venue
+
+**📁 Fichier à créer** : `backend/schemas/venue.py`
+
+**Imports requis** :
+```python
+from pydantic import BaseModel, ConfigDict
+from typing import Optional, List
+from datetime import datetime
+```
+
+**Schémas requis** :
+
+**1. VenueBase** :
+```python
+class VenueBase(BaseModel):
+    # Informations gymnase (depuis feuille Excel "Gymnases")
+    nom: str
+    capacite: int = 1  # Nombre de terrains simultanés
+    
+    # Disponibilités (depuis colonnes horaires du Excel)
+    horaires_disponibles: Optional[List[str]] = None
+```
+
+**2. VenueCreate** :
+```python
+class VenueCreate(VenueBase):
+    project_id: int
+```
+
+**3. VenueUpdate** :
+```python
+class VenueUpdate(BaseModel):
+    # Tous champs optionnels
+    nom: Optional[str] = None
+    capacite: Optional[int] = None
+    horaires_disponibles: Optional[List[str]] = None
+```
+
+**4. VenueResponse** :
+```python
+class VenueResponse(VenueBase):
+    id: int
+    project_id: int
+    created_at: datetime
+    
+    model_config = ConfigDict(from_attributes=True)
+```
+
+**Points clés** :
+- Source Excel documentée (feuille Gymnases)
+- `capacite` : Nombre de matchs simultanés possibles
+
+---
+
+### Consignes d'organisation
+
+**Pattern commun pour tous les schémas** :
+1. **Base** : Champs communs create/response
+2. **Create** : Base + project_id (+ données optionnelles pour Project)
+3. **Update** : Tous champs optionnels (PATCH partiel)
+4. **Response** : Base + id, timestamps, `from_attributes=True`
+
+**Imports** :
+- `Optional[T]` pour champs nullables
+- `List[T]` pour listes (horaires, préférences)
+- `Dict[str, Any]` pour JSON (config_data)
+- `datetime` pour timestamps
+- `ConfigDict(from_attributes=True)` pour conversion ORM
+
+**Validation** :
+- Pydantic valide automatiquement les types
+- Utiliser `Field()` si validation personnalisée nécessaire (ex: `semaine_min >= 1`)
+
+---
+
+### Impact et liens avec autres modules
+
+**Utilisation par les routes API** (Tâche 1.5) :
+```python
+# backend/api/routes/matches.py
+from backend.schemas.match import MatchCreate, MatchUpdate, MatchResponse
+
+@router.post("/", response_model=MatchResponse, status_code=201)
+def create_match(match: MatchCreate, db: Session = Depends(get_db)):
+    # Validation automatique par Pydantic
+    db_match = Match(**match.model_dump())
+    # ...
+```
+
+**Conversion ORM → Pydantic** (automatique avec `from_attributes`) :
+```python
+# backend/api/routes/matches.py
+@router.get("/{match_id}", response_model=MatchResponse)
+def get_match(match_id: int, db: Session = Depends(get_db)):
+    match = db.query(Match).filter(Match.id == match_id).first()
+    return match  # Conversion automatique Match (ORM) → MatchResponse (Pydantic)
+```
+
+**Utilisation par le service de sync** (Tâche 1.6) :
+```python
+# backend/services/sync_service.py
+from backend.schemas.project import ProjectCreate
+
+def import_from_excel(yaml_path: str, excel_path: str) -> int:
+    # Créer projet avec schéma
+    project_data = ProjectCreate(
+        nom="Volley 2025",
+        sport="Volley",
+        config_yaml_path=yaml_path,
+        config_excel_path=excel_path,
+        config_yaml_data=yaml_content,
+        nb_semaines=26,
+        semaine_min=1
+    )
+    # ...
+```
+
+---
+
+## À faire/vérifier
+
+**Checklist de développement** :
+
+1. ✅ Créer `backend/schemas/match.py` avec 5 schémas (Base, Create, Update, Response, Move)
+2. ✅ Créer `backend/schemas/project.py` avec 5 schémas (Base, Create, Update, Response, Stats)
+3. ✅ Créer `backend/schemas/team.py` avec 4 schémas (Base, Create, Update, Response)
+4. ✅ Créer `backend/schemas/venue.py` avec 4 schémas (Base, Create, Update, Response)
+5. ✅ Vérifier correspondance exacte avec modèles SQLAlchemy (Tâche 1.3)
+6. ✅ Documenter sources Excel en commentaires (Equipes, Gymnases, Preferences_Gymnases)
+
+**Checklist de validation** :
+
+1. ✅ Importer les schémas sans erreur :
+   ```python
+   from backend.schemas.match import MatchCreate, MatchUpdate, MatchResponse, MatchMove
+   from backend.schemas.project import ProjectCreate, ProjectResponse, ProjectStats
+   from backend.schemas.team import TeamCreate, TeamResponse
+   from backend.schemas.venue import VenueCreate, VenueResponse
+   ```
+
+2. ✅ Tester la validation Pydantic :
+   ```python
+   from backend.schemas.match import MatchCreate
+   
+   # Valide
+   match_data = MatchCreate(
+       project_id=1,
+       equipe1_nom="Equipe A",
+       equipe2_nom="Equipe B",
+       poule="Poule 1"
+   )
+   assert match_data.est_fixe == False
+   assert match_data.statut == "a_planifier"
+   
+   # Invalide (manque equipe1_nom)
+   try:
+       MatchCreate(project_id=1, equipe2_nom="B")
+   except ValidationError:
+       print("Validation OK : equipe1_nom requis")
+   ```
+
+3. ✅ Tester la conversion ORM → Pydantic :
+   ```python
+   from backend.database.models import Match
+   from backend.schemas.match import MatchResponse
+   
+   # Créer un match ORM
+   match_orm = Match(
+       id=1,
+       project_id=1,
+       equipe1_nom="A",
+       equipe2_nom="B",
+       poule="P1",
+       semaine=5,
+       created_at=datetime.utcnow(),
+       updated_at=datetime.utcnow()
+   )
+   
+   # Conversion automatique
+   match_response = MatchResponse.model_validate(match_orm)
+   assert match_response.id == 1
+   assert match_response.semaine == 5
+   ```
+
+4. ✅ Tester les updates partiels :
+   ```python
+   from backend.schemas.match import MatchUpdate
+   
+   # Update partiel (seulement semaine et horaire)
+   update_data = MatchUpdate(semaine=10, horaire="Mercredi 14h")
+   update_dict = update_data.model_dump(exclude_unset=True)
+   assert update_dict == {"semaine": 10, "horaire": "Mercredi 14h"}
+   ```
+
+**Commandes de test** :
+```bash
+# Vérifier imports
+python -c "from backend.schemas import match, project, team, venue; print('✅ Tous les schémas importés')"
+
+# Tester validation
+python -c "
+from backend.schemas.match import MatchCreate
+m = MatchCreate(project_id=1, equipe1_nom='A', equipe2_nom='B', poule='P1')
+print(f'Match créé : {m.equipe1_nom} vs {m.equipe2_nom}')
+"
+```
+
+---
+
+## Questions
+
+**Questions critiques à poser si quelque chose n'est pas clair** :
+
+1. **Validation des valeurs** :
+   - Faut-il valider les valeurs de `statut` (ex: enum avec ["a_planifier", "planifie", "fixe", "termine", "annule"]) ?
+   - Faut-il valider `semaine_min <= nb_semaines` dans ProjectCreate ?
+   - Faut-il valider `capacite >= 1` dans VenueCreate ?
+
+2. **Correspondance DB** :
+   - Les noms de champs correspondent-ils exactement aux colonnes SQLAlchemy ?
+   - Le nom `semaine_min` (schema) vs `semaine_minimum` (YAML) est-il OK ?
+
+3. **Données JSON** :
+   - Quel format exact pour `config_yaml_data` et `config_excel_data` ?
+   - Faut-il définir des sous-schémas pour ces JSON ou laisser Dict[str, Any] ?
+
+4. **Listes vides** :
+   - `horaires_preferes: Optional[List[str]] = None` ou `List[str] = []` (liste vide par défaut) ?
+   - Même question pour `lieux_preferes` et `horaires_disponibles` ?
+
+5. **ProjectStats** :
+   - Quels autres champs statistiques seraient utiles ?
+   - Faut-il ajouter des pourcentages (ex: `pct_planifies = nb_planifies / nb_total`) ?
+
+---
+
+## Documentation
+
+Rester concis : documenter uniquement les choix non évidents :
+- **Source des données** : Commentaires indiquant quelle feuille Excel (ex: `# Depuis feuille "Equipes"`)
+- **Conversion ORM** : Expliquer `from_attributes=True` une fois (permet Match ORM → MatchResponse)
+- **Updates partiels** : Expliquer pourquoi tous champs optionnels dans Update (PATCH partiel)
+- **Pattern Base/Create/Update/Response** : Documenter une fois la logique commune
+
+Éviter la sur-documentation des concepts Pydantic standards.

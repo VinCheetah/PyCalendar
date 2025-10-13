@@ -1,0 +1,947 @@
+# Prompt 2.4 : Hooks React Query# Prompt 2.4 : Hooks React Query
+
+
+
+## Contexte global## Contexte global
+
+PyCalendar V2 utilise React Query (@tanstack/react-query) pour gérer l'état serveur, le cache et les mutations. Les hooks doivent encapsuler les appels API Axios et fournir une interface simple aux composants.PyCalendar V2 doit permettre une gestion efficace des états et des requêtes côté frontend. React Query (TanStack Query) facilite la synchronisation des données avec le backend, la gestion du cache, et l'invalidation automatique après mutations.
+
+
+
+**RAPPEL - Double configuration** :## Contexte technique
+
+- **useProject(id)** : Retourne config_yaml_data et config_excel_dataCette tâche concerne la création de hooks personnalisés utilisant React Query pour interagir avec l'API (récupération, mutation, invalidation du cache).
+
+- **useProjects()** : Liste projets avec configs
+
+- **useProjectStats(id)** : Statistiques (nb_equipes, nb_matchs, taux_planification)## Résumé du travail précédent
+
+- Le client Axios est en place avec tous les endpoints (`frontend/src/api/`).
+
+## Contexte technique- Les types TypeScript sont définis (`frontend/src/types/`).
+
+Cette tâche crée des custom hooks React Query pour tous les endpoints API. Ces hooks géreront automatiquement le cache, le refetch, les erreurs et les mutations.- Le projet React est configuré avec React Query installé.
+
+
+
+## Résumé du travail précédent## Objectifs
+
+- API clients Axios typés créés (Tâche 2.3)- Définir des hooks React Query clairs et extensibles pour chaque opération principale.
+
+- Types TypeScript complets (Tâche 2.2)- S'assurer de la gestion correcte du cache, des erreurs et de l'invalidation.
+
+- React Query configuré dans main.tsx (Tâche 2.1)- Prévoir l'ajout de nouveaux hooks pour de futures fonctionnalités.
+
+
+
+## Objectifs## Détails techniques
+
+1. Créer hooks useQuery pour lecture (GET)
+
+2. Créer hooks useMutation pour écriture (POST, PUT, DELETE)### Fichier principal : Hooks Matches
+
+3. Gérer invalidation de cache automatique**Créer** : `frontend/src/hooks/useMatches.ts`
+
+4. Fournir états loading, error, data
+
+5. Documenter usage et exemples**Imports requis** :
+
+```typescript
+
+## Détails techniquesimport { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+
+import { matchesApi } from '@/api'
+
+### Hooks Projectsimport type { Match, MatchCreate, MatchUpdate, MatchMove } from '@/types'
+
+```
+
+**📁 Fichier à créer** : `frontend/src/hooks/useProjects.ts`
+
+**Hooks requis** :
+
+**Contenu complet** :
+
+1. **useMatches(projectId?: number)** :
+
+```typescript   - Utiliser `useQuery` de TanStack Query
+
+/**   - `queryKey`: `['matches', projectId]` (clé unique par projet)
+
+ * Hooks React Query pour les projets.   - `queryFn`: `() => matchesApi.list(projectId)`
+
+ */   - `enabled`: `!!projectId` (ne query que si projectId fourni)
+
+   - Retourner l'objet useQuery complet (data, isLoading, error, etc.)
+
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+
+import { projectsApi } from '@services'2. **useMatch(id: number)** :
+
+import type { Project, ProjectCreate, ProjectStats } from '@types'   - `queryKey`: `['matches', id]`
+
+   - `queryFn`: `() => matchesApi.get(id)`
+
+// ============================================   - Pour afficher les détails d'un match
+
+// Query Keys
+
+// ============================================3. **useCreateMatch()** :
+
+   - Utiliser `useMutation`
+
+export const projectKeys = {   - `mutationFn`: `(match: MatchCreate) => matchesApi.create(match)`
+
+  all: ['projects'] as const,   - `onSuccess`: invalider `['matches']` pour rafraîchir la liste
+
+  lists: () => [...projectKeys.all, 'list'] as const,   - Retourner l'objet useMutation (mutate, mutateAsync, etc.)
+
+  list: (filters?: Record<string, unknown>) => [...projectKeys.lists(), filters] as const,
+
+  details: () => [...projectKeys.all, 'detail'] as const,4. **useUpdateMatch()** :
+
+  detail: (id: number) => [...projectKeys.details(), id] as const,   - `mutationFn`: `({ id, data }: { id: number, data: MatchUpdate }) => matchesApi.update(id, data)`
+
+  stats: (id: number) => [...projectKeys.all, 'stats', id] as const,   - `onSuccess`: invalider queries `['matches']` et `['matches', id]`
+
+}
+
+5. **useMoveMatch()** :
+
+// ============================================   - `mutationFn`: `({ id, creneau }: { id: number, creneau: MatchMove }) => matchesApi.move(id, creneau)`
+
+// Queries (GET)   - `onSuccess`: 
+
+// ============================================     - Invalider `['matches']` (rafraîchit liste complète)
+
+     - Invalider `['matches', id]` (rafraîchit détail match)
+
+/**   - Gérer erreur spécifique (match fixé) dans `onError`
+
+ * Hook pour lister tous les projets.
+
+ * 6. **useFixMatch()** :
+
+ * Usage :   - `mutationFn`: `({ id }: { id: number }) => matchesApi.fix(id)`
+
+ *   const { data: projects, isLoading, error } = useProjects()   - `onSuccess`: invalider queries matches
+
+ */
+
+export function useProjects() {7. **useUnfixMatch()** :
+
+  return useQuery({   - `mutationFn`: `({ id }: { id: number }) => matchesApi.unfix(id)`
+
+    queryKey: projectKeys.lists(),   - `onSuccess`: invalider queries matches
+
+    queryFn: () => projectsApi.getProjects(),
+
+  })8. **useDeleteMatch()** :
+
+}   - `mutationFn`: `({ id }: { id: number }) => matchesApi.delete(id)`
+
+   - `onSuccess`: invalider `['matches']`
+
+/**
+
+ * Hook pour récupérer un projet par ID.**Exemple structure** :
+
+ * ```typescript
+
+ * Retourne config_yaml_data et config_excel_data.import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+
+ * import { matchesApi } from '@/api'
+
+ * Usage :import type { MatchMove } from '@/types'
+
+ *   const { data: project, isLoading, error } = useProject(1)
+
+ */export const useMatches = (projectId?: number) => {
+
+export function useProject(id: number) {  return useQuery({
+
+  return useQuery({    queryKey: ['matches', projectId],
+
+    queryKey: projectKeys.detail(id),    queryFn: () => matchesApi.list(projectId),
+
+    queryFn: () => projectsApi.getProject(id),    enabled: !!projectId
+
+    enabled: !!id,  // Ne pas exécuter si id est 0 ou undefined  })
+
+  })}
+
+}
+
+export const useMoveMatch = () => {
+
+/**  const queryClient = useQueryClient()
+
+ * Hook pour récupérer les statistiques d'un projet.  
+
+ *   return useMutation({
+
+ * Usage :    mutationFn: ({ id, creneau }: { id: number, creneau: MatchMove }) => 
+
+ *   const { data: stats } = useProjectStats(1)      matchesApi.move(id, creneau),
+
+ *   // stats.nb_equipes, stats.nb_matchs, stats.taux_planification    onSuccess: () => {
+
+ */      queryClient.invalidateQueries({ queryKey: ['matches'] })
+
+export function useProjectStats(id: number) {    },
+
+  return useQuery({    onError: (error) => {
+
+    queryKey: projectKeys.stats(id),      console.error('Erreur déplacement match:', error)
+
+    queryFn: () => projectsApi.getProjectStats(id),    }
+
+    enabled: !!id,  })
+
+  })}
+
+}
+
+// ... autres hooks
+
+// ============================================```
+
+// Mutations (POST, PUT, DELETE)
+
+// ============================================### Hooks Projects
+
+**Créer** : `frontend/src/hooks/useProjects.ts`
+
+/**
+
+ * Hook pour créer un nouveau projet.**Hooks requis** :
+
+ * - `useProjects()` : liste des projets
+
+ * Usage :- `useProject(id)` : détail d'un projet
+
+ *   const createProject = useCreateProject()- `useProjectStats(id)` : stats du projet (nb matchs, etc.)
+
+ *   createProject.mutate({- `useCreateProject()` : création
+
+ *     nom: "Nouveau Projet",- `useUpdateProject()` : mise à jour
+
+ *     sport: "Volleyball",- `useDeleteProject()` : suppression
+
+ *     config_yaml_data: {...},
+
+ *     config_excel_data: {...}### Hooks Teams et Venues
+
+ *   })**Créer** : `frontend/src/hooks/useTeams.ts`, `useVenues.ts`
+
+ */
+
+export function useCreateProject() {**Hooks CRUD standard** :
+
+  const queryClient = useQueryClient()- `useTeams(projectId?)`, `useVenues(projectId?)` : listes filtrées par projet
+
+  - `useCreateTeam()`, `useCreateVenue()`
+
+  return useMutation({- `useUpdateTeam()`, `useUpdateVenue()`
+
+    mutationFn: (data: ProjectCreate) => projectsApi.createProject(data),- `useDeleteTeam()`, `useDeleteVenue()`
+
+    onSuccess: () => {
+
+      // Invalider liste des projets pour refetch### Fichier index pour exports centralisés
+
+      queryClient.invalidateQueries({ queryKey: projectKeys.lists() })**Créer** : `frontend/src/hooks/index.ts`
+
+    },
+
+  })```typescript
+
+}export * from './useMatches'
+
+export * from './useProjects'
+
+/**export * from './useTeams'
+
+ * Hook pour mettre à jour un projet.export * from './useVenues'
+
+ * ```
+
+ * Usage :
+
+ *   const updateProject = useUpdateProject()### Consignes d'organisation
+
+ *   updateProject.mutate({ id: 1, data: { nom: "Nouveau nom" } })- Utiliser `useQueryClient()` dans mutations pour invalidation
+
+ */- `invalidateQueries({ queryKey: ['matches'] })` rafraîchit toutes queries matches
+
+export function useUpdateProject() {- Typer arguments mutations avec interfaces TypeScript
+
+  const queryClient = useQueryClient()- Gérer les erreurs dans `onError` (logging, notifications)
+
+  - Considérer optimistic updates pour UX améliorée (Phase 3)
+
+  return useMutation({- Préférer `mutateAsync` dans handlers async (meilleur contrôle erreurs)
+
+    mutationFn: ({ id, data }: { id: number; data: Partial<ProjectCreate> }) =>
+
+      projectsApi.updateProject(id, data),### Impact et liens
+
+    onSuccess: (updatedProject) => {- Les composants React (`frontend/src/components/`) utiliseront ces hooks pour accéder aux données.
+
+      // Invalider détail du projet- Les pages (`frontend/src/pages/`) utiliseront ces hooks pour orchestrer les opérations.
+
+      queryClient.invalidateQueries({ queryKey: projectKeys.detail(updatedProject.id) })- Le client API (`frontend/src/api/`) est appelé par les hooks.
+
+      // Invalider liste
+
+      queryClient.invalidateQueries({ queryKey: projectKeys.lists() })## À faire/vérifier
+
+    },- Créer le dossier `frontend/src/hooks/`
+
+  })- Implémenter tous les hooks pour Matches (8 hooks)
+
+}- Implémenter hooks pour Projects, Teams, Venues
+
+- Créer le fichier index.ts pour exports centralisés
+
+/**- Tester les hooks dans un composant temporaire :
+
+ * Hook pour supprimer un projet (cascade).  - `const { data: matches } = useMatches(1)` → vérifier que data est bien typée
+
+ *   - `const moveMatch = useMoveMatch()` → appeler `moveMatch.mutate({ id: 1, creneau: {...} })`
+
+ * Usage :  - Vérifier l'invalidation du cache après mutation
+
+ *   const deleteProject = useDeleteProject()- Utiliser React Query DevTools pour observer les queries et mutations
+
+ *   deleteProject.mutate(1)
+
+ */## Questions
+
+export function useDeleteProject() {Poser des questions si des points sur React Query, l'invalidation du cache, la gestion des erreurs ou l'organisation ne sont pas clairs.
+
+  const queryClient = useQueryClient()
+
+  ## Documentation
+
+  return useMutation({Rester concis, ne pas ajouter de documentation excessive. Commenter brièvement les hooks complexes ou les stratégies d'invalidation si besoin.
+
+    mutationFn: (id: number) => projectsApi.deleteProject(id),
+    onSuccess: () => {
+      // Invalider toutes les queries projets
+      queryClient.invalidateQueries({ queryKey: projectKeys.all })
+    },
+  })
+}
+```
+
+**Points clés** :
+- **Query keys hiérarchiques** : `['projects', 'list']`, `['projects', 'detail', 1]`
+- **enabled: !!id** : Ne pas exécuter query si id invalide
+- **invalidateQueries** : Refetch automatique après mutations
+- **onSuccess** : Invalider cache des listes et détails
+
+---
+
+### Hooks Matches
+
+**📁 Fichier à créer** : `frontend/src/hooks/useMatches.ts`
+
+**Contenu complet** :
+
+```typescript
+/**
+ * Hooks React Query pour les matchs.
+ */
+
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { matchesApi } from '@services'
+import type { 
+  Match, 
+  MatchCreate, 
+  MatchUpdate, 
+  MatchMovePayload,
+  MatchQueryParams 
+} from '@types'
+
+// ============================================
+// Query Keys
+// ============================================
+
+export const matchKeys = {
+  all: ['matches'] as const,
+  lists: () => [...matchKeys.all, 'list'] as const,
+  list: (projectId: number, filters?: MatchQueryParams) => 
+    [...matchKeys.lists(), projectId, filters] as const,
+  details: () => [...matchKeys.all, 'detail'] as const,
+  detail: (id: number) => [...matchKeys.details(), id] as const,
+}
+
+// ============================================
+// Queries (GET)
+// ============================================
+
+/**
+ * Hook pour lister les matchs d'un projet.
+ * 
+ * Filtres optionnels : semaine, equipe_id, gymnase_id, est_fixe, include_relations
+ * 
+ * Usage :
+ *   const { data: matches } = useMatches(projectId, { semaine: 3, include_relations: true })
+ */
+export function useMatches(projectId: number, params?: MatchQueryParams) {
+  return useQuery({
+    queryKey: matchKeys.list(projectId, params),
+    queryFn: () => matchesApi.getMatches(projectId, params),
+    enabled: !!projectId,
+  })
+}
+
+/**
+ * Hook pour récupérer un match par ID.
+ * 
+ * Usage :
+ *   const { data: match } = useMatch(1, true)  // includeRelations = true
+ */
+export function useMatch(id: number, includeRelations = true) {
+  return useQuery({
+    queryKey: matchKeys.detail(id),
+    queryFn: () => matchesApi.getMatch(id, includeRelations),
+    enabled: !!id,
+  })
+}
+
+// ============================================
+// Mutations (POST, PUT, DELETE)
+// ============================================
+
+/**
+ * Hook pour créer un nouveau match.
+ * 
+ * Usage :
+ *   const createMatch = useCreateMatch()
+ *   createMatch.mutate({
+ *     project_id: 1,
+ *     equipe_domicile_id: 1,
+ *     equipe_exterieur_id: 2,
+ *     gymnase_id: 1,
+ *     semaine: 3
+ *   })
+ */
+export function useCreateMatch() {
+  const queryClient = useQueryClient()
+  
+  return useMutation({
+    mutationFn: (data: MatchCreate) => matchesApi.createMatch(data),
+    onSuccess: (newMatch) => {
+      // Invalider listes de matchs du projet
+      queryClient.invalidateQueries({ 
+        queryKey: matchKeys.list(newMatch.project_id) 
+      })
+    },
+  })
+}
+
+/**
+ * Hook pour mettre à jour un match.
+ * 
+ * Usage :
+ *   const updateMatch = useUpdateMatch()
+ *   updateMatch.mutate({ id: 1, data: { gymnase_id: 2 } })
+ */
+export function useUpdateMatch() {
+  const queryClient = useQueryClient()
+  
+  return useMutation({
+    mutationFn: ({ id, data }: { id: number; data: MatchUpdate }) =>
+      matchesApi.updateMatch(id, data),
+    onSuccess: (updatedMatch) => {
+      // Invalider détail du match
+      queryClient.invalidateQueries({ queryKey: matchKeys.detail(updatedMatch.id) })
+      // Invalider listes du projet
+      queryClient.invalidateQueries({ 
+        queryKey: matchKeys.list(updatedMatch.project_id) 
+      })
+    },
+  })
+}
+
+/**
+ * Hook pour supprimer un match.
+ * 
+ * Usage :
+ *   const deleteMatch = useDeleteMatch()
+ *   deleteMatch.mutate({ id: 1, projectId: 1 })
+ */
+export function useDeleteMatch() {
+  const queryClient = useQueryClient()
+  
+  return useMutation({
+    mutationFn: ({ id, projectId }: { id: number; projectId: number }) =>
+      matchesApi.deleteMatch(id),
+    onSuccess: (_, variables) => {
+      // Invalider listes du projet
+      queryClient.invalidateQueries({ 
+        queryKey: matchKeys.list(variables.projectId) 
+      })
+    },
+  })
+}
+
+/**
+ * Hook pour déplacer un match vers une nouvelle semaine.
+ * 
+ * IMPORTANT : Validation backend (match non fixé, semaine >= semaine_min)
+ * 
+ * Usage :
+ *   const moveMatch = useMoveMatch()
+ *   moveMatch.mutate({ id: 1, payload: { nouvelle_semaine: 5 } })
+ */
+export function useMoveMatch() {
+  const queryClient = useQueryClient()
+  
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: number; payload: MatchMovePayload }) =>
+      matchesApi.moveMatch(id, payload),
+    onSuccess: (movedMatch) => {
+      // Invalider détail
+      queryClient.invalidateQueries({ queryKey: matchKeys.detail(movedMatch.id) })
+      // Invalider listes du projet
+      queryClient.invalidateQueries({ 
+        queryKey: matchKeys.list(movedMatch.project_id) 
+      })
+    },
+  })
+}
+
+/**
+ * Hook pour fixer un match (non modifiable par solver).
+ * 
+ * Usage :
+ *   const fixMatch = useFixMatch()
+ *   fixMatch.mutate(1)
+ */
+export function useFixMatch() {
+  const queryClient = useQueryClient()
+  
+  return useMutation({
+    mutationFn: (id: number) => matchesApi.fixMatch(id),
+    onSuccess: (fixedMatch) => {
+      queryClient.invalidateQueries({ queryKey: matchKeys.detail(fixedMatch.id) })
+      queryClient.invalidateQueries({ 
+        queryKey: matchKeys.list(fixedMatch.project_id) 
+      })
+    },
+  })
+}
+
+/**
+ * Hook pour défixer un match (modifiable par solver).
+ * 
+ * Usage :
+ *   const unfixMatch = useUnfixMatch()
+ *   unfixMatch.mutate(1)
+ */
+export function useUnfixMatch() {
+  const queryClient = useQueryClient()
+  
+  return useMutation({
+    mutationFn: (id: number) => matchesApi.unfixMatch(id),
+    onSuccess: (unfixedMatch) => {
+      queryClient.invalidateQueries({ queryKey: matchKeys.detail(unfixedMatch.id) })
+      queryClient.invalidateQueries({ 
+        queryKey: matchKeys.list(unfixedMatch.project_id) 
+      })
+    },
+  })
+}
+```
+
+**Points clés** :
+- **Filtres dans query keys** : Cache séparé par projectId + params
+- **useMoveMatch** : Mutation spéciale pour déplacement (validation backend)
+- **useFixMatch/useUnfixMatch** : Mutations pour matchs fixes
+- **Invalidation ciblée** : Invalider detail + listes du projet
+
+---
+
+### Hooks Teams
+
+**📁 Fichier à créer** : `frontend/src/hooks/useTeams.ts`
+
+**Contenu complet** :
+
+```typescript
+/**
+ * Hooks React Query pour les équipes.
+ */
+
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { teamsApi } from '@services'
+import type { Team, TeamCreate, TeamQueryParams } from '@types'
+
+export const teamKeys = {
+  all: ['teams'] as const,
+  lists: () => [...teamKeys.all, 'list'] as const,
+  list: (projectId: number, params?: TeamQueryParams) => 
+    [...teamKeys.lists(), projectId, params] as const,
+  details: () => [...teamKeys.all, 'detail'] as const,
+  detail: (id: number) => [...teamKeys.details(), id] as const,
+}
+
+/**
+ * Hook pour lister les équipes d'un projet.
+ * 
+ * Filtres : poule, niveau, categorie, institution
+ */
+export function useTeams(projectId: number, params?: TeamQueryParams) {
+  return useQuery({
+    queryKey: teamKeys.list(projectId, params),
+    queryFn: () => teamsApi.getTeams(projectId, params),
+    enabled: !!projectId,
+  })
+}
+
+/**
+ * Hook pour récupérer une équipe par ID.
+ */
+export function useTeam(id: number) {
+  return useQuery({
+    queryKey: teamKeys.detail(id),
+    queryFn: () => teamsApi.getTeam(id),
+    enabled: !!id,
+  })
+}
+
+/**
+ * Hook pour créer une équipe.
+ */
+export function useCreateTeam() {
+  const queryClient = useQueryClient()
+  
+  return useMutation({
+    mutationFn: (data: TeamCreate) => teamsApi.createTeam(data),
+    onSuccess: (newTeam) => {
+      queryClient.invalidateQueries({ 
+        queryKey: teamKeys.list(newTeam.project_id) 
+      })
+    },
+  })
+}
+
+/**
+ * Hook pour mettre à jour une équipe.
+ */
+export function useUpdateTeam() {
+  const queryClient = useQueryClient()
+  
+  return useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Partial<TeamCreate> }) =>
+      teamsApi.updateTeam(id, data),
+    onSuccess: (updatedTeam) => {
+      queryClient.invalidateQueries({ queryKey: teamKeys.detail(updatedTeam.id) })
+      queryClient.invalidateQueries({ 
+        queryKey: teamKeys.list(updatedTeam.project_id) 
+      })
+    },
+  })
+}
+
+/**
+ * Hook pour supprimer une équipe.
+ */
+export function useDeleteTeam() {
+  const queryClient = useQueryClient()
+  
+  return useMutation({
+    mutationFn: ({ id, projectId }: { id: number; projectId: number }) =>
+      teamsApi.deleteTeam(id),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ 
+        queryKey: teamKeys.list(variables.projectId) 
+      })
+    },
+  })
+}
+```
+
+---
+
+### Hooks Venues
+
+**📁 Fichier à créer** : `frontend/src/hooks/useVenues.ts`
+
+**Contenu complet** :
+
+```typescript
+/**
+ * Hooks React Query pour les gymnases.
+ */
+
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { venuesApi } from '@services'
+import type { Venue, VenueCreate, VenueQueryParams } from '@types'
+
+export const venueKeys = {
+  all: ['venues'] as const,
+  lists: () => [...venueKeys.all, 'list'] as const,
+  list: (projectId: number, params?: VenueQueryParams) => 
+    [...venueKeys.lists(), projectId, params] as const,
+  details: () => [...venueKeys.all, 'detail'] as const,
+  detail: (id: number) => [...venueKeys.details(), id] as const,
+}
+
+/**
+ * Hook pour lister les gymnases d'un projet.
+ */
+export function useVenues(projectId: number, params?: VenueQueryParams) {
+  return useQuery({
+    queryKey: venueKeys.list(projectId, params),
+    queryFn: () => venuesApi.getVenues(projectId, params),
+    enabled: !!projectId,
+  })
+}
+
+/**
+ * Hook pour récupérer un gymnase par ID.
+ */
+export function useVenue(id: number) {
+  return useQuery({
+    queryKey: venueKeys.detail(id),
+    queryFn: () => venuesApi.getVenue(id),
+    enabled: !!id,
+  })
+}
+
+/**
+ * Hook pour créer un gymnase.
+ */
+export function useCreateVenue() {
+  const queryClient = useQueryClient()
+  
+  return useMutation({
+    mutationFn: (data: VenueCreate) => venuesApi.createVenue(data),
+    onSuccess: (newVenue) => {
+      queryClient.invalidateQueries({ 
+        queryKey: venueKeys.list(newVenue.project_id) 
+      })
+    },
+  })
+}
+
+/**
+ * Hook pour mettre à jour un gymnase.
+ */
+export function useUpdateVenue() {
+  const queryClient = useQueryClient()
+  
+  return useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Partial<VenueCreate> }) =>
+      venuesApi.updateVenue(id, data),
+    onSuccess: (updatedVenue) => {
+      queryClient.invalidateQueries({ queryKey: venueKeys.detail(updatedVenue.id) })
+      queryClient.invalidateQueries({ 
+        queryKey: venueKeys.list(updatedVenue.project_id) 
+      })
+    },
+  })
+}
+
+/**
+ * Hook pour supprimer un gymnase.
+ */
+export function useDeleteVenue() {
+  const queryClient = useQueryClient()
+  
+  return useMutation({
+    mutationFn: ({ id, projectId }: { id: number; projectId: number }) =>
+      venuesApi.deleteVenue(id),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ 
+        queryKey: venueKeys.list(variables.projectId) 
+      })
+    },
+  })
+}
+```
+
+---
+
+### Export centralisé
+
+**📁 Fichier à créer** : `frontend/src/hooks/index.ts`
+
+**Contenu** :
+
+```typescript
+/**
+ * Export centralisé des hooks React Query.
+ */
+
+export * from './useProjects'
+export * from './useMatches'
+export * from './useTeams'
+export * from './useVenues'
+```
+
+---
+
+### Exemple d'utilisation dans un composant
+
+**📁 Fichier exemple** : `frontend/src/examples/HookUsage.tsx`
+
+**Contenu** :
+
+```typescript
+import { useProjects, useMatches, useMoveMatch } from '@hooks'
+import { getErrorMessage } from '@utils/apiHelpers'
+
+function ExampleComponent() {
+  // 1. Lister projets
+  const { data: projects, isLoading, error } = useProjects()
+  
+  // 2. Lister matchs d'un projet (semaine 3, avec relations)
+  const { data: matches } = useMatches(1, { 
+    semaine: 3, 
+    include_relations: true 
+  })
+  
+  // 3. Mutation pour déplacer un match
+  const moveMatch = useMoveMatch()
+  
+  const handleMoveMatch = async (matchId: number) => {
+    try {
+      await moveMatch.mutateAsync({
+        id: matchId,
+        payload: { nouvelle_semaine: 5 }
+      })
+      alert('Match déplacé avec succès !')
+    } catch (err) {
+      alert(`Erreur : ${getErrorMessage(err)}`)
+    }
+  }
+  
+  if (isLoading) return <div>Chargement...</div>
+  if (error) return <div>Erreur : {getErrorMessage(error)}</div>
+  
+  return (
+    <div>
+      <h2>Projets ({projects?.length})</h2>
+      {projects?.map(p => (
+        <div key={p.id}>{p.nom}</div>
+      ))}
+      
+      <h2>Matchs semaine 3</h2>
+      {matches?.map(m => (
+        <div key={m.id}>
+          {m.equipe_domicile?.nom} vs {m.equipe_exterieur?.nom}
+          <button onClick={() => handleMoveMatch(m.id)}>
+            Déplacer vers semaine 5
+          </button>
+        </div>
+      ))}
+    </div>
+  )
+}
+```
+
+---
+
+## À faire/vérifier
+
+**Checklist de développement** :
+
+1. ✅ Créer `hooks/useProjects.ts` avec :
+   - useProjects(), useProject(id), useProjectStats(id)
+   - useCreateProject(), useUpdateProject(), useDeleteProject()
+
+2. ✅ Créer `hooks/useMatches.ts` avec :
+   - useMatches(projectId, params), useMatch(id)
+   - useCreateMatch(), useUpdateMatch(), useDeleteMatch()
+   - useMoveMatch(), useFixMatch(), useUnfixMatch()
+
+3. ✅ Créer `hooks/useTeams.ts` avec :
+   - useTeams(projectId, params), useTeam(id)
+   - useCreateTeam(), useUpdateTeam(), useDeleteTeam()
+
+4. ✅ Créer `hooks/useVenues.ts` avec :
+   - useVenues(projectId, params), useVenue(id)
+   - useCreateVenue(), useUpdateVenue(), useDeleteVenue()
+
+5. ✅ Créer `hooks/index.ts` :
+   - Export centralisé de tous les hooks
+
+**Checklist de validation** :
+
+1. ✅ **Test dans composant** :
+   ```tsx
+   import { useProjects, useMatches } from '@hooks'
+   
+   function TestComponent() {
+     const { data: projects } = useProjects()
+     const { data: matches } = useMatches(1)
+     
+     return <div>{projects?.length} projets</div>
+   }
+   ```
+
+2. ✅ **Vérifier cache React Query** :
+   - Ouvrir React Query DevTools (panneau bas gauche)
+   - Vérifier query keys : `['projects', 'list']`, `['matches', 'list', 1]`
+   - Vérifier états : fresh, fetching, stale
+
+3. ✅ **Test mutation** :
+   ```tsx
+   const moveMatch = useMoveMatch()
+   
+   const handleMove = async () => {
+     await moveMatch.mutateAsync({ id: 1, payload: { nouvelle_semaine: 5 } })
+     // Cache invalidé automatiquement
+   }
+   ```
+
+4. ✅ **Test invalidation** :
+   - Déplacer un match
+   - Vérifier que useMatches() refetch automatiquement
+   - Vérifier React Query DevTools (query invalidated)
+
+5. ✅ **Vérifier TypeScript** :
+   ```bash
+   npx tsc --noEmit
+   ```
+
+---
+
+## Questions
+
+**Questions critiques** :
+
+1. **Optimistic updates** :
+   - Faut-il des optimistic updates (UI mise à jour avant réponse serveur) ?
+   - Ou attendre confirmation backend (comportement actuel) ?
+
+2. **Refetch automatique** :
+   - refetchOnWindowFocus désactivé (main.tsx) : OK ?
+   - Faut-il refetch automatique toutes les X minutes ?
+
+3. **Gestion d'erreurs** :
+   - Faut-il un toast global pour erreurs mutations ?
+   - Ou laisser composants gérer (comportement actuel) ?
+
+4. **Cache staleTime** :
+   - staleTime: 5min (main.tsx) : OK pour tous ?
+   - Faut-il différencier par type (projects: 10min, matches: 1min) ?
+
+5. **Pagination** :
+   - Si implémentée, faut-il useInfiniteQuery ?
+   - Ou pagination classique avec useQuery ?
+
+---
+
+## Documentation
+
+Documenter uniquement :
+- **Query keys hiérarchiques** : Expliquer structure `['projects', 'list']`
+- **enabled: !!id** : Expliquer désactivation si id invalide
+- **invalidateQueries** : Expliquer refetch automatique
+- **onSuccess** : Expliquer invalidation cache après mutations

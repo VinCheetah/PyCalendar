@@ -46,6 +46,7 @@ class SchedulingPipeline:
         self.groupes_non_simultaneite = self._load_groupes_non_simultaneite()
         self.ententes = self._load_ententes()
         self.contraintes_temporelles = self._load_contraintes_temporelles()
+        matchs_fixes_data = self._load_matchs_fixes()
         
         if not self._validate_data(equipes, gymnases):
             print("❌ Erreurs de validation. Arrêt du pipeline.")
@@ -55,9 +56,24 @@ class SchedulingPipeline:
         self._afficher_info_donnees(equipes, poules, gymnases)
         
         matchs = self._generer_matchs(poules)
+        
+        # Appliquer les matchs fixés sur les matchs générés
+        matchs = self._appliquer_matchs_fixes(matchs, matchs_fixes_data, equipes)
+        
         creneaux = DataTransformer.generer_creneaux(gymnases, self.config.nb_semaines)
         
-        print(f"✓ {len(matchs)} matchs à planifier sur {len(creneaux)} créneaux disponibles\n")
+        # Filtrer les créneaux occupés par les matchs fixés ET respecter semaine_minimum
+        creneaux = self._filtrer_creneaux(creneaux, matchs_fixes_data)
+        
+        # Compter matchs à planifier vs fixés
+        nb_fixes = sum(1 for m in matchs if m.est_fixe)
+        nb_a_planifier = len(matchs) - nb_fixes
+        
+        print(f"📅 Résumé de planification:")
+        if nb_fixes > 0:
+            print(f"  • {nb_fixes} matchs déjà fixés")
+        print(f"  • {nb_a_planifier} matchs à planifier")
+        print(f"  • {len(creneaux)} créneaux disponibles\n")
         
         solution = self._resoudre(matchs, creneaux.copy(), gymnases)
         
@@ -150,7 +166,7 @@ class SchedulingPipeline:
             return {}
     
     def _load_contraintes_temporelles(self) -> Dict:
-        """Load temporal constraints (before/after specific week)."""
+        """Load temporal constraints on specific matches."""
         if not self.config.contrainte_temporelle_actif:
             return {}
         
@@ -159,11 +175,9 @@ class SchedulingPipeline:
             contraintes = self.source.charger_contraintes_temporelles()
             
             if contraintes:
-                mode = "dure (blocage)" if self.config.contrainte_temporelle_dure else f"souple (pénalité {self.config.contrainte_temporelle_penalite})"
-                print(f"✓ {len(contraintes)} contraintes temporelles chargées (mode {mode}):")
+                print(f"✓ {len(contraintes)} contraintes temporelles chargées:")
                 for (eq1, eq2), contrainte in sorted(contraintes.items()):
-                    horaires_info = f", horaires: {', '.join(contrainte.horaires_possibles)}" if contrainte.horaires_possibles else ""
-                    print(f"  • {eq1} ↔ {eq2}: {contrainte.type_contrainte} semaine {contrainte.semaine_limite}{horaires_info}")
+                    print(f"  • {eq1} vs {eq2}: {contrainte.type_contrainte} semaine {contrainte.semaine_limite}")
             else:
                 print("  ℹ️  Aucune contrainte temporelle définie")
             print()
@@ -172,6 +186,35 @@ class SchedulingPipeline:
             print(f"  ⚠️  Erreur lors du chargement des contraintes temporelles: {e}")
             print()
             return {}
+    
+    def _load_matchs_fixes(self) -> Dict:
+        """Load fixed matches that cannot be rescheduled."""
+        if not self.config.respecter_matchs_fixes:
+            return {'creneaux_occupes': {}, 'matchs_par_equipe': {}, 'details': []}
+        
+        print("🔒 Chargement des matchs fixés...")
+        try:
+            matchs_fixes = self.source.charger_matchs_fixes()
+            
+            if matchs_fixes['details']:
+                print(f"✓ {len(matchs_fixes['details'])} matchs fixés chargés")
+                print(f"  • {len(matchs_fixes['creneaux_occupes'])} créneaux réservés")
+                print(f"  • {len(matchs_fixes['matchs_par_equipe'])} équipes concernées")
+                
+                # Afficher quelques exemples
+                for i, match_info in enumerate(matchs_fixes['details'][:3]):
+                    print(f"  • S{match_info['semaine']} {match_info['horaire']} {match_info['gymnase']}: "
+                          f"{match_info['equipe1_nom']} vs {match_info['equipe2_nom']} [{match_info['statut']}]")
+                if len(matchs_fixes['details']) > 3:
+                    print(f"  ... et {len(matchs_fixes['details']) - 3} autres")
+            else:
+                print("  ℹ️  Aucun match fixé défini")
+            print()
+            return matchs_fixes
+        except Exception as e:
+            print(f"  ⚠️  Erreur lors du chargement des matchs fixés: {e}")
+            print()
+            return {'creneaux_occupes': {}, 'matchs_par_equipe': {}, 'details': []}
     
     def _validate_data(self, equipes: List[Equipe], gymnases: List[Gymnase]) -> bool:
         """Validate loaded data."""
@@ -210,6 +253,113 @@ class SchedulingPipeline:
         
         print(f"✓ {len(matchs)} matchs générés")
         return matchs
+    
+    def _appliquer_matchs_fixes(self, matchs: List, matchs_fixes_data: Dict, equipes: List[Equipe]) -> List:
+        """
+        Applique les matchs fixés sur la liste des matchs générés.
+        
+        Marque les matchs correspondants comme fixés avec leur créneau.
+        """
+        from core.models import Match, Creneau
+        
+        if not matchs_fixes_data['details']:
+            return matchs
+        
+        print("🔧 Application des matchs fixés...")
+        
+        # Créer un dict d'équipes par id pour lookup rapide
+        equipes_dict = {eq.id_unique: eq for eq in equipes}
+        
+        nb_fixes = 0
+        nb_non_trouves = 0
+        
+        for match in matchs:
+            eq1_id = match.equipe1.id_unique
+            eq2_id = match.equipe2.id_unique
+            
+            # Chercher dans les matchs fixés (dans les deux sens)
+            match_info = None
+            for info in matchs_fixes_data['details']:
+                if ((info['equipe1_id'] == eq1_id and info['equipe2_id'] == eq2_id) or
+                    (info['equipe1_id'] == eq2_id and info['equipe2_id'] == eq1_id)):
+                    match_info = info
+                    break
+            
+            if match_info:
+                # Créer le créneau
+                creneau = Creneau(
+                    semaine=match_info['semaine'],
+                    horaire=match_info['horaire'],
+                    gymnase=match_info['gymnase']
+                )
+                
+                # Marquer le match comme fixé
+                match.creneau = creneau
+                match.est_fixe = True
+                match.statut = match_info['statut']
+                match.score_equipe1 = match_info['score1']
+                match.score_equipe2 = match_info['score2']
+                match.notes = match_info['notes']
+                
+                nb_fixes += 1
+        
+        # Vérifier s'il y a des matchs fixés qui n'ont pas été trouvés dans les matchs générés
+        matchs_generes_ids = set()
+        for match in matchs:
+            eq1_id = match.equipe1.id_unique
+            eq2_id = match.equipe2.id_unique
+            matchs_generes_ids.add((eq1_id, eq2_id))
+            matchs_generes_ids.add((eq2_id, eq1_id))  # Bidirectionnel
+        
+        for info in matchs_fixes_data['details']:
+            if (info['equipe1_id'], info['equipe2_id']) not in matchs_generes_ids:
+                nb_non_trouves += 1
+                print(f"  ⚠️  Match fixé non trouvé dans les matchs générés: "
+                      f"{info['equipe1_nom']} vs {info['equipe2_nom']}")
+        
+        if nb_fixes > 0:
+            print(f"✓ {nb_fixes} matchs marqués comme fixés")
+        if nb_non_trouves > 0:
+            print(f"  ⚠️  {nb_non_trouves} matchs fixés non trouvés dans les poules (vérifier vos données)")
+        print()
+        
+        return matchs
+    
+    def _filtrer_creneaux(self, creneaux: List, matchs_fixes_data: Dict) -> List:
+        """
+        Filtre les créneaux en enlevant:
+        1. Les créneaux occupés par les matchs fixés
+        2. Les créneaux avant la semaine_minimum (si configurée)
+        """
+        from core.models import Creneau
+        
+        print("🔍 Filtrage des créneaux disponibles...")
+        nb_initial = len(creneaux)
+        
+        # 1. Filtrer par semaine_minimum
+        if self.config.semaine_minimum > 1:
+            creneaux = [c for c in creneaux if c.semaine >= self.config.semaine_minimum]
+            nb_semaine_min = nb_initial - len(creneaux)
+            if nb_semaine_min > 0:
+                print(f"  • {nb_semaine_min} créneaux exclus (avant semaine {self.config.semaine_minimum})")
+        
+        # 2. Filtrer les créneaux occupés par matchs fixés
+        if matchs_fixes_data['creneaux_occupes']:
+            creneaux_occupes_keys = set(matchs_fixes_data['creneaux_occupes'].keys())
+            nb_avant_fixes = len(creneaux)
+            
+            creneaux = [
+                c for c in creneaux 
+                if (c.semaine, c.horaire, c.gymnase) not in creneaux_occupes_keys
+            ]
+            
+            nb_occupes = nb_avant_fixes - len(creneaux)
+            if nb_occupes > 0:
+                print(f"  • {nb_occupes} créneaux occupés par matchs fixés")
+        
+        print(f"✓ {len(creneaux)} créneaux disponibles pour planification\n")
+        
+        return creneaux
     
     def _resoudre(self, matchs, creneaux, gymnases):
         """Solve the scheduling problem with optional warm start."""

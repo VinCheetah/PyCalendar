@@ -1,0 +1,819 @@
+# Prompt 2.5 : Composant Calendrier FullCalendar# Prompt 2.5 : Composant Calendrier – FullCalendar
+
+
+
+## Contexte global## Contexte global
+
+PyCalendar V2 affiche les matchs planifiés dans un calendrier interactif avec FullCalendar. Les utilisateurs peuvent glisser-déposer les matchs entre semaines, fixer/défixer des matchs, et voir les détails.PyCalendar V2 doit proposer une interface utilisateur claire pour visualiser et manipuler le calendrier des matchs. Le composant calendrier est central pour l'expérience utilisateur, permettant l'affichage, le drag & drop et la distinction visuelle des matchs (fixes vs modifiables).
+
+
+
+**RAPPEL - Double configuration** :## Contexte technique
+
+- **semaine_minimum** (YAML) → **semaine_min** (API/DB) : Première semaine modifiableCette tâche concerne la création d'un composant React basé sur FullCalendar, intégrant la gestion des matchs fixes, du drag & drop, de la coloration des événements et du calcul des dates à partir de semaines/horaires.
+
+- **Matchs fixes** : Définis via UI web (pas Excel), est_fixe = true
+
+- **Matchs non modifiables** : est_fixe = true OU semaine < semaine_min## Résumé du travail précédent
+
+- Les hooks React Query sont en place (`frontend/src/hooks/`).
+
+## Contexte technique- Le client API est opérationnel (`frontend/src/api/`).
+
+Cette tâche crée le composant calendrier principal avec FullCalendar, gestion du drag & drop, modale de détails, et intégration avec les hooks React Query.- Les types TypeScript sont définis (`frontend/src/types/`).
+
+- FullCalendar est installé avec plugins nécessaires.
+
+## Résumé du travail précédent
+
+- Hooks React Query créés (useMatches, useMoveMatch, useFixMatch, etc.) - Tâche 2.4## Objectifs
+
+- Types MatchExtended avec est_modifiable, titre, couleur - Tâche 2.2- Créer un composant calendrier clair, modulaire et facilement extensible.
+
+- Helper toMatchExtended() pour enrichir matchs - Tâche 2.2- Implémenter la transformation des matchs en événements FullCalendar.
+
+- Gérer le drag & drop avec validation (matchs fixes non déplaçables).
+
+## Objectifs- Assurer la coloration visuelle (rouge = fixé, bleu = normal, vert = terminé).
+
+1. Créer composant Calendar avec FullCalendar- Calculer correctement les dates à partir de semaine + horaire.
+
+2. Implémenter drag & drop pour déplacer matchs
+
+3. Afficher modale de détails au clic## Détails techniques
+
+4. Gérer matchs fixes (badge, couleur)
+
+5. Respecter contrainte semaine_min### Fichier à créer
+
+`frontend/src/components/calendar/Calendar.tsx`
+
+## Détails techniques
+
+### Props interface
+
+### Composant Calendar principal```typescript
+
+interface CalendarProps {
+
+**📁 Fichier à créer** : `frontend/src/components/Calendar/Calendar.tsx`  matches: Match[]
+
+  onMatchDrop?: (matchId: number, newCreneau: MatchMove) => void
+
+**Contenu complet** :  onMatchClick?: (match: Match) => void
+
+}
+
+```typescript```
+
+/**
+
+ * Composant calendrier principal avec FullCalendar.### Imports requis
+
+ * ```typescript
+
+ * Fonctionnalités :import FullCalendar from '@fullcalendar/react'
+
+ * - Affichage matchs par semaineimport dayGridPlugin from '@fullcalendar/daygrid'
+
+ * - Drag & drop pour déplacer matchs (si modifiable)import timeGridPlugin from '@fullcalendar/timegrid'
+
+ * - Clic pour voir détails + fixer/défixerimport interactionPlugin from '@fullcalendar/interaction'
+
+ * - Couleurs par pouleimport type { EventDropArg, EventClickArg } from '@fullcalendar/core'
+
+ * - Badge "Fixé" sur matchs fixesimport type { Match, MatchMove } from '@/types'
+
+ */
+
+// CSS FullCalendar
+
+import { useState, useMemo } from 'react'import '@fullcalendar/core/main.css'
+
+import FullCalendar from '@fullcalendar/react'import '@fullcalendar/daygrid/main.css'
+
+import dayGridPlugin from '@fullcalendar/daygrid'import '@fullcalendar/timegrid/main.css'
+
+import interactionPlugin from '@fullcalendar/interaction'```
+
+import type { EventInput, EventDropArg, EventClickArg } from '@fullcalendar/core'
+
+### Fonctions auxiliaires
+
+import { useMatches, useMoveMatch } from '@hooks'
+
+import { toMatchExtended, isMatchModifiable } from '@utils/matchHelpers'1. **calculateDate(semaine: number, horaire: string, referenceDate?: Date): Date** :
+
+import { getErrorMessage } from '@utils/apiHelpers'   - Date de référence par défaut : 1er janvier 2025 (ou configurable via props)
+
+import type { Match, MatchExtended } from '@types'   - Calculer : `referenceDate + (semaine - 1) * 7 jours`
+
+import EventDetailsModal from './EventDetailsModal'   - Parser horaire format "HH:MM" (ex: "09:00")
+
+   - Setter heures/minutes sur la date calculée
+
+interface CalendarProps {   - Retourner la Date complète
+
+  projectId: number
+
+  semaineMin: number  // Depuis project.semaine_min2. **getWeekNumber(date: Date, referenceDate?: Date): number** :
+
+}   - Calculer différence en millisecondes entre date et referenceDate
+
+   - Convertir en jours : `Math.floor(diff / (1000 * 60 * 60 * 24))`
+
+export default function Calendar({ projectId, semaineMin }: CalendarProps) {   - Calculer semaine : `Math.floor(jours / 7) + 1`
+
+  const [selectedMatch, setSelectedMatch] = useState<MatchExtended | null>(null)   - Retourner le numéro de semaine
+
+  const [isModalOpen, setIsModalOpen] = useState(false)
+
+3. **parseTime(horaire: string): { hours: number, minutes: number }** :
+
+  // Récupérer matchs avec relations (équipes, gymnase)   - Split sur ":" → ["09", "00"]
+
+  const { data: matches, isLoading } = useMatches(projectId, {    - Retourner `{ hours: parseInt(parts[0]), minutes: parseInt(parts[1]) }`
+
+    include_relations: true 
+
+  })### Transformation matchs → événements FullCalendar
+
+```typescript
+
+  // Mutation pour déplacer matchconst events = matches
+
+  const moveMatch = useMoveMatch()  .filter(m => m.semaine !== null && m.horaire !== null)
+
+  .map(match => ({
+
+  // Transformer matchs en événements FullCalendar    id: match.id.toString(),
+
+  const events: EventInput[] = useMemo(() => {    title: `${match.equipe1_nom} vs ${match.equipe2_nom}`,
+
+    if (!matches) return []    start: calculateDate(match.semaine!, match.horaire!),
+
+    backgroundColor: getMatchColor(match),
+
+    return matches    editable: !match.est_fixe && match.statut !== 'termine',
+
+      .filter(m => m.semaine !== null)  // Seulement matchs planifiés    extendedProps: { match }
+
+      .map(match => {  }))
+
+        const extended = toMatchExtended(match, semaineMin)
+
+        function getMatchColor(match: Match): string {
+
+        return {  if (match.est_fixe || match.statut === 'fixe') return '#ef4444' // rouge
+
+          id: match.id.toString(),  if (match.statut === 'termine') return '#22c55e' // vert
+
+          title: extended.titre,  return '#3b82f6' // bleu
+
+          start: getSemaineDate(match.semaine!),  // Date début semaine}
+
+          backgroundColor: extended.couleur,```
+
+          borderColor: extended.couleur,
+
+          textColor: '#ffffff',### Handlers FullCalendar
+
+          editable: extended.est_modifiable,  // Drag & drop seulement si modifiable
+
+          extendedProps: {1. **handleEventDrop(info: EventDropArg)** :
+
+            match: extended,   - Récupérer match : `const match = info.event.extendedProps.match as Match`
+
+          },   - Vérifier si modifiable : `if (!match.est_modifiable()) { info.revert(); return }`
+
+        }   - Calculer nouveau créneau depuis `info.event.start` :
+
+      })     - `semaine = getWeekNumber(info.event.start!)`
+
+  }, [matches, semaineMin])     - `horaire = format(info.event.start!, 'HH:mm')` (utiliser date-fns ou équivalent)
+
+     - `gymnase = match.gymnase!` (conserver gymnase actuel ou permettre changement)
+
+  // Gérer drop d'un événement (déplacement match)   - Appeler `onMatchDrop?.(match.id, { semaine, horaire, gymnase })`
+
+  const handleEventDrop = async (info: EventDropArg) => {   - En cas d'erreur : `info.revert()` pour annuler le déplacement
+
+    const match = info.event.extendedProps.match as MatchExtended
+
+    const newDate = info.event.start!2. **handleEventClick(info: EventClickArg)** :
+
+    const nouvelleSemaine = getWeekNumber(newDate)   - Récupérer match : `const match = info.event.extendedProps.match as Match`
+
+   - Appeler `onMatchClick?.(match)`
+
+    try {
+
+      await moveMatch.mutateAsync({### Composant FullCalendar
+
+        id: match.id,```typescript
+
+        payload: { nouvelle_semaine: nouvelleSemaine },<FullCalendar
+
+      })  plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
+
+    } catch (error) {  initialView="timeGridWeek"
+
+      // Revert position en cas d'erreur  headerToolbar={{
+
+      info.revert()    left: 'prev,next today',
+
+      alert(`Impossible de déplacer le match : ${getErrorMessage(error)}`)    center: 'title',
+
+    }    right: 'dayGridMonth,timeGridWeek,timeGridDay'
+
+  }  }}
+
+  events={events}
+
+  // Gérer clic sur événement (ouvrir modale)  editable={true}
+
+  const handleEventClick = (info: EventClickArg) => {  eventDrop={handleEventDrop}
+
+    const match = info.event.extendedProps.match as MatchExtended  eventClick={handleEventClick}
+
+    setSelectedMatch(match)  slotMinTime="07:00:00"
+
+    setIsModalOpen(true)  slotMaxTime="23:00:00"
+
+  }  locale="fr"
+
+  height="auto"
+
+  // Fermer modale/>
+
+  const handleCloseModal = () => {```
+
+    setIsModalOpen(false)
+
+    setSelectedMatch(null)### Consignes d'organisation
+
+  }- Date de référence cohérente (stocker en config ou props, ex: `referenceDate={new Date(2025, 0, 1)}`)
+
+- Format horaire backend : "HH:MM" 24h
+
+  if (isLoading) {- `editable` per-event empêche drag si fixé
+
+    return (- Gérer timezone (UTC ou locale selon besoin du projet)
+
+      <div className="flex items-center justify-center h-96">- Import CSS FullCalendar obligatoire pour rendu correct
+
+        <div className="text-lg text-gray-600">Chargement du calendrier...</div>- Utiliser `info.revert()` pour annuler drag si erreur
+
+      </div>- Prévoir feedback visuel pendant drag (FullCalendar le gère par défaut)
+
+    )
+
+  }### Impact et liens
+
+- La page CalendarPage (`frontend/src/pages/CalendarPage.tsx`) utilisera ce composant.
+
+  return (- Les hooks (`frontend/src/hooks/useMatches.ts`) fourniront les données matches.
+
+    <div className="p-6 bg-white rounded-lg shadow">- Le handler `onMatchDrop` appellera le hook `useMoveMatch()`.
+
+      <FullCalendar
+
+        plugins={[dayGridPlugin, interactionPlugin]}## À faire/vérifier
+
+        initialView="dayGridMonth"- Créer le composant Calendar avec toutes les fonctions auxiliaires
+
+        headerToolbar={{- Implémenter la transformation matchs → événements
+
+          left: 'prev,next today',- Implémenter les handlers eventDrop et eventClick
+
+          center: 'title',- Tester l'affichage avec données de test :
+
+          right: 'dayGridMonth,dayGridWeek',  - Matchs avec créneaux affichés aux bonnes dates/heures
+
+        }}  - Matchs fixes en rouge, normaux en bleu, terminés en vert
+
+        locale="fr"- Tester le drag & drop :
+
+        firstDay={1}  // Lundi  - Match normal : déplaçable, appelle onMatchDrop
+
+        events={events}  - Match fixé : non déplaçable (editable=false)
+
+        editable={true}  - Erreur API : revenir à position initiale (info.revert())
+
+        eventDrop={handleEventDrop}- Vérifier le calcul des dates/semaines (cohérence aller-retour)
+
+        eventClick={handleEventClick}
+
+        eventContent={renderEventContent}## Questions
+
+        height="auto"Poser des questions si des points sur FullCalendar, le calcul des dates, la gestion du drag & drop, les couleurs ou l'intégration ne sont pas clairs.
+
+        eventTimeFormat={{
+
+          hour: '2-digit',## Documentation
+
+          minute: '2-digit',Rester concis, ne pas ajouter de documentation excessive. Commenter brièvement les fonctions de calcul de dates et la logique de coloration si besoin.
+
+          meridiem: false,
+        }}
+      />
+
+      {/* Modale détails match */}
+      {selectedMatch && (
+        <EventDetailsModal
+          match={selectedMatch}
+          isOpen={isModalOpen}
+          onClose={handleCloseModal}
+          semaineMin={semaineMin}
+        />
+      )}
+    </div>
+  )
+}
+
+/**
+ * Rendu personnalisé d'un événement (avec badge "Fixé").
+ */
+function renderEventContent(eventInfo: any) {
+  const match = eventInfo.event.extendedProps.match as MatchExtended
+
+  return (
+    <div className="p-1 truncate">
+      <div className="font-medium text-sm">{eventInfo.event.title}</div>
+      {match.est_fixe && (
+        <span className="inline-block px-1 py-0.5 text-xs bg-red-500 text-white rounded">
+          Fixé
+        </span>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Calcule la date de début de semaine à partir du numéro de semaine.
+ * 
+ * IMPORTANT : Adapter selon le calendrier réel du championnat.
+ * Exemple : Semaine 1 = 14 octobre 2025
+ */
+function getSemaineDate(semaine: number): Date {
+  // Exemple : Semaine 1 commence le 14 octobre 2025
+  const baseDate = new Date(2025, 9, 14)  // 14 octobre 2025
+  const offset = (semaine - 1) * 7
+  const date = new Date(baseDate)
+  date.setDate(date.getDate() + offset)
+  return date
+}
+
+/**
+ * Calcule le numéro de semaine à partir d'une date.
+ */
+function getWeekNumber(date: Date): number {
+  const baseDate = new Date(2025, 9, 14)
+  const diff = date.getTime() - baseDate.getTime()
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24))
+  return Math.floor(days / 7) + 1
+}
+```
+
+**Points clés** :
+- **events** : Transformation matchs → EventInput FullCalendar
+- **editable** : Basé sur est_modifiable (false si fixé ou < semaine_min)
+- **eventDrop** : Appel useMoveMatch(), revert si erreur
+- **eventClick** : Ouvrir modale de détails
+- **renderEventContent** : Badge "Fixé" sur matchs fixes
+- **getSemaineDate/getWeekNumber** : Conversion semaine ↔ date (à adapter au calendrier réel)
+
+---
+
+### Modale de détails match
+
+**📁 Fichier à créer** : `frontend/src/components/Calendar/EventDetailsModal.tsx`
+
+**Contenu complet** :
+
+```typescript
+/**
+ * Modale pour afficher les détails d'un match.
+ * 
+ * Fonctionnalités :
+ * - Afficher équipes, gymnase, semaine
+ * - Bouton Fixer/Défixer
+ * - Bouton Supprimer
+ * - Bouton Modifier (optionnel)
+ */
+
+import { Fragment } from 'react'
+import { Dialog, Transition } from '@headlessui/react'
+import { 
+  XMarkIcon, 
+  LockClosedIcon, 
+  LockOpenIcon,
+  TrashIcon 
+} from '@heroicons/react/24/outline'
+
+import { useFixMatch, useUnfixMatch, useDeleteMatch } from '@hooks'
+import { getErrorMessage } from '@utils/apiHelpers'
+import type { MatchExtended } from '@types'
+
+interface EventDetailsModalProps {
+  match: MatchExtended
+  isOpen: boolean
+  onClose: () => void
+  semaineMin: number
+}
+
+export default function EventDetailsModal({
+  match,
+  isOpen,
+  onClose,
+  semaineMin,
+}: EventDetailsModalProps) {
+  const fixMatch = useFixMatch()
+  const unfixMatch = useUnfixMatch()
+  const deleteMatch = useDeleteMatch()
+
+  // Fixer match
+  const handleFix = async () => {
+    try {
+      await fixMatch.mutateAsync(match.id)
+      onClose()
+    } catch (error) {
+      alert(`Erreur : ${getErrorMessage(error)}`)
+    }
+  }
+
+  // Défixer match
+  const handleUnfix = async () => {
+    try {
+      await unfixMatch.mutateAsync(match.id)
+      onClose()
+    } catch (error) {
+      alert(`Erreur : ${getErrorMessage(error)}`)
+    }
+  }
+
+  // Supprimer match
+  const handleDelete = async () => {
+    if (!confirm('Êtes-vous sûr de vouloir supprimer ce match ?')) return
+
+    try {
+      await deleteMatch.mutateAsync({
+        id: match.id,
+        projectId: match.project_id,
+      })
+      onClose()
+    } catch (error) {
+      alert(`Erreur : ${getErrorMessage(error)}`)
+    }
+  }
+
+  return (
+    <Transition appear show={isOpen} as={Fragment}>
+      <Dialog as="div" className="relative z-50" onClose={onClose}>
+        {/* Backdrop */}
+        <Transition.Child
+          as={Fragment}
+          enter="ease-out duration-300"
+          enterFrom="opacity-0"
+          enterTo="opacity-100"
+          leave="ease-in duration-200"
+          leaveFrom="opacity-100"
+          leaveTo="opacity-0"
+        >
+          <div className="fixed inset-0 bg-black bg-opacity-25" />
+        </Transition.Child>
+
+        {/* Modal */}
+        <div className="fixed inset-0 overflow-y-auto">
+          <div className="flex min-h-full items-center justify-center p-4">
+            <Transition.Child
+              as={Fragment}
+              enter="ease-out duration-300"
+              enterFrom="opacity-0 scale-95"
+              enterTo="opacity-100 scale-100"
+              leave="ease-in duration-200"
+              leaveFrom="opacity-100 scale-100"
+              leaveTo="opacity-0 scale-95"
+            >
+              <Dialog.Panel className="w-full max-w-md transform overflow-hidden rounded-2xl bg-white p-6 shadow-xl transition-all">
+                {/* Header */}
+                <div className="flex items-center justify-between mb-4">
+                  <Dialog.Title className="text-lg font-medium text-gray-900">
+                    Détails du match
+                  </Dialog.Title>
+                  <button
+                    onClick={onClose}
+                    className="text-gray-400 hover:text-gray-500"
+                  >
+                    <XMarkIcon className="h-6 w-6" />
+                  </button>
+                </div>
+
+                {/* Contenu */}
+                <div className="space-y-4">
+                  {/* Équipes */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">
+                      Équipes
+                    </label>
+                    <div className="mt-1 text-base text-gray-900">
+                      {match.equipe_domicile?.nom || `Équipe ${match.equipe_domicile_id}`}
+                      <span className="mx-2 text-gray-500">vs</span>
+                      {match.equipe_exterieur?.nom || `Équipe ${match.equipe_exterieur_id}`}
+                    </div>
+                  </div>
+
+                  {/* Gymnase */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">
+                      Gymnase
+                    </label>
+                    <div className="mt-1 text-base text-gray-900">
+                      {match.gymnase?.nom || 'Non assigné'}
+                    </div>
+                  </div>
+
+                  {/* Semaine */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">
+                      Semaine
+                    </label>
+                    <div className="mt-1 text-base text-gray-900">
+                      Semaine {match.semaine}
+                      {match.semaine && match.semaine < semaineMin && (
+                        <span className="ml-2 text-sm text-orange-600">
+                          (Non modifiable - avant semaine {semaineMin})
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* État */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">
+                      État
+                    </label>
+                    <div className="mt-1">
+                      {match.est_fixe ? (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                          <LockClosedIcon className="h-4 w-4 mr-1" />
+                          Fixé (non modifiable par le solver)
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                          <LockOpenIcon className="h-4 w-4 mr-1" />
+                          Modifiable
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="mt-6 flex gap-3">
+                  {/* Fixer/Défixer */}
+                  {match.est_modifiable && (
+                    <>
+                      {match.est_fixe ? (
+                        <button
+                          onClick={handleUnfix}
+                          disabled={unfixMatch.isPending}
+                          className="flex-1 inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50"
+                        >
+                          <LockOpenIcon className="h-5 w-5 mr-2" />
+                          {unfixMatch.isPending ? 'Défixage...' : 'Défixer'}
+                        </button>
+                      ) : (
+                        <button
+                          onClick={handleFix}
+                          disabled={fixMatch.isPending}
+                          className="flex-1 inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-orange-600 hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 disabled:opacity-50"
+                        >
+                          <LockClosedIcon className="h-5 w-5 mr-2" />
+                          {fixMatch.isPending ? 'Fixage...' : 'Fixer'}
+                        </button>
+                      )}
+                    </>
+                  )}
+
+                  {/* Supprimer */}
+                  <button
+                    onClick={handleDelete}
+                    disabled={deleteMatch.isPending}
+                    className="flex-1 inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50"
+                  >
+                    <TrashIcon className="h-5 w-5 mr-2" />
+                    {deleteMatch.isPending ? 'Suppression...' : 'Supprimer'}
+                  </button>
+                </div>
+              </Dialog.Panel>
+            </Transition.Child>
+          </div>
+        </div>
+      </Dialog>
+    </Transition>
+  )
+}
+```
+
+**Points clés** :
+- **@headlessui/react Dialog** : Modale accessible avec transitions
+- **@heroicons/react** : Icônes LockClosed, LockOpen, Trash, XMark
+- **Boutons conditionnels** : Fixer/Défixer selon match.est_fixe
+- **Désactivation** : Si match.semaine < semaineMin, pas de boutons Fixer/Défixer
+- **Mutations** : useFixMatch, useUnfixMatch, useDeleteMatch avec states isPending
+
+---
+
+### Styles CSS personnalisés FullCalendar
+
+**📁 Fichier à créer** : `frontend/src/assets/styles/calendar.css`
+
+**Contenu** :
+
+```css
+/* Styles personnalisés FullCalendar */
+
+/* Événements */
+.fc-event {
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.fc-event:hover {
+  opacity: 0.9;
+}
+
+/* Événements non modifiables (grisés) */
+.fc-event:not(.fc-event-draggable) {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Badge "Fixé" */
+.fc-event .badge-fixed {
+  background-color: rgba(239, 68, 68, 0.8);
+  color: white;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  margin-left: 4px;
+}
+
+/* Titre calendrier */
+.fc-toolbar-title {
+  font-size: 1.5rem !important;
+  font-weight: 600 !important;
+  color: #1f2937;
+}
+
+/* Boutons */
+.fc-button {
+  background-color: #3b82f6 !important;
+  border-color: #3b82f6 !important;
+}
+
+.fc-button:hover {
+  background-color: #2563eb !important;
+  border-color: #2563eb !important;
+}
+
+.fc-button-active {
+  background-color: #1d4ed8 !important;
+  border-color: #1d4ed8 !important;
+}
+
+/* Cellules jours */
+.fc-daygrid-day {
+  cursor: pointer;
+}
+
+.fc-daygrid-day:hover {
+  background-color: #f3f4f6;
+}
+
+/* Événements en cours de drag */
+.fc-event-dragging {
+  opacity: 0.5;
+}
+```
+
+**Importer dans Calendar.tsx** :
+```typescript
+import '../../assets/styles/calendar.css'
+```
+
+---
+
+## À faire/vérifier
+
+**Checklist de développement** :
+
+1. ✅ Créer `components/Calendar/Calendar.tsx` avec :
+   - FullCalendar avec dayGrid + interaction plugins
+   - Transformation matchs → EventInput
+   - Drag & drop avec useMoveMatch()
+   - Clic événement → modale
+   - Badge "Fixé" sur matchs fixes
+
+2. ✅ Créer `components/Calendar/EventDetailsModal.tsx` avec :
+   - @headlessui/react Dialog
+   - Affichage détails (équipes, gymnase, semaine)
+   - Boutons Fixer/Défixer (conditionnel)
+   - Bouton Supprimer
+
+3. ✅ Créer `assets/styles/calendar.css` :
+   - Styles événements
+   - Styles badge "Fixé"
+   - Styles boutons FullCalendar
+
+4. ✅ Installer dépendances si manquantes :
+   ```bash
+   npm install @headlessui/react @heroicons/react
+   ```
+
+**Checklist de validation** :
+
+1. ✅ **Test affichage calendrier** :
+   ```tsx
+   import Calendar from '@components/Calendar/Calendar'
+   
+   function App() {
+     return <Calendar projectId={1} semaineMin={2} />
+   }
+   ```
+
+2. ✅ **Test drag & drop** :
+   - Glisser un match modifiable (semaine >= semaine_min, non fixé)
+   - Vérifier appel useMoveMatch()
+   - Vérifier refetch automatique (React Query)
+
+3. ✅ **Test matchs non modifiables** :
+   - Match fixé : Pas de drag & drop, badge "Fixé"
+   - Match semaine < semaine_min : Pas de drag & drop
+
+4. ✅ **Test modale** :
+   - Clic sur match → Modale s'ouvre
+   - Bouton Fixer → Match devient fixé, badge apparaît
+   - Bouton Défixer → Match devient modifiable
+   - Bouton Supprimer → Match supprimé, calendrier mis à jour
+
+5. ✅ **Test responsive** :
+   - Tester sur mobile (vue semaine, événements lisibles)
+
+**Commandes de test** :
+```bash
+# Lancer dev
+npm run dev
+
+# Vérifier types
+npx tsc --noEmit
+
+# Build production
+npm run build
+```
+
+---
+
+## Questions
+
+**Questions critiques** :
+
+1. **Calendrier dates réelles** :
+   - Date de début réelle de la semaine 1 ? (actuellement 14 octobre 2025)
+   - Faut-il un sélecteur de date de début dans l'interface ?
+   - Faut-il stocker date_debut dans Project (config_yaml_data) ?
+
+2. **Vues calendrier** :
+   - dayGridMonth et dayGridWeek suffisantes ?
+   - Faut-il une vue liste (listWeek) ?
+   - Faut-il une vue personnalisée "Semaine du championnat" ?
+
+3. **Couleurs événements** :
+   - Couleurs par poule (actuel) : OK ?
+   - Ou par niveau, catégorie, institution ?
+   - Faut-il des couleurs configurables (config YAML) ?
+
+4. **Détails événements** :
+   - jour_semaine et heure_debut à afficher ?
+   - Faut-il éditer ces champs dans la modale ?
+   - Faut-il un formulaire complet de modification ?
+
+5. **Filtres** :
+   - Faut-il filtrer matchs par poule, niveau, catégorie ?
+   - Faut-il un sélecteur de vue (Toutes les poules / Poule spécifique) ?
+
+6. **Export** :
+   - Faut-il exporter calendrier en PDF/Excel ?
+   - Faut-il partager calendrier (lien public, iCal) ?
+
+---
+
+## Documentation
+
+Documenter uniquement :
+- **getSemaineDate/getWeekNumber** : Expliquer conversion semaine ↔ date
+- **editable: est_modifiable** : Expliquer désactivation drag si fixé ou < semaine_min
+- **eventDrop revert** : Expliquer annulation si erreur backend
+- **Badge "Fixé"** : Expliquer renderEventContent personnalisé

@@ -293,6 +293,128 @@ class DataSource:
         """
         return self.loader.charger_types_poules()
     
+    def charger_matchs_fixes(self) -> Dict:
+        """
+        Charge les matchs déjà programmés et fixés depuis la feuille 'Matchs_Fixes'.
+        
+        Ces matchs ne pourront pas être replanifiés par le solver.
+        
+        Format de la feuille Excel 'Matchs_Fixes':
+        | Equipe_1 | Genre_1 | Equipe_2 | Genre_2 | Semaine | Horaire | Gymnase | Statut | Score_1 | Score_2 | Notes |
+        
+        Returns:
+            Dictionnaire avec:
+            - 'creneaux_occupes': {(semaine, horaire, gymnase): [matchs]}
+            - 'matchs_par_equipe': {nom_equipe: [matchs]}
+            - 'details': Liste des matchs fixés avec toutes leurs infos
+        """
+        import pandas as pd
+        
+        df = self.loader.config.lire_feuille('Matchs_Fixes')
+        if df is None or df.empty:
+            logger.info("Aucun match fixé défini")
+            return {'creneaux_occupes': {}, 'matchs_par_equipe': {}, 'details': []}
+        
+        creneaux_occupes = {}
+        matchs_par_equipe = {}
+        details = []
+        
+        for idx, row in df.iterrows():
+            # Extraire les infos du match
+            equipe1_nom = str(row.get('Equipe_1', '')).strip()
+            equipe1_genre = str(row.get('Genre_1', '')).strip().upper()
+            equipe2_nom = str(row.get('Equipe_2', '')).strip()
+            equipe2_genre = str(row.get('Genre_2', '')).strip().upper()
+            
+            # Ignorer les lignes vides
+            if not equipe1_nom or not equipe2_nom or equipe1_nom == 'nan' or equipe2_nom == 'nan':
+                continue
+            
+            # Normaliser les genres (vide si NaN ou invalide)
+            if equipe1_genre not in ['M', 'F']:
+                equipe1_genre = ''
+            if equipe2_genre not in ['M', 'F']:
+                equipe2_genre = ''
+            
+            # Créer les identifiants uniques des équipes
+            equipe1_id = f"{equipe1_nom}|{equipe1_genre}"
+            equipe2_id = f"{equipe2_nom}|{equipe2_genre}"
+            
+            # Créneau
+            semaine = row.get('Semaine')
+            horaire = str(row.get('Horaire', '')).strip()
+            gymnase = str(row.get('Gymnase', '')).strip()
+            
+            # Valider les données essentielles
+            if pd.isna(semaine) or not horaire or not gymnase:
+                logger.warning(f"Match fixé ligne incomplet : {equipe1_nom} vs {equipe2_nom}")
+                continue
+            
+            try:
+                semaine = int(semaine)
+            except (ValueError, TypeError):
+                logger.warning(f"Semaine invalide pour match : {equipe1_nom} vs {equipe2_nom} (semaine={semaine})")
+                continue
+            
+            # Statut et scores
+            statut = str(row.get('Statut', 'fixe')).strip().lower()
+            score1 = row.get('Score_1')
+            score2 = row.get('Score_2')
+            notes = str(row.get('Notes', '')).strip()
+            
+            # Convertir scores en int si possible
+            try:
+                score1 = int(score1) if pd.notna(score1) else None
+            except (ValueError, TypeError):
+                score1 = None
+            
+            try:
+                score2 = int(score2) if pd.notna(score2) else None
+            except (ValueError, TypeError):
+                score2 = None
+            
+            # Créer l'entrée du match fixé
+            match_info = {
+                'equipe1_nom': equipe1_nom,
+                'equipe1_genre': equipe1_genre,
+                'equipe1_id': equipe1_id,
+                'equipe2_nom': equipe2_nom,
+                'equipe2_genre': equipe2_genre,
+                'equipe2_id': equipe2_id,
+                'semaine': semaine,
+                'horaire': horaire,
+                'gymnase': gymnase,
+                'statut': statut,
+                'score1': score1,
+                'score2': score2,
+                'notes': notes
+            }
+            
+            # Enregistrer le créneau occupé
+            creneau_key = (semaine, horaire, gymnase)
+            if creneau_key not in creneaux_occupes:
+                creneaux_occupes[creneau_key] = []
+            creneaux_occupes[creneau_key].append(match_info)
+            
+            # Enregistrer par équipe
+            for equipe_id in [equipe1_id, equipe2_id]:
+                if equipe_id not in matchs_par_equipe:
+                    matchs_par_equipe[equipe_id] = []
+                matchs_par_equipe[equipe_id].append(match_info)
+            
+            # Ajouter aux détails
+            details.append(match_info)
+        
+        logger.info(f"✓ {len(details)} matchs fixés chargés")
+        logger.info(f"  - {len(creneaux_occupes)} créneaux occupés")
+        logger.info(f"  - {len(matchs_par_equipe)} équipes concernées")
+        
+        return {
+            'creneaux_occupes': creneaux_occupes,
+            'matchs_par_equipe': matchs_par_equipe,
+            'details': details
+        }
+    
     def get_poules_dict(self, equipes: List[Equipe]) -> Dict[str, List[Equipe]]:
         """Regroupe les équipes par poule."""
         return self.loader.get_poules_dict(equipes)

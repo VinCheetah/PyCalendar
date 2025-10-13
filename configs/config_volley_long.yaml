@@ -1,0 +1,28 @@
+# Configuration PyCalendar - Handball avec CP-SAT
+# ====================================
+# Seules les valeurs différentes des défauts sont spécifiées
+
+# Fichiers
+fichiers:
+  donnees: "data_volley/config_volley.xlsx"
+  sortie: "data_volley/calendrier_volley.xlsx"
+
+# Paramètres de planification (seulement valeurs différentes des défauts)
+planification:
+  nb_semaines: 10
+  strategie: "cpsat"  # Défaut: "greedy" - Force l'utilisation de CP-SAT
+
+# Configuration Greedy (fallback)
+greedy:
+  nb_essais: 5        # Défaut: 10 - Réduit pour fallback plus rapide
+
+# Configuration CP-SAT (OR-Tools)
+cpsat:
+  temps_max_secondes: 600    # Défaut: 300 - Limite temps pour tests rapides
+  warm_start: true
+  warm_start_file: "volley"  # Solutions spécifiques au volley
+
+contraintes:
+  compaction_penalites_par_semaine: [0, 0, 5, 8, 8, 10, 15, 3, 4, 5]  # Pénalité par semaine (indice 0 = semaine 1)
+
+  

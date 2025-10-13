@@ -1,0 +1,1110 @@
+# Prompt 3.4 : Intégration Frontend de la Résolution# Prompt 3.4 : Intégration frontend – Résolution projet
+
+
+
+## Contexte global## Contexte global
+
+PyCalendar V2 doit permettre à l'utilisateur de déclencher la résolution (optimisation) du calendrier directement depuis l'interface React. Cette tâche intègre le bouton "Optimiser", l'affichage des résultats, et la gestion des erreurs.PyCalendar V2 doit permettre à l'utilisateur de lancer la résolution d'un projet depuis l'interface web. L'architecture frontend doit rester claire, maintenable et facilement extensible pour supporter différentes stratégies de résolution et options de configuration.
+
+
+
+**RAPPEL - Double configuration et résolution frontend** :## Contexte technique
+
+- **Bouton Optimiser** : Appelle POST /projects/{id}/solveCette tâche concerne l'intégration du bouton de résolution et du hook associé dans le frontend, pour interagir avec l'endpoint API de résolution et rafraîchir automatiquement le calendrier.
+
+- **Affichage résultat** : Toast + mise à jour calendrier
+
+- **Stratégie** : Affichée depuis config_yaml_data.solver.strategie## Résumé du travail précédent
+
+- Le backend expose un endpoint de résolution (`POST /api/projects/{id}/solve`).
+
+## Contexte technique- Le frontend gère l'affichage du calendrier et la navigation (`frontend/src/pages/`).
+
+Cette tâche crée l'interface frontend pour déclencher et afficher les résultats de résolution du calendrier.- Les hooks React Query sont en place pour la gestion des données (`frontend/src/hooks/`).
+
+- Le client API est configuré (`frontend/src/api/`).
+
+## Résumé du travail précédent
+
+- Endpoint POST /projects/{id}/solve créé (Tâche 3.3)## Objectifs
+
+- Hooks React Query pour API créés (Tâche 2.4)- Créer l'endpoint API côté frontend pour appeler la résolution.
+
+- Calendar component avec drag & drop (Tâche 2.5)- Définir le hook React Query pour gérer l'appel et l'invalidation du cache.
+
+- ProjectSelector + ProjectStats (Tâche 2.6)- Intégrer le bouton de résolution dans l'interface avec gestion des états.
+
+- Prévoir l'évolution pour d'autres solveurs, paramètres ou feedback utilisateur amélioré.
+
+## Objectifs
+
+1. Créer hook useSolve pour appeler endpoint## Détails techniques
+
+2. Ajouter bouton "Optimiser le calendrier" dans page principale
+
+3. Afficher résultats de résolution (toast, stats)### Sous-tâche 1 : Endpoint API frontend
+
+4. Gérer erreurs (aucune solution, timeout)**Fichier à créer** : `frontend/src/api/endpoints/solver.ts`
+
+5. Désactiver bouton si aucun match modifiable
+
+6. Afficher progression (optionnel pour async)**Imports** :
+
+```typescript
+
+## Détails techniquesimport apiClient from '../client'
+
+```
+
+### Hook React Query pour résolution
+
+**Interface pour la réponse** :
+
+**📁 Fichier à créer** : `frontend/src/hooks/useSolve.ts````typescript
+
+export interface SolveResponse {
+
+**Code complet** :  message: string
+
+  project_id: number
+
+```typescript  strategy: string
+
+import { useMutation, useQueryClient } from '@tanstack/react-query';  matchs_planifies: number
+
+import { projectsApi } from '@/api/client';  cout_total?: number
+
+}
+
+/**```
+
+ * Interface pour les paramètres de résolution (override optionnel).
+
+ */**Objet export** :
+
+export interface SolveParams {```typescript
+
+  strategie?: 'optimal' | 'heuristique' | 'hybride';export const solverApi = {
+
+  temps_max_secondes?: number;  solve: async (
+
+}    projectId: number, 
+
+    strategy: 'cpsat' | 'greedy' = 'cpsat'
+
+/**  ): Promise<SolveResponse> => {
+
+ * Interface pour les résultats de résolution.    const { data } = await apiClient.post(
+
+ */      `/projects/${projectId}/solve`, 
+
+export interface SolveResult {      { strategy }
+
+  project_id: number;    )
+
+  strategie: string;    return data
+
+  nb_matchs_total: number;  }
+
+  nb_matchs_fixes: number;}
+
+  nb_matchs_planifies: number;```
+
+  nb_matchs_modifiables: number;
+
+  temps_execution_secondes: number;**Ajouter à l'export centralisé** : `frontend/src/api/index.ts`
+
+  erreurs?: string[];```typescript
+
+}export * from './endpoints/solver'
+
+```
+
+/**
+
+ * Hook pour résoudre (optimiser) un projet.### Sous-tâche 2 : Hook React Query
+
+ * **Fichier à créer** : `frontend/src/hooks/useSolver.ts`
+
+ * **Fonctionnalités** :
+
+ * - Appelle POST /projects/{id}/solve**Imports** :
+
+ * - Invalidation cache après résolution```typescript
+
+ * - Gestion erreurs (toast, message)import { useMutation, useQueryClient } from '@tanstack/react-query'
+
+ * import { solverApi } from '@/api'
+
+ * **Utilisation** :import type { SolveResponse } from '@/api/endpoints/solver'
+
+ * ```tsx```
+
+ * const { mutate: solve, isPending } = useSolve();
+
+ * **Hook principal** :
+
+ * solve({ projectId: 1 }, {```typescript
+
+ *   onSuccess: (result) => {export function useSolveProject() {
+
+ *     toast.success(`${result.nb_matchs_planifies} matchs planifiés`);  const queryClient = useQueryClient()
+
+ *   }  
+
+ * });  return useMutation({
+
+ * ```    mutationFn: ({ 
+
+ */      projectId, 
+
+export function useSolve() {      strategy 
+
+  const queryClient = useQueryClient();    }: { 
+
+      projectId: number
+
+  return useMutation<      strategy: 'cpsat' | 'greedy' 
+
+    SolveResult,    }): Promise<SolveResponse> => {
+
+    Error,      return solverApi.solve(projectId, strategy)
+
+    { projectId: number; params?: SolveParams }    },
+
+  >({    
+
+    mutationFn: async ({ projectId, params }) => {    onSuccess: (data) => {
+
+      const response = await projectsApi.solve(projectId, params);      console.log(`✅ Résolution terminée: ${data.matchs_planifies} matchs planifiés`)
+
+      return response.data;      
+
+    },      // Invalider queries matches pour refetch automatique
+
+          queryClient.invalidateQueries({ queryKey: ['matches'] })
+
+    onSuccess: (result, variables) => {      
+
+      // Invalider cache des matchs (affichage mis à jour)      // Invalider projet pour mettre à jour les stats
+
+      queryClient.invalidateQueries({      queryClient.invalidateQueries({ queryKey: ['projects', data.project_id] })
+
+        queryKey: ['matches', 'list', variables.projectId]    },
+
+      });    
+
+          onError: (error) => {
+
+      // Invalider cache des stats projet      console.error('❌ Erreur résolution:', error)
+
+      queryClient.invalidateQueries({    }
+
+        queryKey: ['projects', 'stats', variables.projectId]  })
+
+      });}
+
+      ```
+
+      // Invalider cache du projet (métadonnées)
+
+      queryClient.invalidateQueries({**Ajouter à l'export centralisé** : `frontend/src/hooks/index.ts`
+
+        queryKey: ['projects', 'detail', variables.projectId]```typescript
+
+      });export * from './useSolver'
+
+    },```
+
+  });
+
+}### Sous-tâche 3 : UI Bouton dans CalendarPage
+
+```**Fichier à modifier** : `frontend/src/pages/CalendarPage.tsx`
+
+
+
+**Points clés** :**Import** :
+
+- **SolveParams** : Override optionnel stratégie/temps_max```typescript
+
+- **SolveResult** : Résultat de résolution (matchs planifiés, temps, etc.)import { useSolveProject } from '@/hooks'
+
+- **Invalidation cache** : Matchs + stats + projet après résolution```
+
+- **onSuccess** : Callback pour toast/notification
+
+**Hook dans le composant** :
+
+---```typescript
+
+const solveProject = useSolveProject()
+
+### Fonction API pour résolution```
+
+
+
+**📁 Fichier à modifier** : `frontend/src/api/client.ts`**Handler** :
+
+```typescript
+
+**Ajout dans projectsApi** :const handleSolve = async (strategy: 'cpsat' | 'greedy') => {
+
+  try {
+
+```typescript    const result = await solveProject.mutateAsync({ 
+
+export const projectsApi = {      projectId: selectedProjectId, 
+
+  // ... Fonctions existantes (getProjects, getProject, etc.) ...      strategy 
+
+    })
+
+  /**    
+
+   * Résout (optimise) le calendrier d'un projet.    // Phase 4 : toast notification
+
+   *     alert(`✅ ${result.matchs_planifies} matchs planifiés avec succès !`)
+
+   * @param projectId - ID du projet    
+
+   * @param params - Paramètres optionnels (override stratégie, temps_max)  } catch (error) {
+
+   * @returns Résultat de résolution    alert(`❌ Erreur lors de la résolution: ${(error as Error).message}`)
+
+   */  }
+
+  solve: (projectId: number, params?: SolveParams) =>}
+
+    apiClient.post<SolveResult>(`/projects/${projectId}/solve`, params || {}),```
+
+
+
+  /****UI dans le render** (ajouter dans le header) :
+
+   * Récupère le statut de résolution asynchrone (optionnel).```tsx
+
+   * <header className="mb-6">
+
+   * @param projectId - ID du projet  <div className="flex items-center justify-between">
+
+   * @returns Statut de résolution    <div>
+
+   */      <h1 className="text-3xl font-bold">Calendrier Sportif</h1>
+
+  getSolveStatus: (projectId: number) =>      <p className="text-gray-600">
+
+    apiClient.get<SolveStatus>(`/projects/${projectId}/solve/status`),        Projet ID: {selectedProjectId} | {matches?.length || 0} matchs
+
+      </p>
+
+  /**    </div>
+
+   * Annule une résolution en cours (optionnel).    
+
+   *     <div className="flex gap-2">
+
+   * @param projectId - ID du projet      <button
+
+   */        onClick={() => handleSolve('cpsat')}
+
+  cancelSolve: (projectId: number) =>        disabled={solveProject.isLoading}
+
+    apiClient.delete(`/projects/${projectId}/solve`),        className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+
+};      >
+
+```        {solveProject.isLoading && solveProject.variables?.strategy === 'cpsat' 
+
+          ? 'Calcul CP-SAT...' 
+
+**Interfaces à ajouter** :          : 'Recalculer (CP-SAT)'}
+
+      </button>
+
+```typescript      
+
+export interface SolveParams {      <button
+
+  strategie?: 'optimal' | 'heuristique' | 'hybride';        onClick={() => handleSolve('greedy')}
+
+  temps_max_secondes?: number;        disabled={solveProject.isLoading}
+
+}        className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-400"
+
+      >
+
+export interface SolveResult {        {solveProject.isLoading && solveProject.variables?.strategy === 'greedy' 
+
+  project_id: number;          ? 'Calcul Greedy...' 
+
+  strategie: string;          : 'Recalculer (Greedy)'}
+
+  nb_matchs_total: number;      </button>
+
+  nb_matchs_fixes: number;    </div>
+
+  nb_matchs_planifies: number;  </div>
+
+  nb_matchs_modifiables: number;</header>
+
+  temps_execution_secondes: number;```
+
+  erreurs?: string[];
+
+}### Sous-tâche 4 (Optionnel) : Toast notifications
+
+**Installer react-hot-toast** :
+
+export interface SolveStatus {```bash
+
+  project_id: number;npm install react-hot-toast
+
+  status: 'pending' | 'running' | 'completed' | 'failed';```
+
+  progress?: number; // 0.0 à 1.0
+
+  message?: string;**Modifier App.tsx** :
+
+  result?: SolveResult;```typescript
+
+}import { Toaster } from 'react-hot-toast'
+
+```
+
+// Dans le render
+
+**Points clés** :<Toaster position="top-right" />
+
+- **solve()** : POST avec params optionnels```
+
+- **getSolveStatus()** : Récupérer statut async (optionnel)
+
+- **cancelSolve()** : Annuler résolution (optionnel)**Utiliser dans handleSolve** :
+
+```typescript
+
+---import toast from 'react-hot-toast'
+
+
+
+### Bouton "Optimiser le calendrier"const handleSolve = async (strategy: 'cpsat' | 'greedy') => {
+
+  try {
+
+**📁 Fichier à créer** : `frontend/src/components/SolveButton.tsx`    const result = await solveProject.mutateAsync({ projectId: selectedProjectId, strategy })
+
+    toast.success(`✅ ${result.matchs_planifies} matchs planifiés avec succès !`)
+
+**Code complet** :  } catch (error) {
+
+    toast.error(`❌ Erreur: ${(error as Error).message}`)
+
+```typescript  }
+
+import { useState } from 'react';}
+
+import { useSolve } from '@/hooks/useSolve';```
+
+import { useProjectStats } from '@/hooks/useProjects';
+
+import { CheckCircleIcon, XCircleIcon } from '@heroicons/react/24/solid';### Consignes d'organisation
+
+- Désactiver boutons pendant résolution (`isLoading`)
+
+interface SolveButtonProps {- Feedback visuel clair (spinner, texte "Calcul en cours...")
+
+  projectId: number;- Invalider queries pour refetch automatique du calendrier
+
+  onSuccess?: (result: SolveResult) => void;- Gérer les erreurs avec messages clairs (toast ou alert)
+
+  onError?: (error: Error) => void;- Prévoir l'évolution pour sélection dynamique de projet (Phase 4)
+
+}- Considérer feedback avancé : durée résolution, coût, statistiques
+
+
+
+/**### Impact et liens
+
+ * Bouton pour déclencher l'optimisation du calendrier.- L'endpoint API backend (`backend/api/routes/solver.py`) est appelé.
+
+ * - Le hook React Query gère l'invalidation du cache après résolution.
+
+ * **Fonctionnalités** :- Le calendrier (`Calendar` component) se rafraîchit automatiquement.
+
+ * - Désactivé si aucun match modifiable
+
+ * - Affiche progression pendant résolution## À faire/vérifier
+
+ * - Toast succès/erreur après résolution- Créer l'endpoint API frontend (solver.ts)
+
+ * - Créer le hook useSolveProject
+
+ * **Utilisation** :- Modifier CalendarPage pour ajouter les boutons
+
+ * ```tsx- (Optionnel) Installer et configurer react-hot-toast
+
+ * <SolveButton - Tester l'intégration complète :
+
+ *   projectId={1}  - Backend démarré
+
+ *   onSuccess={(result) => toast.success(`${result.nb_matchs_planifies} matchs planifiés`)}  - Frontend démarré
+
+ * />  - Fixer 2-3 matchs via interface (Phase 4) ou API directe
+
+ * ```  - Cliquer "Recalculer (CP-SAT)"
+
+ */  - Vérifier :
+
+export function SolveButton({ projectId, onSuccess, onError }: SolveButtonProps) {    - Bouton désactivé pendant calcul
+
+  const { data: stats } = useProjectStats(projectId);    - Texte change en "Calcul CP-SAT..."
+
+  const { mutate: solve, isPending } = useSolve();    - Calendrier se rafraîchit après résolution
+
+  const [result, setResult] = useState<SolveResult | null>(null);    - Matchs fixes n'ont pas bougé
+
+    - Autres matchs replanifiés
+
+  // Vérifier si résolution possible    - Notification succès affichée
+
+  const nbMatchsModifiables = stats   - Tester avec "Recalculer (Greedy)"
+
+    ? stats.nb_matchs_total - stats.nb_matchs_fixes   - Tester les erreurs (projet inexistant, backend arrêté)
+
+    : 0;- Vérifier que les queries sont invalidées (React Query DevTools)
+
+  const canSolve = nbMatchsModifiables > 0;
+
+## Questions
+
+  const handleSolve = () => {Poser des questions si des points sur React Query, l'invalidation du cache, la gestion des états, le feedback utilisateur ou l'intégration ne sont pas clairs.
+
+    solve(
+
+      { projectId },## Documentation
+
+      {Rester concis, ne pas ajouter de documentation excessive. Commenter brièvement la logique d'invalidation des queries si besoin.
+
+        onSuccess: (data) => {
+          setResult(data);
+          onSuccess?.(data);
+        },
+        onError: (err) => {
+          onError?.(err);
+        },
+      }
+    );
+  };
+
+  return (
+    <div className="flex flex-col gap-3">
+      {/* Bouton principal */}
+      <button
+        onClick={handleSolve}
+        disabled={!canSolve || isPending}
+        className={`
+          px-6 py-3 rounded-lg font-semibold
+          transition-colors duration-200
+          ${canSolve && !isPending
+            ? 'bg-blue-600 hover:bg-blue-700 text-white'
+            : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+          }
+        `}
+      >
+        {isPending ? (
+          <span className="flex items-center gap-2">
+            <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+              <circle
+                className="opacity-25"
+                cx="12" cy="12" r="10"
+                stroke="currentColor" strokeWidth="4" fill="none"
+              />
+              <path
+                className="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+              />
+            </svg>
+            Optimisation en cours...
+          </span>
+        ) : (
+          'Optimiser le calendrier'
+        )}
+      </button>
+
+      {/* Message si aucun match modifiable */}
+      {!canSolve && (
+        <p className="text-sm text-gray-600">
+          Aucun match modifiable (tous les matchs sont fixés ou avant semaine_minimum).
+        </p>
+      )}
+
+      {/* Résultat de résolution */}
+      {result && (
+        <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+          <div className="flex items-start gap-3">
+            <CheckCircleIcon className="w-6 h-6 text-green-600 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <h4 className="font-semibold text-green-900">
+                Optimisation réussie
+              </h4>
+              <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                <div>
+                  <dt className="text-gray-600">Stratégie</dt>
+                  <dd className="font-medium text-gray-900">{result.strategie}</dd>
+                </div>
+                <div>
+                  <dt className="text-gray-600">Temps d'exécution</dt>
+                  <dd className="font-medium text-gray-900">
+                    {result.temps_execution_secondes.toFixed(2)}s
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-gray-600">Matchs planifiés</dt>
+                  <dd className="font-medium text-gray-900">
+                    {result.nb_matchs_planifies} / {result.nb_matchs_total}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-gray-600">Matchs modifiés</dt>
+                  <dd className="font-medium text-gray-900">
+                    {result.nb_matchs_modifiables}
+                  </dd>
+                </div>
+              </dl>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+**Points clés** :
+- **Désactivé si aucun match modifiable** : nbMatchsModifiables = total - fixes
+- **Spinner pendant résolution** : isPending
+- **Résultat affiché** : Cards avec stratégie, temps, matchs planifiés
+- **Callback onSuccess** : Pour toast externe
+
+---
+
+### Intégration dans page principale
+
+**📁 Fichier à modifier** : `frontend/src/pages/App.tsx`
+
+**Ajout du bouton** :
+
+```typescript
+import { useState } from 'react';
+import { ProjectSelector } from '@/components/ProjectSelector';
+import { ProjectStats } from '@/components/ProjectStats';
+import { Calendar } from '@/components/Calendar';
+import { SolveButton } from '@/components/SolveButton';
+import { Header } from '@/components/Header';
+import { toast, Toaster } from 'react-hot-toast'; // Installer : npm install react-hot-toast
+
+export function App() {
+  const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <Header />
+      
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Sélecteur de projet */}
+        <div className="mb-6">
+          <ProjectSelector
+            selectedProjectId={selectedProjectId}
+            onSelect={setSelectedProjectId}
+          />
+        </div>
+
+        {selectedProjectId && (
+          <div className="space-y-6">
+            {/* Stats projet */}
+            <ProjectStats projectId={selectedProjectId} />
+
+            {/* Bouton Optimiser */}
+            <div className="bg-white rounded-lg shadow p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                Optimisation du calendrier
+              </h3>
+              <SolveButton
+                projectId={selectedProjectId}
+                onSuccess={(result) => {
+                  toast.success(
+                    `✅ ${result.nb_matchs_planifies} matchs planifiés en ${result.temps_execution_secondes.toFixed(1)}s`,
+                    { duration: 5000 }
+                  );
+                }}
+                onError={(error) => {
+                  toast.error(
+                    `❌ Erreur lors de l'optimisation : ${error.message}`,
+                    { duration: 7000 }
+                  );
+                }}
+              />
+            </div>
+
+            {/* Calendrier */}
+            <Calendar projectId={selectedProjectId} />
+          </div>
+        )}
+      </main>
+
+      {/* Toast notifications */}
+      <Toaster position="top-right" />
+    </div>
+  );
+}
+```
+
+**Points clés** :
+- **SolveButton** : Intégré entre ProjectStats et Calendar
+- **Toasts** : react-hot-toast pour notifications
+- **onSuccess** : Toast avec résultat (matchs planifiés, temps)
+- **onError** : Toast avec message d'erreur
+
+---
+
+### Modal de configuration de résolution (optionnel)
+
+**📁 Fichier à créer** : `frontend/src/components/SolveConfigModal.tsx`
+
+**Code complet** :
+
+```typescript
+import { Fragment, useState } from 'react';
+import { Dialog, Transition } from '@headlessui/react';
+import { XMarkIcon } from '@heroicons/react/24/outline';
+import { SolveParams } from '@/hooks/useSolve';
+
+interface SolveConfigModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onConfirm: (params: SolveParams) => void;
+  defaultStrategie?: string;
+}
+
+/**
+ * Modal pour configurer les paramètres de résolution.
+ * 
+ * Permet d'override stratégie et temps_max pour une résolution ponctuelle.
+ */
+export function SolveConfigModal({
+  isOpen,
+  onClose,
+  onConfirm,
+  defaultStrategie = 'hybride'
+}: SolveConfigModalProps) {
+  const [strategie, setStrategie] = useState<string>(defaultStrategie);
+  const [tempsMax, setTempsMax] = useState<number>(300); // 5 minutes par défaut
+
+  const handleConfirm = () => {
+    onConfirm({
+      strategie: strategie as 'optimal' | 'heuristique' | 'hybride',
+      temps_max_secondes: tempsMax
+    });
+    onClose();
+  };
+
+  return (
+    <Transition appear show={isOpen} as={Fragment}>
+      <Dialog as="div" className="relative z-50" onClose={onClose}>
+        <Transition.Child
+          as={Fragment}
+          enter="ease-out duration-300"
+          enterFrom="opacity-0"
+          enterTo="opacity-100"
+          leave="ease-in duration-200"
+          leaveFrom="opacity-100"
+          leaveTo="opacity-0"
+        >
+          <div className="fixed inset-0 bg-black bg-opacity-25" />
+        </Transition.Child>
+
+        <div className="fixed inset-0 overflow-y-auto">
+          <div className="flex min-h-full items-center justify-center p-4">
+            <Transition.Child
+              as={Fragment}
+              enter="ease-out duration-300"
+              enterFrom="opacity-0 scale-95"
+              enterTo="opacity-100 scale-100"
+              leave="ease-in duration-200"
+              leaveFrom="opacity-100 scale-100"
+              leaveTo="opacity-0 scale-95"
+            >
+              <Dialog.Panel className="w-full max-w-md transform overflow-hidden rounded-2xl bg-white p-6 shadow-xl transition-all">
+                <div className="flex items-center justify-between mb-4">
+                  <Dialog.Title className="text-lg font-semibold text-gray-900">
+                    Configuration de la résolution
+                  </Dialog.Title>
+                  <button
+                    onClick={onClose}
+                    className="text-gray-400 hover:text-gray-500"
+                  >
+                    <XMarkIcon className="w-6 h-6" />
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  {/* Stratégie */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Stratégie de résolution
+                    </label>
+                    <select
+                      value={strategie}
+                      onChange={(e) => setStrategie(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="optimal">Optimal (CP-SAT)</option>
+                      <option value="heuristique">Heuristique (rapide)</option>
+                      <option value="hybride">Hybride (optimal + fallback)</option>
+                    </select>
+                    <p className="mt-1 text-sm text-gray-500">
+                      {strategie === 'optimal' && 'Solution optimale garantie (peut être lent)'}
+                      {strategie === 'heuristique' && 'Solution rapide (non garantie optimale)'}
+                      {strategie === 'hybride' && 'Essaie optimal, bascule heuristique si échec'}
+                    </p>
+                  </div>
+
+                  {/* Temps max */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Temps maximum (secondes)
+                    </label>
+                    <input
+                      type="number"
+                      value={tempsMax}
+                      onChange={(e) => setTempsMax(parseInt(e.target.value))}
+                      min={10}
+                      max={3600}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    />
+                    <p className="mt-1 text-sm text-gray-500">
+                      Temps max avant timeout (10s à 1h)
+                    </p>
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="mt-6 flex justify-end gap-3">
+                  <button
+                    onClick={onClose}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    onClick={handleConfirm}
+                    className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg"
+                  >
+                    Optimiser
+                  </button>
+                </div>
+              </Dialog.Panel>
+            </Transition.Child>
+          </div>
+        </div>
+      </Dialog>
+    </Transition>
+  );
+}
+```
+
+**Modification SolveButton pour utiliser modal** :
+
+```typescript
+import { SolveConfigModal } from './SolveConfigModal';
+
+export function SolveButton({ projectId, onSuccess, onError }: SolveButtonProps) {
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  
+  // ... code existant ...
+
+  const handleSolveWithConfig = (params: SolveParams) => {
+    solve(
+      { projectId, params },
+      { onSuccess, onError }
+    );
+  };
+
+  return (
+    <>
+      <button
+        onClick={() => setIsModalOpen(true)}
+        disabled={!canSolve}
+        // ... style existant ...
+      >
+        Configurer et optimiser
+      </button>
+
+      <SolveConfigModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onConfirm={handleSolveWithConfig}
+        defaultStrategie={project?.config_yaml_data?.solver?.strategie}
+      />
+    </>
+  );
+}
+```
+
+**Points clés** :
+- **Modal @headlessui** : Configuration stratégie + temps_max
+- **Override config YAML** : Temporaire pour cette résolution
+- **Descriptions stratégies** : Aide utilisateur à choisir
+
+---
+
+### Affichage progression (résolution async)
+
+**📁 Fichier à créer** : `frontend/src/components/SolveProgress.tsx`
+
+**Code pour polling statut** :
+
+```typescript
+import { useQuery } from '@tanstack/react-query';
+import { projectsApi } from '@/api/client';
+
+interface SolveProgressProps {
+  projectId: number;
+}
+
+/**
+ * Composant pour afficher la progression de résolution asynchrone.
+ * 
+ * Utilise polling pour récupérer statut depuis GET /projects/{id}/solve/status.
+ */
+export function SolveProgress({ projectId }: SolveProgressProps) {
+  const { data: status } = useQuery({
+    queryKey: ['solve-status', projectId],
+    queryFn: async () => {
+      const res = await projectsApi.getSolveStatus(projectId);
+      return res.data;
+    },
+    refetchInterval: (data) => {
+      // Polling toutes les secondes si en cours
+      if (data?.status === 'running' || data?.status === 'pending') {
+        return 1000;
+      }
+      // Arrêter polling si terminé/échec
+      return false;
+    },
+    enabled: true,
+  });
+
+  if (!status) return null;
+
+  return (
+    <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+      <div className="flex items-center gap-3">
+        {/* Spinner si en cours */}
+        {(status.status === 'running' || status.status === 'pending') && (
+          <svg className="animate-spin h-5 w-5 text-blue-600" viewBox="0 0 24 24">
+            <circle
+              className="opacity-25"
+              cx="12" cy="12" r="10"
+              stroke="currentColor" strokeWidth="4" fill="none"
+            />
+            <path
+              className="opacity-75"
+              fill="currentColor"
+              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+            />
+          </svg>
+        )}
+
+        <div className="flex-1">
+          <p className="text-sm font-medium text-blue-900">
+            {status.message || 'Résolution en cours...'}
+          </p>
+          
+          {/* Barre de progression */}
+          {status.progress !== undefined && (
+            <div className="mt-2 w-full bg-blue-200 rounded-full h-2">
+              <div
+                className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                style={{ width: `${status.progress * 100}%` }}
+              />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Résultat si terminé */}
+      {status.status === 'completed' && status.result && (
+        <div className="mt-3 text-sm text-blue-800">
+          ✅ {status.result.nb_matchs_planifies} matchs planifiés en{' '}
+          {status.result.temps_execution_secondes.toFixed(1)}s
+        </div>
+      )}
+
+      {/* Erreur si échec */}
+      {status.status === 'failed' && (
+        <div className="mt-3 text-sm text-red-800">
+          ❌ {status.message}
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+**Points clés** :
+- **Polling avec refetchInterval** : 1s si running, stop si terminé
+- **Barre de progression** : Si status.progress fourni
+- **Affichage résultat** : Cards si completed
+
+---
+
+## À faire/vérifier
+
+**Checklist de développement** :
+
+1. ✅ Créer hook dans `frontend/src/hooks/useSolve.ts` :
+   - useSolve() avec mutation POST /solve
+   - Interfaces SolveParams, SolveResult
+   - Invalidation cache après résolution
+
+2. ✅ Créer composant dans `frontend/src/components/SolveButton.tsx` :
+   - Bouton "Optimiser le calendrier"
+   - Désactivé si aucun match modifiable
+   - Spinner pendant résolution
+   - Affichage résultat (stratégie, temps, matchs)
+
+3. ✅ Intégrer dans `frontend/src/pages/App.tsx` :
+   - Placer SolveButton entre ProjectStats et Calendar
+   - Toasts avec react-hot-toast
+   - Callbacks onSuccess/onError
+
+4. ✅ (Optionnel) Créer modal configuration :
+   - SolveConfigModal pour override stratégie/temps_max
+   - Descriptions stratégies (optimal, heuristique, hybride)
+
+5. ✅ (Optionnel) Créer composant progression :
+   - SolveProgress avec polling statut
+   - Barre de progression
+   - Affichage résultat/erreur
+
+**Checklist de validation** :
+
+1. ✅ **Test bouton Optimiser** :
+   ```bash
+   # Lancer backend + frontend
+   cd backend && uvicorn main:app --reload
+   cd frontend && npm run dev
+   
+   # Ouvrir http://localhost:5173
+   # Sélectionner projet
+   # Cliquer "Optimiser le calendrier"
+   # Vérifier :
+   # - Spinner pendant résolution
+   # - Toast succès avec résultat
+   # - Calendrier mis à jour (nouveaux matchs affichés)
+   ```
+
+2. ✅ **Test désactivation bouton** :
+   ```bash
+   # Fixer tous les matchs d'un projet
+   curl -X POST http://localhost:8000/matches/1/fix
+   curl -X POST http://localhost:8000/matches/2/fix
+   # ...
+   
+   # Recharger frontend
+   # Vérifier :
+   # - Bouton "Optimiser" désactivé
+   # - Message "Aucun match modifiable" affiché
+   ```
+
+3. ✅ **Test gestion erreurs** :
+   ```bash
+   # Tester projet sans équipes/gymnases
+   # Vérifier :
+   # - Toast erreur affiché
+   # - Message clair (SolverError)
+   ```
+
+4. ✅ **Test modal configuration (si implémenté)** :
+   ```bash
+   # Cliquer "Configurer et optimiser"
+   # Changer stratégie → heuristique
+   # Changer temps_max → 60s
+   # Cliquer "Optimiser"
+   # Vérifier :
+   # - Stratégie override utilisée
+   # - Résultat affiché avec stratégie "heuristique"
+   ```
+
+5. ✅ **Test progression async (si implémenté)** :
+   ```bash
+   # Lancer résolution async
+   # Vérifier :
+   # - Barre de progression affichée
+   # - Mise à jour toutes les 1s
+   # - Résultat affiché à la fin
+   ```
+
+**Commandes de test** :
+```bash
+# Installer dépendances
+cd frontend
+npm install react-hot-toast @headlessui/react @heroicons/react
+
+# Lancer dev
+npm run dev
+
+# Build production
+npm run build
+npm run preview
+```
+
+---
+
+## Questions
+
+**Questions critiques** :
+
+1. **Toast vs modal résultat** :
+   - Toast suffisant pour afficher résultat ?
+   - Ou modal détaillé avec graphiques (matchs planifiés/semaine) ?
+   - Faut-il historique des résolutions (avec rollback) ?
+
+2. **Override config** :
+   - Faut-il permettre override stratégie/temps_max ?
+   - Ou forcer utilisation config YAML (plus simple) ?
+   - Si override, faut-il sauvegarder dans projet (metadata) ?
+
+3. **Résolution async** :
+   - Polling statut toutes les secondes acceptable ?
+   - Ou websockets pour push temps réel ?
+   - Faut-il annulation résolution en cours (bouton "Annuler") ?
+
+4. **Feedback utilisateur** :
+   - Afficher progression détaillée (contraintes traitées, itérations) ?
+   - Ou simple spinner "Optimisation en cours" ?
+   - Faut-il logs visibles (console frontend) ?
+
+5. **Gestion erreurs** :
+   - Message d'erreur générique ok (toast) ?
+   - Ou détails techniques (contraintes violées, matchs conflictuels) ?
+   - Faut-il suggestions (ex: "Libérez des matchs fixes pour permettre optimisation") ?
+
+6. **UX calendrier** :
+   - Après résolution, faut-il auto-scroll vers première semaine modifiée ?
+   - Faut-il highlight matchs nouvellement planifiés ?
+   - Faut-il animation (fade-in) pour nouveaux matchs ?
+
+---
+
+## Documentation
+
+Documenter uniquement :
+- **SolveButton** : Expliquer désactivation si aucun match modifiable
+- **useSolve** : Expliquer invalidation cache (matchs, stats, projet)
+- **Modal config** : Expliquer override temporaire (pas persiste)
+- **Async** : Expliquer polling vs websockets (si implémenté)
+- **Toast** : Expliquer react-hot-toast pour notifications

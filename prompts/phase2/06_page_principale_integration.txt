@@ -1,0 +1,905 @@
+# Prompt 2.6 : Page Principale et Intégration# Prompt 2.6 : Page principale – Intégration calendrier
+
+
+
+## Contexte global## Contexte global
+
+PyCalendar V2 intègre tous les composants React dans une page principale avec sélecteur de projet, affichage du calendrier, et statistiques. L'interface doit refléter la double configuration (YAML + Excel).PyCalendar V2 doit proposer une page principale intégrant le calendrier, les hooks React Query et la navigation. L'architecture frontend doit rester claire, maintenable et facilement extensible pour de futures fonctionnalités.
+
+
+
+**RAPPEL - Double configuration** :## Contexte technique
+
+- **Sélecteur de projet** : Affiche config_yaml_path, config_excel_pathCette tâche concerne la création de la page principale (CalendarPage) et l'intégration du composant calendrier, des hooks React Query, du routeur React Router, et du QueryClientProvider.
+
+- **Statistiques** : Depuis config_excel_data (nb_equipes, nb_gymnases) et ProjectStats (nb_matchs)
+
+- **Calendrier** : Utilise semaine_min depuis config_yaml_data.semaines.semaine_minimum## Résumé du travail précédent
+
+- Le composant Calendar est créé avec drag & drop (`frontend/src/components/calendar/Calendar.tsx`).
+
+## Contexte technique- Les hooks React Query sont opérationnels (`frontend/src/hooks/`).
+
+Cette tâche crée la page principale qui assemble tous les composants : sélecteur de projets, calendrier FullCalendar, panneau de statistiques, et navigation.- Le client API est configuré (`frontend/src/api/`).
+
+- Les types TypeScript sont définis (`frontend/src/types/`).
+
+## Résumé du travail précédent
+
+- Composant Calendar avec drag & drop créé (Tâche 2.5)## Objectifs
+
+- Hooks React Query complets (useProjects, useMatches, useProjectStats) (Tâche 2.4)- Créer une page principale CalendarPage intégrant le composant Calendar.
+
+- Types TypeScript avec ConfigYamlData, ConfigExcelData (Tâche 2.2)- Gérer les états (chargement, erreur, données) avec les hooks React Query.
+
+- Implémenter les handlers pour drag & drop et clics sur matchs.
+
+## Objectifs- Configurer le routeur et le QueryClientProvider dans App.tsx.
+
+1. Créer sélecteur de projets avec infos config- Prévoir l'évolution de la navigation et des fonctionnalités.
+
+2. Créer panneau de statistiques projet
+
+3. Assembler page principale avec layout## Détails techniques
+
+4. Gérer état projet sélectionné
+
+5. Afficher informations double configuration### Fichier principal : CalendarPage
+
+**Créer** : `frontend/src/pages/CalendarPage.tsx`
+
+## Détails techniques
+
+**Imports requis** :
+
+### Sélecteur de projets```typescript
+
+import { useState } from 'react'
+
+**📁 Fichier à créer** : `frontend/src/components/Project/ProjectSelector.tsx`import { Calendar } from '@/components/calendar/Calendar'
+
+import { useMatches, useMoveMatch, useFixMatch, useUnfixMatch } from '@/hooks'
+
+**Contenu complet** :import type { Match, MatchMove } from '@/types'
+
+```
+
+```typescript
+
+/****État local** :
+
+ * Sélecteur de projets avec affichage des configurations.```typescript
+
+ * const [selectedProjectId] = useState(1) // Hardcodé pour Phase 2, dynamique en Phase 3
+
+ * Affiche :```
+
+ * - Nom, sport, nb_semaines, semaine_min
+
+ * - Chemin config YAML**Hooks React Query** :
+
+ * - Chemin config Excel```typescript
+
+ * - Métadonnées Excel (nb_equipes, nb_gymnases)const { data: matches, isLoading, error } = useMatches(selectedProjectId)
+
+ */const moveMatch = useMoveMatch()
+
+const fixMatch = useFixMatch()
+
+import { Fragment } from 'react'const unfixMatch = useUnfixMatch()
+
+import { Listbox, Transition } from '@headlessui/react'```
+
+import { CheckIcon, ChevronUpDownIcon } from '@heroicons/react/20/solid'
+
+import { **Handler handleMatchDrop** :
+
+  DocumentTextIcon, ```typescript
+
+  TableCellsIcon const handleMatchDrop = async (matchId: number, creneau: MatchMove) => {
+
+} from '@heroicons/react/24/outline'  try {
+
+    await moveMatch.mutateAsync({ id: matchId, creneau })
+
+import { useProjects } from '@hooks'    console.log('✅ Match déplacé avec succès')
+
+import type { Project } from '@types'    // Phase 3 : toast notification
+
+  } catch (error) {
+
+interface ProjectSelectorProps {    console.error('❌ Erreur déplacement match:', error)
+
+  selectedProjectId: number | null    alert('Impossible de déplacer ce match')
+
+  onSelectProject: (project: Project) => void  }
+
+}}
+
+```
+
+export default function ProjectSelector({
+
+  selectedProjectId,**Handler handleMatchClick** :
+
+  onSelectProject,```typescript
+
+}: ProjectSelectorProps) {const handleMatchClick = (match: Match) => {
+
+  const { data: projects, isLoading } = useProjects()  console.log('Match cliqué:', match)
+
+  // Phase 3 : Ouvrir modal détails match avec options fix/unfix
+
+  const selectedProject = projects?.find(p => p.id === selectedProjectId)}
+
+```
+
+  if (isLoading) {
+
+    return (**Render avec gestion états** :
+
+      <div className="animate-pulse">```typescript
+
+        <div className="h-10 bg-gray-200 rounded"></div>if (isLoading) {
+
+      </div>  return (
+
+    )    <div className="flex items-center justify-center h-screen">
+
+  }      <div className="text-xl">Chargement du calendrier...</div>
+
+    </div>
+
+  if (!projects || projects.length === 0) {  )
+
+    return (}
+
+      <div className="text-gray-500 text-sm">
+
+        Aucun projet disponible. Importez un projet via le backend.if (error) {
+
+      </div>  return (
+
+    )    <div className="flex items-center justify-center h-screen">
+
+  }      <div className="text-xl text-red-500">
+
+        Erreur : {(error as Error).message}
+
+  return (      </div>
+
+    <div>    </div>
+
+      <Listbox value={selectedProject} onChange={onSelectProject}>  )
+
+        <div className="relative">}
+
+          <Listbox.Button className="relative w-full cursor-pointer rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+
+            <span className="block truncate">return (
+
+              {selectedProject ? (  <div className="container mx-auto p-4">
+
+                <div>    <header className="mb-6">
+
+                  <div className="font-medium text-gray-900">      <h1 className="text-3xl font-bold">Calendrier Sportif</h1>
+
+                    {selectedProject.nom}      <p className="text-gray-600">
+
+                  </div>        Projet ID: {selectedProjectId} | {matches?.length || 0} matchs
+
+                  <div className="text-sm text-gray-500">      </p>
+
+                    {selectedProject.sport} • {selectedProject.nb_semaines} semaines    </header>
+
+                    • Semaine min: {selectedProject.semaine_min}    
+
+                  </div>    <div className="bg-white rounded-lg shadow p-4">
+
+                </div>      {matches && (
+
+              ) : (        <Calendar
+
+                <span className="text-gray-500">Sélectionner un projet</span>          matches={matches}
+
+              )}          onMatchDrop={handleMatchDrop}
+
+            </span>          onMatchClick={handleMatchClick}
+
+            <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">        />
+
+              <ChevronUpDownIcon      )}
+
+                className="h-5 w-5 text-gray-400"    </div>
+
+                aria-hidden="true"    
+
+              />    <footer className="mt-4 text-sm text-gray-500">
+
+            </span>      <p>🔴 Rouge = Fixé | 🔵 Bleu = Normal | 🟢 Vert = Terminé</p>
+
+          </Listbox.Button>    </footer>
+
+  </div>
+
+          <Transition)
+
+            as={Fragment}```
+
+            leave="transition ease-in duration-100"
+
+            leaveFrom="opacity-100"### Fichier App.tsx : Router et QueryClient
+
+            leaveTo="opacity-0"**Créer** : `frontend/src/App.tsx`
+
+          >
+
+            <Listbox.Options className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md bg-white py-1 shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">**Imports requis** :
+
+              {projects.map((project) => (```typescript
+
+                <Listbox.Optionimport { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+
+                  key={project.id}import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
+
+                  value={project}import { BrowserRouter, Routes, Route } from 'react-router-dom'
+
+                  className={({ active }) =>import { CalendarPage } from './pages/CalendarPage'
+
+                    `relative cursor-pointer select-none py-3 pl-10 pr-4 ${```
+
+                      active ? 'bg-blue-100 text-blue-900' : 'text-gray-900'
+
+                    }`**Configuration QueryClient** (hors composant) :
+
+                  }```typescript
+
+                >const queryClient = new QueryClient({
+
+                  {({ selected }) => (  defaultOptions: {
+
+                    <>    queries: {
+
+                      <div>      refetchOnWindowFocus: false, // Éviter refetch constant
+
+                        <div className={`block truncate ${selected ? 'font-medium' : 'font-normal'}`}>      staleTime: 5 * 60 * 1000 // 5 minutes
+
+                          {project.nom}    }
+
+                        </div>  }
+
+                        <div className="text-sm text-gray-500">})
+
+                          {project.sport} • {project.nb_semaines} semaines```
+
+                        </div>
+
+                        **Composant App** :
+
+                        {/* Infos config */}```typescript
+
+                        <div className="mt-2 space-y-1 text-xs text-gray-600">export default function App() {
+
+                          <div className="flex items-center">  return (
+
+                            <DocumentTextIcon className="h-4 w-4 mr-1" />    <QueryClientProvider client={queryClient}>
+
+                            <span className="truncate">      <BrowserRouter>
+
+                              YAML: {project.config_yaml_path}        <Routes>
+
+                            </span>          <Route path="/" element={<CalendarPage />} />
+
+                          </div>          {/* Phase 3+ : Routes projects, stats, settings, etc. */}
+
+                          <div className="flex items-center">        </Routes>
+
+                            <TableCellsIcon className="h-4 w-4 mr-1" />      </BrowserRouter>
+
+                            <span className="truncate">      
+
+                              Excel: {project.config_excel_path}      {/* DevTools en développement uniquement */}
+
+                            </span>      {import.meta.env.DEV && <ReactQueryDevtools initialIsOpen={false} />}
+
+                          </div>    </QueryClientProvider>
+
+                          <div className="text-gray-500">  )
+
+                            {project.config_excel_data.nb_equipes} équipes, {project.config_excel_data.nb_gymnases} gymnases}
+
+                          </div>```
+
+                        </div>
+
+                      </div>### Fichier main.tsx : Point d'entrée
+
+                      **Modifier** : `frontend/src/main.tsx`
+
+                      {selected && (
+
+                        <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-blue-600">```typescript
+
+                          <CheckIcon className="h-5 w-5" aria-hidden="true" />import React from 'react'
+
+                        </span>import ReactDOM from 'react-dom/client'
+
+                      )}import App from './App'
+
+                    </>import './index.css' // Tailwind CSS
+
+                  )}
+
+                </Listbox.Option>ReactDOM.createRoot(document.getElementById('root')!).render(
+
+              ))}  <React.StrictMode>
+
+            </Listbox.Options>    <App />
+
+          </Transition>  </React.StrictMode>
+
+        </div>)
+
+      </Listbox>```
+
+
+
+      {/* Infos config du projet sélectionné */}### Configuration Tailwind CSS (optionnel)
+
+      {selectedProject && (**Modifier** : `frontend/tailwind.config.js`
+
+        <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+
+          <h3 className="text-sm font-medium text-gray-900 mb-3">```javascript
+
+            Configuration du projet/** @type {import('tailwindcss').Config} */
+
+          </h3>export default {
+
+            content: [
+
+          <div className="space-y-2 text-sm">    "./index.html",
+
+            {/* Config YAML */}    "./src/**/*.{js,ts,jsx,tsx}",
+
+            <div>  ],
+
+              <div className="flex items-center text-gray-700 font-medium mb-1">  theme: {
+
+                <DocumentTextIcon className="h-4 w-4 mr-2" />    extend: {},
+
+                Fichier YAML  },
+
+              </div>  plugins: [],
+
+              <div className="pl-6 text-gray-600">}
+
+                <div>{selectedProject.config_yaml_path}</div>```
+
+                <div className="mt-1 text-xs">
+
+                  Stratégie solver: {selectedProject.config_yaml_data.solver.strategie}**Modifier** : `frontend/src/index.css`
+
+                  • Temps max: {selectedProject.config_yaml_data.solver.temps_max_secondes}s
+
+                </div>```css
+
+              </div>@tailwind base;
+
+            </div>@tailwind components;
+
+            @tailwind utilities;
+
+            {/* Config Excel */}```
+
+            <div>
+
+              <div className="flex items-center text-gray-700 font-medium mb-1">### Consignes d'organisation
+
+                <TableCellsIcon className="h-4 w-4 mr-2" />- QueryClient instancié une seule fois hors composant (éviter re-création)
+
+                Fichier Excel- Configuration QueryClient : `refetchOnWindowFocus: false` évite refetch constants
+
+              </div>- Gestion des états (loading, error) propre et claire
+
+              <div className="pl-6 text-gray-600">- Notification utilisateur pour feedback (console.log temporaire, toast en Phase 3)
+
+                <div>{selectedProject.config_excel_path}</div>- ID projet hardcodé temporaire, sélection dynamique en Phase 3
+
+                <div className="mt-1 text-xs">- ReactQueryDevtools pour debugging (uniquement en dev)
+
+                  Feuilles: {selectedProject.config_excel_data.feuilles_presentes.join(', ')}
+
+                </div>### Impact et liens
+
+              </div>- Le composant Calendar (`frontend/src/components/calendar/Calendar.tsx`) est intégré.
+
+            </div>- Les hooks (`frontend/src/hooks/`) gèrent les données et mutations.
+
+          </div>- Le routeur permet d'ajouter facilement de nouvelles pages (projets, stats, etc.).
+
+        </div>
+
+      )}## À faire/vérifier
+
+    </div>- Créer le dossier `frontend/src/pages/`
+
+  )- Créer CalendarPage avec gestion des états et handlers
+
+}- Configurer App.tsx avec QueryClientProvider et Router
+
+```- Modifier main.tsx pour importer App
+
+- (Optionnel) Configurer Tailwind CSS
+
+**Points clés** :- Tester l'application complète :
+
+- **@headlessui/react Listbox** : Dropdown accessible  - Backend démarré : `uvicorn backend.api.main:app --reload`
+
+- **Affichage double config** : config_yaml_path, config_excel_path  - Importer données : `python scripts/import_excel.py configs/config_volley.yaml "Test"`
+
+- **Métadonnées Excel** : nb_equipes, nb_gymnases, feuilles_presentes  - Frontend démarré : `cd frontend && npm run dev`
+
+- **Config YAML** : strategie solver, temps_max_secondes  - Accéder http://localhost:5173
+
+- Vérifier :
+
+---  - Calendrier affiche les matchs aux bons créneaux
+
+  - Drag & drop fonctionne pour matchs normaux
+
+### Panneau de statistiques  - Drag & drop bloqué pour matchs fixés
+
+  - Clics sur matchs affichent console.log
+
+**📁 Fichier à créer** : `frontend/src/components/Project/ProjectStats.tsx`  - États loading/error gérés correctement
+
+  - ReactQueryDevtools affiche les queries
+
+**Contenu complet** :
+
+## Questions
+
+```typescriptPoser des questions si des points sur React Router, QueryClient, la gestion des états, l'intégration ou l'organisation ne sont pas clairs.
+
+/**
+
+ * Panneau de statistiques d'un projet.## Documentation
+
+ * Rester concis, ne pas ajouter de documentation excessive. Commenter brièvement la configuration QueryClient et les handlers si besoin.
+
+ * Affiche :
+ * - Nombre d'équipes, gymnases (depuis config_excel_data)
+ * - Nombre de matchs total, planifiés, fixés (depuis API stats)
+ * - Taux de planification
+ */
+
+import { 
+  UsersIcon, 
+  BuildingOfficeIcon, 
+  CalendarIcon,
+  LockClosedIcon 
+} from '@heroicons/react/24/outline'
+
+import { useProjectStats } from '@hooks'
+
+interface ProjectStatsProps {
+  projectId: number
+}
+
+export default function ProjectStats({ projectId }: ProjectStatsProps) {
+  const { data: stats, isLoading } = useProjectStats(projectId)
+
+  if (isLoading) {
+    return (
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {[...Array(4)].map((_, i) => (
+          <div key={i} className="animate-pulse bg-gray-200 h-24 rounded-lg"></div>
+        ))}
+      </div>
+    )
+  }
+
+  if (!stats) return null
+
+  const statCards = [
+    {
+      name: 'Équipes',
+      value: stats.nb_equipes,
+      icon: UsersIcon,
+      color: 'text-blue-600',
+      bgColor: 'bg-blue-100',
+    },
+    {
+      name: 'Gymnases',
+      value: stats.nb_gymnases,
+      icon: BuildingOfficeIcon,
+      color: 'text-green-600',
+      bgColor: 'bg-green-100',
+    },
+    {
+      name: 'Matchs planifiés',
+      value: `${stats.nb_matchs_planifies} / ${stats.nb_matchs}`,
+      icon: CalendarIcon,
+      color: 'text-purple-600',
+      bgColor: 'bg-purple-100',
+      subtitle: `${stats.taux_planification.toFixed(1)}%`,
+    },
+    {
+      name: 'Matchs fixés',
+      value: stats.nb_matchs_fixes,
+      icon: LockClosedIcon,
+      color: 'text-orange-600',
+      bgColor: 'bg-orange-100',
+    },
+  ]
+
+  return (
+    <div>
+      <h2 className="text-lg font-medium text-gray-900 mb-4">
+        Statistiques du projet
+      </h2>
+      
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {statCards.map((stat) => (
+          <div
+            key={stat.name}
+            className="bg-white overflow-hidden rounded-lg shadow border border-gray-200"
+          >
+            <div className="p-5">
+              <div className="flex items-center">
+                <div className={`flex-shrink-0 rounded-md p-3 ${stat.bgColor}`}>
+                  <stat.icon className={`h-6 w-6 ${stat.color}`} aria-hidden="true" />
+                </div>
+                <div className="ml-5 w-0 flex-1">
+                  <dl>
+                    <dt className="text-sm font-medium text-gray-500 truncate">
+                      {stat.name}
+                    </dt>
+                    <dd className="flex items-baseline">
+                      <div className="text-2xl font-semibold text-gray-900">
+                        {stat.value}
+                      </div>
+                      {stat.subtitle && (
+                        <div className="ml-2 text-sm text-gray-600">
+                          {stat.subtitle}
+                        </div>
+                      )}
+                    </dd>
+                  </dl>
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+```
+
+**Points clés** :
+- **useProjectStats(projectId)** : Récupère stats depuis API
+- **Grid responsive** : 1 colonne mobile, 4 colonnes desktop
+- **Icônes @heroicons** : Users, BuildingOffice, Calendar, LockClosed
+- **Taux planification** : Affiché en pourcentage avec 1 décimale
+
+---
+
+### Layout Header
+
+**📁 Fichier à créer** : `frontend/src/components/Layout/Header.tsx`
+
+**Contenu complet** :
+
+```typescript
+/**
+ * Header de l'application.
+ */
+
+import { CalendarIcon } from '@heroicons/react/24/outline'
+
+export default function Header() {
+  return (
+    <header className="bg-white shadow-sm">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center">
+            <CalendarIcon className="h-8 w-8 text-blue-600 mr-3" />
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">
+                PyCalendar V2
+              </h1>
+              <p className="text-sm text-gray-500">
+                Planification de calendriers sportifs
+              </p>
+            </div>
+          </div>
+          
+          <div className="text-sm text-gray-600">
+            FFSU - Fédération Française du Sport Universitaire
+          </div>
+        </div>
+      </div>
+    </header>
+  )
+}
+```
+
+---
+
+### Page principale
+
+**📁 Fichier à modifier** : `frontend/src/App.tsx`
+
+**Contenu complet** :
+
+```typescript
+import { useState } from 'react'
+import { QueryErrorResetBoundary } from '@tanstack/react-query'
+import { ErrorBoundary } from 'react-error-boundary'
+
+import Header from '@components/Layout/Header'
+import ProjectSelector from '@components/Project/ProjectSelector'
+import ProjectStats from '@components/Project/ProjectStats'
+import Calendar from '@components/Calendar/Calendar'
+import type { Project } from '@types'
+
+import './App.css'
+
+function App() {
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null)
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <Header />
+      
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Sélecteur de projet */}
+        <div className="mb-8">
+          <h2 className="text-lg font-medium text-gray-900 mb-4">
+            Sélectionner un projet
+          </h2>
+          <ProjectSelector
+            selectedProjectId={selectedProject?.id || null}
+            onSelectProject={setSelectedProject}
+          />
+        </div>
+
+        {/* Contenu principal (si projet sélectionné) */}
+        {selectedProject ? (
+          <QueryErrorResetBoundary>
+            {({ reset }) => (
+              <ErrorBoundary
+                onReset={reset}
+                fallbackRender={({ error, resetErrorBoundary }) => (
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                    <h3 className="text-red-800 font-medium mb-2">
+                      Une erreur est survenue
+                    </h3>
+                    <p className="text-red-600 text-sm mb-4">
+                      {error.message}
+                    </p>
+                    <button
+                      onClick={resetErrorBoundary}
+                      className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+                    >
+                      Réessayer
+                    </button>
+                  </div>
+                )}
+              >
+                <div className="space-y-8">
+                  {/* Statistiques */}
+                  <ProjectStats projectId={selectedProject.id} />
+
+                  {/* Calendrier */}
+                  <div>
+                    <h2 className="text-lg font-medium text-gray-900 mb-4">
+                      Calendrier des matchs
+                    </h2>
+                    <Calendar
+                      projectId={selectedProject.id}
+                      semaineMin={selectedProject.semaine_min}
+                    />
+                  </div>
+                </div>
+              </ErrorBoundary>
+            )}
+          </QueryErrorResetBoundary>
+        ) : (
+          <div className="text-center py-12">
+            <CalendarIcon className="mx-auto h-12 w-12 text-gray-400" />
+            <h3 className="mt-2 text-sm font-medium text-gray-900">
+              Aucun projet sélectionné
+            </h3>
+            <p className="mt-1 text-sm text-gray-500">
+              Sélectionnez un projet ci-dessus pour afficher le calendrier.
+            </p>
+          </div>
+        )}
+      </main>
+    </div>
+  )
+}
+
+function CalendarIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...props} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+    </svg>
+  )
+}
+
+export default App
+```
+
+**Points clés** :
+- **useState<Project>** : Gérer projet sélectionné
+- **Conditional rendering** : Afficher calendrier seulement si projet sélectionné
+- **ErrorBoundary** : Gérer erreurs React Query avec fallback
+- **Layout responsive** : max-w-7xl, padding adaptatif
+- **Space-y-8** : Espacement vertical entre sections
+
+---
+
+### Styles globaux
+
+**📁 Fichier à modifier** : `frontend/src/App.css`
+
+**Contenu** :
+
+```css
+/* Styles globaux de l'application */
+
+/* Scrollbar personnalisée */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.3s ease-out;
+}
+
+/* Utilitaires */
+.truncate-2-lines {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+```
+
+---
+
+## À faire/vérifier
+
+**Checklist de développement** :
+
+1. ✅ Créer `components/Project/ProjectSelector.tsx` avec :
+   - @headlessui/react Listbox
+   - Affichage config_yaml_path, config_excel_path
+   - Métadonnées Excel (nb_equipes, nb_gymnases, feuilles)
+
+2. ✅ Créer `components/Project/ProjectStats.tsx` avec :
+   - useProjectStats(projectId)
+   - Grid 4 cartes (équipes, gymnases, matchs planifiés, matchs fixés)
+   - Icônes @heroicons
+
+3. ✅ Créer `components/Layout/Header.tsx` :
+   - Logo + titre + FFSU
+
+4. ✅ Modifier `App.tsx` :
+   - useState pour projet sélectionné
+   - ProjectSelector + ProjectStats + Calendar
+   - ErrorBoundary global
+
+5. ✅ Modifier `App.css` :
+   - Scrollbar personnalisée
+   - Animations fadeIn
+
+**Checklist de validation** :
+
+1. ✅ **Test sélection projet** :
+   - Lancer app : `npm run dev`
+   - Ouvrir http://localhost:5173
+   - Sélectionner un projet dans la liste
+   - Vérifier affichage config YAML + Excel
+
+2. ✅ **Test statistiques** :
+   - Vérifier affichage nb_equipes, nb_gymnases
+   - Vérifier nb_matchs, nb_matchs_planifies, taux_planification
+   - Vérifier responsive (mobile, desktop)
+
+3. ✅ **Test calendrier** :
+   - Vérifier affichage matchs après sélection projet
+   - Vérifier semaine_min passée au composant Calendar
+
+4. ✅ **Test erreurs** :
+   - Simuler erreur API (backend off)
+   - Vérifier ErrorBoundary affiche message + bouton "Réessayer"
+
+5. ✅ **Test responsive** :
+   - Mobile : 1 colonne stats, calendrier adapté
+   - Desktop : 4 colonnes stats
+
+**Commandes de test** :
+```bash
+# Dev
+npm run dev
+
+# Build
+npm run build
+
+# Preview build
+npm run preview
+
+# Types
+npx tsc --noEmit
+```
+
+---
+
+## Questions
+
+**Questions critiques** :
+
+1. **Navigation** :
+   - Faut-il une sidebar avec navigation (Calendrier, Statistiques, Configuration) ?
+   - Ou page unique avec sections (actuel) ?
+
+2. **Multi-projets** :
+   - Faut-il gérer plusieurs projets simultanément (onglets) ?
+   - Ou un seul projet actif à la fois (actuel) ?
+
+3. **Import projet** :
+   - Faut-il un bouton "Importer projet" dans l'UI ?
+   - Ou uniquement via scripts CLI/backend (actuel) ?
+
+4. **Édition config** :
+   - Faut-il éditer config_yaml_data depuis l'UI ?
+   - Ou configs en lecture seule (actuel) ?
+
+5. **Thème** :
+   - Faut-il un thème sombre (dark mode) ?
+   - Faut-il des couleurs FFSU personnalisées ?
+
+6. **Notifications** :
+   - Faut-il des toasts pour succès/erreurs (react-hot-toast) ?
+   - Ou alerts navigateur (actuel) ?
+
+---
+
+## Documentation
+
+Documenter uniquement :
+- **Double configuration** : Expliquer affichage YAML + Excel dans ProjectSelector
+- **semaine_min** : Expliquer passage au composant Calendar
+- **ErrorBoundary** : Expliquer gestion erreurs React Query
+- **Responsive** : Expliquer grid adaptatif stats

@@ -23,6 +23,8 @@ class Config:
     nb_semaines: int
     taille_poule_min: int
     taille_poule_max: int
+    semaine_minimum: int  # Semaine minimum pour la planification (replanification en cours de saison)
+    respecter_matchs_fixes: bool  # Si True, les matchs fixés ne seront pas replanifiés
     
     # Solver configuration
     strategie: str
@@ -155,6 +157,8 @@ class Config:
             config_dict['fallback_greedy'] = p['fallback_greedy']
             config_dict['taille_poule_min'] = p['taille_poule_min']
             config_dict['taille_poule_max'] = p['taille_poule_max']
+            config_dict['semaine_minimum'] = p['semaine_minimum']
+            config_dict['respecter_matchs_fixes'] = p.get('respecter_matchs_fixes', True)
         
         # Solver parameters
         if 'greedy' in merged_data:

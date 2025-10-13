@@ -1,0 +1,796 @@
+# Prompt 3.2 : Service Solveur et Orchestration# Prompt 3.2 : Service Solveur – Orchestration backend
+
+
+
+## Contexte global## Contexte global
+
+PyCalendar V2 nécessite un service backend pour orchestrer l'exécution des solveurs (optimal, heuristique) et mettre à jour la base de données avec les résultats. Ce service doit respecter les matchs fixes et la configuration YAML+Excel.PyCalendar V2 doit permettre de lancer la résolution d'un projet via un service backend orchestrant l'appel aux solveurs et la mise à jour de la base de données. L'architecture doit rester claire, modulaire et facilement extensible pour supporter différents solveurs ou contraintes.
+
+
+
+**RAPPEL - Double configuration et solveurs** :## Contexte technique
+
+- **Config YAML** : stratégie solver ("optimal", "heuristique", "hybride"), temps_max_secondesCette tâche concerne la création d'un service Solveur qui gère le flux complet : extraction des données depuis la base, conversion vers modèles métier, appel au solveur, et sauvegarde des résultats en base.
+
+- **Config Excel** : Données équipes, gymnases, indisponibilités (via ConfigManager, DataSource)
+
+- **Matchs fixes** : Préservés par le solveur (Tâche 3.1)## Résumé du travail précédent
+
+- **semaine_minimum** : Première semaine modifiable- Les solveurs sont modifiés pour gérer les matchs fixes (`solvers/cpsat_solver.py`, `solvers/greedy_solver.py`).
+
+- Les modèles SQLAlchemy et métier sont en place (`backend/database/models.py`, `core/models.py`).
+
+## Contexte technique- L'API REST est opérationnelle (`backend/api/routes/`).
+
+Cette tâche crée un service backend `SolverService` pour charger les données depuis DB, exécuter le solveur approprié, et persister les résultats.
+
+## Objectifs
+
+## Résumé du travail précédent- Créer un service Solveur modulaire et testable orchestrant le flux complet.
+
+- Solveurs modifiés pour respecter matchs fixes (Tâche 3.1)- S'assurer de la robustesse, de la gestion des erreurs et de la clarté du code.
+
+- Config charge stratégie depuis YAML (core/config.py)- Prévoir l'ajout de nouveaux solveurs ou stratégies d'optimisation.
+
+- SyncService importe données Excel → DB (Tâche 1.6)
+
+## Détails techniques
+
+## Objectifs
+
+1. Créer service SolverService pour orchestrer résolution### Fichier à créer
+
+2. Charger données depuis DB (Project → Config, Matchs, Équipes, Gymnases)`backend/services/solver_service.py`
+
+3. Exécuter solveur selon stratégie config (optimal, heuristique, hybride)
+
+4. Mettre à jour DB avec résultats (semaines, gymnases assignés)### Classe principale
+
+5. Respecter matchs fixes et semaine_minimum**SolverService**
+
+
+
+## Détails techniques**Constructeur** :
+
+```python
+
+### Service Solveurdef __init__(self, db: Session):
+
+    self.db = db
+
+**📁 Fichier à créer** : `backend/services/solver_service.py````
+
+
+
+**Contenu complet** :### Méthode principale
+
+**`solve_project(project_id: int, strategy: str = "cpsat") -> Solution`**
+
+```python
+
+"""**Algorithme détaillé** :
+
+Service pour orchestrer la résolution de calendriers.
+
+1. **Charger projet depuis DB** :
+
+Workflow :   ```python
+
+1. Charger projet depuis DB (config YAML + Excel)   project = self.db.query(models.Project).filter(models.Project.id == project_id).first()
+
+2. Charger matchs, équipes, gymnases   if not project:
+
+3. Reconstruire objets Config, DataSource pour solveurs       raise ValueError(f"Projet non trouvé : {project_id}")
+
+4. Exécuter solveur selon stratégie (optimal, heuristique, hybride)   ```
+
+5. Mettre à jour DB avec solution
+
+"""2. **Charger configuration** :
+
+   ```python
+
+from sqlalchemy.orm import Session   from core.config import Config
+
+from pathlib import Path   
+
+import json   config = Config.from_yaml(project.config_yaml_path)
+
+   config.semaine_min = project.semaine_min  # Override depuis DB
+
+from backend.database.models import Project, Match, Team, Venue   ```
+
+from core.config import Config
+
+from core.config_manager import ConfigManager3. **Convertir DB models → Core models** :
+
+from generators.data_sources import DataSource   ```python
+
+from solvers.optimal import OptimalSolver   matchs = self._db_to_core_matches(project_id)
+
+from solvers.heuristique import HeuristiqueSolver   creneaux = self._generate_creneaux(project_id, config.nb_semaines)
+
+   gymnases = self._db_to_core_gymnases(project_id)
+
+   
+
+class SolverService:   print(f"Résolution projet {project_id}:")
+
+    def __init__(self, db: Session):   print(f"  - {len(matchs)} matchs ({len([m for m in matchs if m.est_fixe])} fixes)")
+
+        self.db = db   print(f"  - {len(creneaux)} créneaux disponibles")
+
+       ```
+
+    def solve_project(self, project_id: int) -> dict:
+
+        """4. **Instancier solver** :
+
+        Résout le calendrier d'un projet.   ```python
+
+           from solvers.cpsat_solver import CPSATSolver
+
+        Args:   from solvers.greedy_solver import GreedySolver
+
+            project_id: ID du projet à résoudre   
+
+           if strategy == "cpsat":
+
+        Returns:       solver = CPSATSolver(config)
+
+            dict: Résumé de la résolution (nb_matchs_planifies, temps_execution, etc.)   elif strategy == "greedy":
+
+               solver = GreedySolver(config)
+
+        Raises:   else:
+
+            ValueError: Si projet introuvable ou config invalide       raise ValueError(f"Stratégie inconnue: {strategy}")
+
+        """   ```
+
+        # 1. Charger projet
+
+        project = self.db.query(Project).filter(Project.id == project_id).first()5. **Résoudre** :
+
+        if not project:   ```python
+
+            raise ValueError(f"Projet {project_id} introuvable")   solution = solver.solve(matchs, creneaux, gymnases)
+
+           print(f"Solution trouvée: {len(solution.matchs_planifies)} matchs planifiés")
+
+        print(f"[SolverService] Résolution du projet '{project.nom}' (ID: {project_id})")   ```
+
+        
+
+        # 2. Reconstruire Config depuis config_yaml_data6. **Sauvegarder solution en DB** :
+
+        config = self._build_config_from_project(project)   ```python
+
+           self._save_solution(project_id, solution)
+
+        # 3. Charger matchs, équipes, gymnases depuis DB   ```
+
+        matchs = self.db.query(Match).filter(Match.project_id == project_id).all()
+
+        equipes = self.db.query(Team).filter(Team.project_id == project_id).all()7. **Retourner solution** :
+
+        gymnases = self.db.query(Venue).filter(Venue.project_id == project_id).all()   ```python
+
+           return solution
+
+        print(f"[SolverService] {len(matchs)} matchs, {len(equipes)} équipes, {len(gymnases)} gymnases")   ```
+
+        
+
+        # 4. Identifier matchs fixes### Méthodes auxiliaires
+
+        matchs_fixes = [m for m in matchs if m.est_fixe or 
+
+                       (m.semaine is not None and m.semaine < project.semaine_min)]**`_db_to_core_matches(project_id: int) -> List[core.Match]`** :
+
+        matchs_modifiables = [m for m in matchs if m not in matchs_fixes]```python
+
+        from core.models import Match, Equipe, Creneau
+
+        print(f"[SolverService] {len(matchs_fixes)} matchs fixes, {len(matchs_modifiables)} modifiables")
+
+        db_matches = self.db.query(models.Match).filter(models.Match.project_id == project_id).all()
+
+        # 5. Choisir et exécuter solveurcore_matches = []
+
+        strategie = config.solver.get('strategie', 'optimal')
+
+        solution = self._execute_solver(strategie, config, matchs, equipes, gymnases)for db_match in db_matches:
+
+            equipe1 = Equipe(
+
+        # 6. Mettre à jour DB avec solution        nom=db_match.equipe1_nom,
+
+        nb_updated = self._update_matches_from_solution(solution, project_id)        institution=db_match.equipe1_institution,
+
+                genre=db_match.equipe1_genre,
+
+        # 7. Retourner résumé        poule=db_match.poule
+
+        return {    )
+
+            'project_id': project_id,    
+
+            'strategie': strategie,    equipe2 = Equipe(
+
+            'nb_matchs_total': len(matchs),        nom=db_match.equipe2_nom,
+
+            'nb_matchs_fixes': len(matchs_fixes),        institution=db_match.equipe2_institution,
+
+            'nb_matchs_planifies': nb_updated,        genre=db_match.equipe2_genre,
+
+            'nb_matchs_modifiables': len(matchs_modifiables),        poule=db_match.poule
+
+        }    )
+
+        
+
+    def _build_config_from_project(self, project: Project) -> Config:    creneau = None
+
+        """    if db_match.semaine and db_match.horaire and db_match.gymnase:
+
+        Reconstruit un objet Config depuis config_yaml_data du projet.        creneau = Creneau(
+
+                    semaine=db_match.semaine,
+
+        IMPORTANT : config_yaml_data contient la structure complète du YAML            horaire=db_match.horaire,
+
+        (sport, semaines, contraintes, solver, fichiers).            gymnase=db_match.gymnase
+
+        """        )
+
+        yaml_data = project.config_yaml_data    
+
+            match = Match(
+
+        # Créer Config depuis dict (similaire à Config.from_yaml mais avec dict)        equipe1=equipe1,
+
+        config = Config(        equipe2=equipe2,
+
+            sport=yaml_data.get('sport', 'Volleyball'),        poule=db_match.poule,
+
+            nb_semaines=yaml_data.get('semaines', {}).get('nb_semaines', 10),        creneau=creneau,
+
+            semaines=yaml_data.get('semaines', {}),        priorite=db_match.priorite,
+
+            contraintes=yaml_data.get('contraintes', {}),        est_fixe=db_match.est_fixe,
+
+            solver=yaml_data.get('solver', {}),        statut=db_match.statut
+
+            fichiers=yaml_data.get('fichiers', {}),    )
+
+        )    
+
+            core_matches.append(match)
+
+        return config
+
+    return core_matches
+
+    def _execute_solver(```
+
+        self, 
+
+        strategie: str, **`_generate_creneaux(project_id: int, nb_semaines: int) -> List[Creneau]`** :
+
+        config: Config, ```python
+
+        matchs: list, import json
+
+        equipes: list, from core.models import Creneau
+
+        gymnases: list
+
+    ) -> list:venues = self.db.query(models.Venue).filter(models.Venue.project_id == project_id).all()
+
+        """creneaux = []
+
+        Exécute le solveur selon la stratégie configurée.
+
+        for venue in venues:
+
+        Args:    horaires_disponibles = json.loads(venue.horaires_disponibles)
+
+            strategie: "optimal", "heuristique", ou "hybride"    
+
+            config: Configuration complète    for semaine in range(1, nb_semaines + 1):
+
+            matchs, equipes, gymnases: Données du problème        for horaire in horaires_disponibles:
+
+                    creneau = Creneau(
+
+        Returns:                semaine=semaine,
+
+            list: Solution sous forme [{'match_id': X, 'semaine': Y, 'gymnase_id': Z}, ...]                horaire=horaire,
+
+        """                gymnase=venue.nom
+
+        print(f"[SolverService] Exécution solveur '{strategie}'")            )
+
+                    creneaux.append(creneau)
+
+        if strategie == 'optimal':
+
+            solver = OptimalSolver()return creneaux
+
+            return solver.solve(config, matchs, equipes, gymnases)```
+
+        
+
+        elif strategie == 'heuristique':**`_db_to_core_gymnases(project_id: int) -> List[Gymnase]`** :
+
+            solver = HeuristiqueSolver()```python
+
+            return solver.solve(config, matchs, equipes, gymnases)import json
+
+        from core.models import Gymnase
+
+        elif strategie == 'hybride':
+
+            # Hybride : Essayer optimal avec timeout, fallback heuristiquevenues = self.db.query(models.Venue).filter(models.Venue.project_id == project_id).all()
+
+            try:gymnases = []
+
+                solver = OptimalSolver()
+
+                return solver.solve(config, matchs, equipes, gymnases)for venue in venues:
+
+            except Exception as e:    horaires = json.loads(venue.horaires_disponibles)
+
+                print(f"[SolverService] Optimal échoué ({e}), fallback heuristique")    gymnase = Gymnase(
+
+                solver = HeuristiqueSolver()        nom=venue.nom,
+
+                return solver.solve(config, matchs, equipes, gymnases)        capacite=venue.capacite,
+
+                horaires_disponibles=horaires
+
+        else:    )
+
+            raise ValueError(f"Stratégie inconnue : {strategie}")    gymnases.append(gymnase)
+
+    
+
+    def _update_matches_from_solution(self, solution: list, project_id: int) -> int:return gymnases
+
+        """```
+
+        Met à jour les matchs dans la DB avec la solution du solveur.
+
+        **`_save_solution(project_id: int, solution: Solution)`** :
+
+        Args:```python
+
+            solution: Liste de dicts {'match_id': X, 'semaine': Y, 'gymnase_id': Z}for match_planifie in solution.matchs_planifies:
+
+            project_id: ID du projet    # Trouver match correspondant en DB par équipes
+
+            db_match = self.db.query(models.Match).filter(
+
+        Returns:        models.Match.project_id == project_id,
+
+            int: Nombre de matchs mis à jour        models.Match.equipe1_nom == match_planifie.equipe1.nom,
+
+        """        models.Match.equipe2_nom == match_planifie.equipe2.nom
+
+        nb_updated = 0    ).first()
+
+            
+
+        for item in solution:    if db_match:
+
+            match_id = item['match_id']        # Vérifier si modifiable (ne pas modifier matchs fixes)
+
+            semaine = item['semaine']        if db_match.est_modifiable:
+
+            gymnase_id = item.get('gymnase_id')  # Peut être None            if match_planifie.creneau:
+
+                            db_match.semaine = match_planifie.creneau.semaine
+
+            # Récupérer match depuis DB                db_match.horaire = match_planifie.creneau.horaire
+
+            match = self.db.query(Match).filter(                db_match.gymnase = match_planifie.creneau.gymnase
+
+                Match.id == match_id,                db_match.statut = "planifie"
+
+                Match.project_id == project_id        else:
+
+            ).first()            print(f"Warning: Match {db_match.id} fixé, non modifié")
+
+            
+
+            if not match:self.db.commit()
+
+                print(f"[SolverService] WARNING: Match {match_id} introuvable")```
+
+                continue
+
+            ### Consignes d'organisation
+
+            # IMPORTANT : Ne PAS modifier matchs fixes- Ne JAMAIS modifier les matchs fixes lors de `_save_solution`
+
+            if match.est_fixe:- Gérer les cas où le solver ne trouve pas de solution complète
+
+                continue- Utiliser des logs pour debugging (nombre de matchs fixes, modifiables, créneaux disponibles)
+
+            - Utiliser une transaction DB avec rollback en cas d'erreur
+
+            # Mettre à jour semaine et gymnase- Prévoir l'extensibilité pour d'autres solveurs (nouveau `elif` dans instanciation)
+
+            match.semaine = semaine
+
+            if gymnase_id is not None:### Impact et liens
+
+                match.gymnase_id = gymnase_id- L'endpoint API (`backend/api/routes/solver.py`) appellera ce service.
+
+            - Les solveurs modifiés (`solvers/`) seront utilisés par ce service.
+
+            nb_updated += 1- Les modèles DB (`backend/database/models.py`) seront mis à jour avec la solution.
+
+        
+
+        # Commit toutes les modifications## À faire/vérifier
+
+        self.db.commit()- Créer la classe SolverService avec toutes les méthodes
+
+        - Implémenter les conversions DB → Core et Core → DB
+
+        print(f"[SolverService] {nb_updated} matchs mis à jour")- Gérer les erreurs (projet non trouvé, solver échoue, etc.)
+
+        return nb_updated- Tester le service complet :
+
+```  - Charger projet avec matchs (dont 2-3 fixes)
+
+  - Créer instance `SolverService(db)`
+
+**Points clés** :  - Appeler `solve_project(project_id, "cpsat")`
+
+- **_build_config_from_project** : Reconstruit Config depuis config_yaml_data (JSON)  - Vérifier en DB :
+
+- **_execute_solver** : Switch stratégie (optimal, heuristique, hybride)    - Matchs fixes inchangés
+
+- **Stratégie hybride** : Optimal avec fallback heuristique si échec    - Autres matchs planifiés
+
+- **_update_matches_from_solution** : Persiste solution dans DB, skip matchs fixes    - Pas de conflits (2 matchs même créneau)
+
+- **Logging** : print() pour traçabilité (remplacer par logger si besoin)    - Statut "planifie" pour matchs résolus
+
+- Tester avec stratégie "greedy"
+
+---- Tester les cas limites :
+
+  - Projet sans matchs → erreur propre
+
+### Gestion des erreurs  - Tous matchs fixes → pas de changement
+
+  - Semaine_min trop haute → certains matchs non planifiés
+
+**Ajout dans SolverService** :
+
+## Questions
+
+```pythonPoser des questions si des points sur l'orchestration, les conversions, la gestion des erreurs ou l'intégration ne sont pas clairs.
+
+class SolverError(Exception):
+
+    """Erreur lors de la résolution."""## Documentation
+
+    passRester concis, ne pas ajouter de documentation excessive. Commenter brièvement les étapes critiques (conversions, sauvegarde) si besoin.
+
+
+
+class SolverService:
+    # ... code existant ...
+    
+    def solve_project(self, project_id: int) -> dict:
+        try:
+            # ... code existant ...
+            
+            # Validation avant résolution
+            if len(matchs_modifiables) == 0:
+                raise SolverError("Aucun match modifiable, résolution inutile")
+            
+            if len(equipes) < 2:
+                raise SolverError("Au moins 2 équipes nécessaires")
+            
+            # Exécuter solveur avec timeout
+            import signal
+            temps_max = config.solver.get('temps_max_secondes', 300)
+            
+            signal.alarm(temps_max)  # Timeout
+            try:
+                solution = self._execute_solver(strategie, config, matchs, equipes, gymnases)
+            finally:
+                signal.alarm(0)  # Annuler timeout
+            
+            # Valider solution
+            if not solution or len(solution) == 0:
+                raise SolverError("Aucune solution trouvée par le solveur")
+            
+            # ... suite du code ...
+            
+        except SolverError as e:
+            print(f"[SolverService] ERREUR: {e}")
+            raise
+        except Exception as e:
+            print(f"[SolverService] ERREUR inattendue: {e}")
+            raise SolverError(f"Erreur lors de la résolution : {e}")
+```
+
+**Points clés** :
+- **SolverError** : Exception custom pour erreurs métier
+- **Validations** : Vérifier matchs modifiables, équipes minimum
+- **Timeout** : Utiliser signal.alarm() ou threading.Timer
+- **Validation solution** : Vérifier que solution non vide
+
+---
+
+### Service de validation de solution
+
+**📁 Fichier à créer** : `backend/services/solution_validator.py`
+
+**Contenu** :
+
+```python
+"""
+Validateur de solution de calendrier.
+
+Vérifie que la solution respecte toutes les contraintes :
+- Matchs fixes non modifiés
+- Semaine >= semaine_minimum
+- Pas de conflits équipes/gymnases
+- Contraintes métier (repos, domicile/extérieur, etc.)
+"""
+
+from backend.database.models import Match
+
+
+class SolutionValidator:
+    def __init__(self, config, matchs_before: list, matchs_after: list):
+        self.config = config
+        self.matchs_before = {m.id: m for m in matchs_before}
+        self.matchs_after = {m.id: m for m in matchs_after}
+    
+    def validate(self) -> tuple[bool, list[str]]:
+        """
+        Valide la solution.
+        
+        Returns:
+            (bool, list[str]): (est_valide, liste_erreurs)
+        """
+        errors = []
+        
+        # 1. Vérifier matchs fixes non modifiés
+        for match_id, match_before in self.matchs_before.items():
+            if match_before.est_fixe:
+                match_after = self.matchs_after.get(match_id)
+                if not match_after:
+                    errors.append(f"Match fixe {match_id} manquant dans solution")
+                elif match_after.semaine != match_before.semaine:
+                    errors.append(f"Match fixe {match_id} : semaine modifiée ({match_before.semaine} → {match_after.semaine})")
+        
+        # 2. Vérifier semaine >= semaine_minimum
+        semaine_min = self.config.semaines.get('semaine_minimum', 1)
+        for match_after in self.matchs_after.values():
+            if match_after.semaine and match_after.semaine < semaine_min:
+                if not match_after.est_fixe:  # OK si fixe
+                    errors.append(f"Match {match_after.id} : semaine {match_after.semaine} < semaine_min {semaine_min}")
+        
+        # 3. Vérifier pas de conflits équipes (même semaine)
+        for semaine in range(1, self.config.nb_semaines + 1):
+            matchs_semaine = [m for m in self.matchs_after.values() if m.semaine == semaine]
+            equipes_jouees = set()
+            
+            for match in matchs_semaine:
+                if match.equipe_domicile_id in equipes_jouees:
+                    errors.append(f"Équipe {match.equipe_domicile_id} joue 2 fois semaine {semaine}")
+                if match.equipe_exterieur_id in equipes_jouees:
+                    errors.append(f"Équipe {match.equipe_exterieur_id} joue 2 fois semaine {semaine}")
+                
+                equipes_jouees.add(match.equipe_domicile_id)
+                equipes_jouees.add(match.equipe_exterieur_id)
+        
+        # 4. Vérifier pas de conflits gymnases (même semaine, même horaire)
+        # (Simplification : on suppose 1 match/gymnase/semaine max)
+        for semaine in range(1, self.config.nb_semaines + 1):
+            matchs_semaine = [m for m in self.matchs_after.values() if m.semaine == semaine]
+            gymnases_utilises = set()
+            
+            for match in matchs_semaine:
+                if match.gymnase_id:
+                    if match.gymnase_id in gymnases_utilises:
+                        errors.append(f"Gymnase {match.gymnase_id} utilisé 2 fois semaine {semaine}")
+                    gymnases_utilises.add(match.gymnase_id)
+        
+        return len(errors) == 0, errors
+```
+
+**Points clés** :
+- **validate()** : Retourne (bool, list[str]) pour afficher erreurs
+- **Matchs fixes** : Vérifier semaine non modifiée
+- **Conflits équipes** : Une équipe ne joue qu'une fois par semaine
+- **Conflits gymnases** : Un gymnase ne peut accueillir qu'un match par semaine (simplification)
+
+---
+
+### Intégration avec SolverService
+
+**Modification dans SolverService.solve_project()** :
+
+```python
+def solve_project(self, project_id: int) -> dict:
+    # ... code existant jusqu'à solution = self._execute_solver(...) ...
+    
+    # NOUVEAU : Valider solution avant de persister
+    matchs_before = matchs.copy()
+    
+    # Simuler matchs_after (appliquer solution)
+    matchs_after_dict = {m.id: m for m in matchs}
+    for item in solution:
+        if item['match_id'] in matchs_after_dict:
+            matchs_after_dict[item['match_id']].semaine = item['semaine']
+            matchs_after_dict[item['match_id']].gymnase_id = item.get('gymnase_id')
+    
+    matchs_after = list(matchs_after_dict.values())
+    
+    # Valider
+    from backend.services.solution_validator import SolutionValidator
+    validator = SolutionValidator(config, matchs_before, matchs_after)
+    is_valid, errors = validator.validate()
+    
+    if not is_valid:
+        error_msg = "Solution invalide :\n" + "\n".join(errors)
+        print(f"[SolverService] {error_msg}")
+        raise SolverError(error_msg)
+    
+    print("[SolverService] Solution validée avec succès")
+    
+    # Persister solution
+    nb_updated = self._update_matches_from_solution(solution, project_id)
+    
+    # ... suite du code ...
+```
+
+---
+
+## À faire/vérifier
+
+**Checklist de développement** :
+
+1. ✅ Créer `backend/services/solver_service.py` avec :
+   - SolverService class
+   - solve_project(project_id)
+   - _build_config_from_project(project)
+   - _execute_solver(strategie, config, matchs, equipes, gymnases)
+   - _update_matches_from_solution(solution, project_id)
+
+2. ✅ Créer `backend/services/solution_validator.py` avec :
+   - SolutionValidator class
+   - validate() : vérifier matchs fixes, semaine_min, conflits
+
+3. ✅ Ajouter gestion d'erreurs :
+   - SolverError exception
+   - Validations (matchs modifiables > 0, équipes >= 2)
+   - Timeout avec signal.alarm()
+
+4. ✅ Intégrer validation :
+   - Appeler SolutionValidator avant persist
+   - Raise SolverError si invalide
+
+**Checklist de validation** :
+
+1. ✅ **Test unitaire SolverService** :
+   ```python
+   # tests/test_solver_service.py
+   def test_solve_project(test_db):
+       # Créer projet + matchs
+       project = Project(nom="Test", ...)
+       test_db.add(project)
+       test_db.commit()
+       
+       # Exécuter service
+       service = SolverService(test_db)
+       result = service.solve_project(project.id)
+       
+       assert result['nb_matchs_planifies'] > 0
+   ```
+
+2. ✅ **Test validation solution** :
+   ```python
+   def test_validator_matchs_fixes():
+       config = Config(...)
+       matchs_before = [Match(id=1, semaine=2, est_fixe=True), ...]
+       matchs_after = [Match(id=1, semaine=3, est_fixe=True), ...]  # Modifié !
+       
+       validator = SolutionValidator(config, matchs_before, matchs_after)
+       is_valid, errors = validator.validate()
+       
+       assert not is_valid
+       assert "Match fixe 1" in errors[0]
+   ```
+
+3. ✅ **Test stratégies** :
+   ```bash
+   # Test optimal
+   python -c "from backend.services.solver_service import SolverService; ..."
+   
+   # Test heuristique
+   # ...
+   
+   # Test hybride
+   # ...
+   ```
+
+4. ✅ **Test avec vraies données** :
+   ```bash
+   # Importer projet
+   python scripts/import_excel.py configs/config_volley.yaml
+   
+   # Fixer un match
+   curl -X POST http://localhost:8000/matches/1/fix
+   
+   # Résoudre (via API créée en Tâche 3.3)
+   curl -X POST http://localhost:8000/projects/1/solve
+   
+   # Vérifier match fixe non modifié
+   curl http://localhost:8000/matches/1
+   ```
+
+**Commandes de test** :
+```bash
+# Tests unitaires
+pytest backend/tests/test_solver_service.py -v
+
+# Test intégration
+python -m backend.services.solver_service  # Si __main__ ajouté
+```
+
+---
+
+## Questions
+
+**Questions critiques** :
+
+1. **Config depuis DB** :
+   - config_yaml_data contient-il TOUTE la structure YAML ?
+   - Ou certains champs sont en colonnes séparées (nb_semaines, semaine_min) ?
+   - Faut-il recombiner les deux sources ?
+
+2. **Solveurs et DB** :
+   - Les solveurs acceptent-ils des objets SQLAlchemy (Match, Team, Venue) ?
+   - Ou faut-il convertir en objets métier (dataclasses) ?
+   - Y a-t-il une couche d'adaptation nécessaire ?
+
+3. **Timeout** :
+   - signal.alarm() ne fonctionne que sur Linux/Mac. Alternative pour Windows ?
+   - Faut-il utiliser threading.Timer ou multiprocessing.Process ?
+   - Que faire si timeout : lever exception ou retourner solution partielle ?
+
+4. **Validation** :
+   - Quelles contraintes valider EXACTEMENT ?
+   - Faut-il valider TOUTES les contraintes (repos, domicile/extérieur, indispos) ?
+   - Ou seulement les contraintes dures (matchs fixes, conflits) ?
+
+5. **Solution partielle** :
+   - Que faire si solveur ne planifie que 80% des matchs ?
+   - Accepter solution partielle ou rejeter ?
+   - Faut-il un seuil minimal (ex: 90% planifiés) ?
+
+6. **Rollback** :
+   - Si validation échoue après persist, faut-il rollback la transaction ?
+   - Ou laisser DB dans état intermédiaire (avec logs) ?
+
+---
+
+## Documentation
+
+Documenter uniquement :
+- **_build_config_from_project** : Expliquer reconstruction Config depuis JSON
+- **Stratégie hybride** : Expliquer fallback optimal → heuristique
+- **Validation** : Expliquer vérifications (matchs fixes, conflits)
+- **Timeout** : Expliquer signal.alarm() ou alternative threading

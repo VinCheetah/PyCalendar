@@ -1,0 +1,728 @@
+# Prompt 1.5 : Routes API Backend# Prompt 1.5 : Routes API – Backend
+
+
+
+## Contexte global## Contexte global
+
+PyCalendar V2 expose une API REST pour manipuler les projets, équipes, gymnases et matchs. L'API FastAPI doit être claire, cohérente, sécurisée et facilement extensible, avec support CORS pour le frontend React.PyCalendar V2 expose une API REST pour manipuler les projets, équipes, gymnases et matchs. L'API FastAPI doit être claire, cohérente, sécurisée et facilement extensible, avec support CORS pour le frontend React.
+
+
+
+**RAPPEL - Double configuration** :## Contexte technique
+
+- **Fichier YAML** : Hyperparamètres (chargé par `core/config.py`)Cette tâche concerne la création de l'application FastAPI principale et des routes pour chaque entité, en respectant les bonnes pratiques REST et la logique métier (gestion des matchs fixes, déplacement, fixation/défixation).
+
+- **Fichier Excel** : Données détaillées (chargé par `core/config_manager.py`)
+
+- **Import initial** : Service de sync (Tâche 1.6) charge YAML+Excel → DB## Résumé du travail précédent
+
+- **Évolution** : Données DB modifiées via API, indépendamment des fichiers source- Les modèles SQLAlchemy et schémas Pydantic sont définis.
+
+- L'engine et la session factory sont en place (`backend/database/engine.py`).
+
+## Contexte technique- Les besoins en termes d'opérations CRUD et de gestion spécifique des matchs sont connus.
+
+Cette tâche crée l'application FastAPI principale et les routes pour chaque entité, en respectant les bonnes pratiques REST et la logique métier (gestion des matchs fixes, déplacement, fixation/défixation).
+
+## Objectifs
+
+## Résumé du travail précédent- Créer l'application FastAPI avec CORS configuré pour le frontend.
+
+- Les modèles SQLAlchemy sont définis avec stockage config YAML+Excel (`backend/database/models.py`) - Tâche 1.3- Définir les routes nécessaires pour chaque entité (CRUD, actions spécifiques).
+
+- Les schémas Pydantic sont créés pour validation/sérialisation (`backend/schemas/`) - Tâche 1.4- S'assurer de la cohérence, de la sécurité et de l'extensibilité des endpoints.
+
+- L'engine et la session factory sont en place (`backend/database/engine.py`) - Tâche 1.3
+
+- La logique métier (matchs fixes, statuts) est définie - Tâche 1.1## Détails techniques
+
+
+
+## Objectifs### Sous-tâche 1 : Application FastAPI
+
+1. Créer l'application FastAPI avec CORS configuré pour le frontend**Fichier à créer** : `backend/api/main.py`
+
+2. Définir les routes CRUD pour chaque entité (Projects, Teams, Venues, Matches)
+
+3. Implémenter les actions spécifiques aux matchs (move, fix, unfix)**Éléments requis** :
+
+4. Assurer cohérence, validation et gestion d'erreurs- Créer app : `FastAPI(title="PyCalendar API", version="2.0.0")`
+
+- Middleware CORS :
+
+## Détails techniques  - `allow_origins=["http://localhost:5173"]` (frontend dev)
+
+  - `allow_credentials=True`
+
+### Sous-tâche 1.5.1 : Application FastAPI  - `allow_methods=["*"]`, `allow_headers=["*"]`
+
+- Routes basiques :
+
+**📁 Fichier à créer** : `backend/api/main.py`  - `GET /` → info API (titre, version, description)
+
+  - `GET /health` → status check {"status": "ok"}
+
+**Imports requis** :- Import routers (à décommenter après création) :
+
+```python  - `from backend.api.routes import matches, projects, teams, venues`
+
+from fastapi import FastAPI  - `app.include_router(matches.router, prefix="/matches", tags=["Matches"])`
+
+from fastapi.middleware.cors import CORSMiddleware  - Idem pour projects, teams, venues
+
+```
+
+### Sous-tâche 2 : Routes Matches
+
+**Contenu détaillé** :**Fichier à créer** : `backend/api/routes/matches.py`
+
+
+
+```python**Router** : `router = APIRouter()`
+
+from fastapi import FastAPI
+
+from fastapi.middleware.cors import CORSMiddleware**Imports critiques** :
+
+- `from backend.database.engine import get_db`
+
+# Créer l'application FastAPI- `from backend.database import models`
+
+app = FastAPI(- `from backend.schemas import match as schemas`
+
+    title="PyCalendar API",- `from fastapi import Depends, HTTPException, status`
+
+    version="2.0.0",
+
+    description="API REST pour la gestion de calendriers sportifs"**Endpoints requis** :
+
+)
+
+1. **GET /matches/** :
+
+# Configuration CORS pour frontend React (dev)   - Query param optionnel : `project_id: Optional[int] = None`
+
+app.add_middleware(   - Filtrer par projet si fourni, sinon tous les matchs
+
+    CORSMiddleware,   - Response : `List[schemas.MatchResponse]`
+
+    allow_origins=["http://localhost:5173"],  # Frontend Vite dev server
+
+    allow_credentials=True,2. **GET /matches/{match_id}** :
+
+    allow_methods=["*"],  # GET, POST, PUT, DELETE, PATCH, OPTIONS   - Récupérer match par ID
+
+    allow_headers=["*"],  # Authorization, Content-Type, etc.   - HTTPException 404 si non trouvé
+
+)   - Response : `schemas.MatchResponse`
+
+
+
+# Routes basiques3. **POST /matches/** :
+
+@app.get("/")   - Body : `schemas.MatchCreate`
+
+def root():   - Créer en DB, commit, refresh
+
+    """Page d'accueil de l'API"""   - Status code 201
+
+    return {   - Response : `schemas.MatchResponse`
+
+        "title": "PyCalendar API",
+
+        "version": "2.0.0",4. **PUT /matches/{match_id}** :
+
+        "description": "API REST pour la gestion de calendriers sportifs",   - Body : `schemas.MatchUpdate`
+
+        "docs": "/docs",   - Utiliser `.model_dump(exclude_unset=True)` pour update partiel
+
+        "redoc": "/redoc"   - Itérer et setattr sur model
+
+    }   - Commit, refresh
+
+   - Response : `schemas.MatchResponse`
+
+@app.get("/health")
+
+def health_check():5. **POST /matches/{match_id}/move** :
+
+    """Health check endpoint"""   - Body : `schemas.MatchMove`
+
+    return {"status": "ok"}   - **Vérifier** `match.est_modifiable` avant update
+
+   - HTTPException 400 si match fixé
+
+# Import et inclusion des routers (décommenter après création des fichiers)   - Update semaine/horaire/gymnase
+
+# from backend.api.routes import matches, projects, teams, venues   - Changer statut à "planifie"
+
+#    - Commit, refresh
+
+# app.include_router(matches.router, prefix="/matches", tags=["Matches"])   - Response : `schemas.MatchResponse`
+
+# app.include_router(projects.router, prefix="/projects", tags=["Projects"])
+
+# app.include_router(teams.router, prefix="/teams", tags=["Teams"])6. **POST /matches/{match_id}/fix** :
+
+# app.include_router(venues.router, prefix="/venues", tags=["Venues"])   - Mettre `est_fixe=True`, `statut="fixe"`
+
+```   - Commit, refresh
+
+   - Response : `{"message": "Match fixé", "match": MatchResponse}`
+
+**Points clés** :
+
+- **CORS** : Essentiel pour appels depuis frontend React (localhost:5173)7. **POST /matches/{match_id}/unfix** :
+
+- **Production** : Restreindre `allow_origins` au domaine production   - Mettre `est_fixe=False`
+
+- **Routers commentés** : Décommenter après création des routes   - Restaurer statut : "planifie" si créneau existe (semaine non null), sinon "a_planifier"
+
+   - Commit, refresh
+
+---   - Response : `{"message": "Match déverrouillé", "match": MatchResponse}`
+
+
+
+### Sous-tâche 1.5.2 : Routes Matches8. **DELETE /matches/{match_id}** :
+
+   - Supprimer de DB
+
+**📁 Fichier à créer** : `backend/api/routes/matches.py`   - Commit
+
+   - Status code 204 (no content)
+
+**Imports requis** :
+
+```python### Sous-tâche 3 : Routes Projects
+
+from fastapi import APIRouter, Depends, HTTPException, status, Query**Fichier à créer** : `backend/api/routes/projects.py`
+
+from sqlalchemy.orm import Session
+
+from typing import List, Optional**Endpoints CRUD standard** :
+
+- GET /projects/ → liste
+
+from backend.database.engine import get_db- GET /projects/{id} → détail
+
+from backend.database import models- POST /projects/ → création
+
+from backend.schemas import match as schemas- PUT /projects/{id} → update
+
+```- DELETE /projects/{id} → suppression
+
+
+
+**Router** :**Endpoint spécifique** :
+
+```python- **GET /projects/{id}/stats** → retourner :
+
+router = APIRouter()  - nb_matchs_total, nb_matchs_planifies, nb_matchs_fixes, nb_matchs_a_planifier
+
+```  - Utiliser `.filter()` et `.count()` sur session
+
+
+
+**Endpoints requis** :### Sous-tâche 4 : Routes Teams et Venues
+
+**Fichiers à créer** : `backend/api/routes/teams.py`, `backend/api/routes/venues.py`
+
+**1. GET /matches/ - Lister les matchs** :
+
+```python**Endpoints CRUD standard** : GET list, GET detail, POST create, PUT update, DELETE
+
+@router.get("/", response_model=List[schemas.MatchResponse])
+
+def list_matches(### Consignes d'organisation
+
+    project_id: Optional[int] = Query(None, description="Filtrer par projet"),- Toujours vérifier existence (404) avant opérations
+
+    db: Session = Depends(get_db)- Vérifier `est_modifiable` pour modifications de matchs
+
+):- Dependency `Depends(get_db)` pour injection session
+
+    """Lister tous les matchs, optionnellement filtrés par projet"""- Utiliser status codes HTTP appropriés (200, 201, 204, 400, 404)
+
+    query = db.query(models.Match)- CORS essentiel pour dev local, restreindre en production
+
+    
+
+    if project_id is not None:### Impact et liens
+
+        query = query.filter(models.Match.project_id == project_id)- Le frontend (`frontend/src/api/`) appellera ces endpoints.
+
+    - Les schémas Pydantic (`backend/schemas/`) valident les données.
+
+    matches = query.all()- Les modèles SQLAlchemy (`backend/database/models.py`) sont manipulés.
+
+    return matches
+
+```## À faire/vérifier
+
+- Créer l'application FastAPI avec CORS configuré
+
+**2. GET /matches/{match_id} - Récupérer un match** :- Implémenter toutes les routes avec gestion d'erreurs
+
+```python- Vérifier la logique métier (est_modifiable, changements de statut)
+
+@router.get("/{match_id}", response_model=schemas.MatchResponse)- Tester avec curl ou Swagger UI (/docs) :
+
+def get_match(match_id: int, db: Session = Depends(get_db)):  - Créer projet, équipes, matchs
+
+    """Récupérer un match par son ID"""  - Déplacer match (move), fixer (fix), défixer (unfix)
+
+    match = db.query(models.Match).filter(models.Match.id == match_id).first()  - Vérifier que match fixé ne peut pas être déplacé (400)
+
+    
+
+    if not match:## Questions
+
+        raise HTTPException(Poser des questions si des points sur la logique métier, la sécurité, les status codes ou l'intégration ne sont pas clairs.
+
+            status_code=status.HTTP_404_NOT_FOUND,
+
+            detail=f"Match {match_id} non trouvé"## Documentation
+
+        )Rester concis, ne pas ajouter de documentation excessive. Commenter brièvement les endpoints critiques si besoin.
+
+    
+    return match
+```
+
+**3. POST /matches/ - Créer un match** :
+```python
+@router.post("/", response_model=schemas.MatchResponse, status_code=status.HTTP_201_CREATED)
+def create_match(match: schemas.MatchCreate, db: Session = Depends(get_db)):
+    """Créer un nouveau match"""
+    # Vérifier que le projet existe
+    project = db.query(models.Project).filter(models.Project.id == match.project_id).first()
+    if not project:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Projet {match.project_id} non trouvé"
+        )
+    
+    # Créer le match
+    db_match = models.Match(**match.model_dump())
+    db.add(db_match)
+    db.commit()
+    db.refresh(db_match)
+    
+    return db_match
+```
+
+**4. PUT /matches/{match_id} - Mettre à jour un match** :
+```python
+@router.put("/{match_id}", response_model=schemas.MatchResponse)
+def update_match(
+    match_id: int,
+    match_update: schemas.MatchUpdate,
+    db: Session = Depends(get_db)
+):
+    """Mettre à jour un match (PATCH partiel)"""
+    db_match = db.query(models.Match).filter(models.Match.id == match_id).first()
+    
+    if not db_match:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Match {match_id} non trouvé"
+        )
+    
+    # Update partiel (seulement champs fournis)
+    update_data = match_update.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(db_match, key, value)
+    
+    db.commit()
+    db.refresh(db_match)
+    
+    return db_match
+```
+
+**5. POST /matches/{match_id}/move - Déplacer un match (drag & drop)** :
+```python
+@router.post("/{match_id}/move", response_model=schemas.MatchResponse)
+def move_match(
+    match_id: int,
+    move_data: schemas.MatchMove,
+    db: Session = Depends(get_db)
+):
+    """Déplacer un match vers un nouveau créneau (drag & drop)"""
+    db_match = db.query(models.Match).filter(models.Match.id == match_id).first()
+    
+    if not db_match:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Match {match_id} non trouvé"
+        )
+    
+    # Vérifier que le match est modifiable (logique métier - Tâche 1.1)
+    if not db_match.est_modifiable:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Ce match est fixé et ne peut pas être déplacé"
+        )
+    
+    # Mettre à jour le créneau
+    db_match.semaine = move_data.semaine
+    db_match.horaire = move_data.horaire
+    db_match.gymnase = move_data.gymnase
+    db_match.statut = "planifie"  # Changer statut après déplacement
+    
+    db.commit()
+    db.refresh(db_match)
+    
+    return db_match
+```
+
+**6. POST /matches/{match_id}/fix - Fixer un match** :
+```python
+@router.post("/{match_id}/fix")
+def fix_match(match_id: int, db: Session = Depends(get_db)):
+    """Fixer un match (le verrouiller pour empêcher replanification)"""
+    db_match = db.query(models.Match).filter(models.Match.id == match_id).first()
+    
+    if not db_match:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Match {match_id} non trouvé"
+        )
+    
+    # Fixer le match
+    db_match.est_fixe = True
+    db_match.statut = "fixe"
+    
+    db.commit()
+    db.refresh(db_match)
+    
+    return {
+        "message": "Match fixé avec succès",
+        "match": schemas.MatchResponse.model_validate(db_match)
+    }
+```
+
+**7. POST /matches/{match_id}/unfix - Défixer un match** :
+```python
+@router.post("/{match_id}/unfix")
+def unfix_match(match_id: int, db: Session = Depends(get_db)):
+    """Défixer un match (le déverrouiller)"""
+    db_match = db.query(models.Match).filter(models.Match.id == match_id).first()
+    
+    if not db_match:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Match {match_id} non trouvé"
+        )
+    
+    # Défixer le match
+    db_match.est_fixe = False
+    
+    # Restaurer statut approprié
+    if db_match.semaine is not None:
+        db_match.statut = "planifie"  # Match déjà planifié
+    else:
+        db_match.statut = "a_planifier"  # Match non planifié
+    
+    db.commit()
+    db.refresh(db_match)
+    
+    return {
+        "message": "Match déverrouillé avec succès",
+        "match": schemas.MatchResponse.model_validate(db_match)
+    }
+```
+
+**8. DELETE /matches/{match_id} - Supprimer un match** :
+```python
+@router.delete("/{match_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_match(match_id: int, db: Session = Depends(get_db)):
+    """Supprimer un match"""
+    db_match = db.query(models.Match).filter(models.Match.id == match_id).first()
+    
+    if not db_match:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Match {match_id} non trouvé"
+        )
+    
+    db.delete(db_match)
+    db.commit()
+    
+    return None  # 204 No Content
+```
+
+**Points clés** :
+- **Validation automatique** : Pydantic valide les schémas (MatchCreate, MatchUpdate, MatchMove)
+- **Logique métier** : Vérifier `est_modifiable` avant déplacement (property du modèle)
+- **Gestion d'erreurs** : HTTPException 404 (not found), 400 (bad request)
+- **Conversion ORM** : `from_attributes=True` permet retour direct des modèles SQLAlchemy
+
+---
+
+### Sous-tâche 1.5.3 : Routes Projects
+
+**📁 Fichier à créer** : `backend/api/routes/projects.py`
+
+**Pattern CRUD standard** avec endpoint stats supplémentaire :
+
+```python
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+from typing import List
+
+from backend.database.engine import get_db
+from backend.database import models
+from backend.schemas import project as schemas
+
+router = APIRouter()
+
+@router.get("/", response_model=List[schemas.ProjectResponse])
+def list_projects(db: Session = Depends(get_db)):
+    """Lister tous les projets"""
+    return db.query(models.Project).all()
+
+@router.get("/{project_id}", response_model=schemas.ProjectResponse)
+def get_project(project_id: int, db: Session = Depends(get_db)):
+    """Récupérer un projet par ID"""
+    project = db.query(models.Project).filter(models.Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail=f"Projet {project_id} non trouvé")
+    return project
+
+@router.post("/", response_model=schemas.ProjectResponse, status_code=201)
+def create_project(project: schemas.ProjectCreate, db: Session = Depends(get_db)):
+    """Créer un nouveau projet"""
+    db_project = models.Project(**project.model_dump())
+    db.add(db_project)
+    db.commit()
+    db.refresh(db_project)
+    return db_project
+
+@router.put("/{project_id}", response_model=schemas.ProjectResponse)
+def update_project(
+    project_id: int,
+    project_update: schemas.ProjectUpdate,
+    db: Session = Depends(get_db)
+):
+    """Mettre à jour un projet"""
+    db_project = db.query(models.Project).filter(models.Project.id == project_id).first()
+    if not db_project:
+        raise HTTPException(status_code=404, detail=f"Projet {project_id} non trouvé")
+    
+    update_data = project_update.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(db_project, key, value)
+    
+    db.commit()
+    db.refresh(db_project)
+    return db_project
+
+@router.delete("/{project_id}", status_code=204)
+def delete_project(project_id: int, db: Session = Depends(get_db)):
+    """Supprimer un projet (et tous ses matchs/équipes/gymnases - cascade)"""
+    db_project = db.query(models.Project).filter(models.Project.id == project_id).first()
+    if not db_project:
+        raise HTTPException(status_code=404, detail=f"Projet {project_id} non trouvé")
+    
+    db.delete(db_project)
+    db.commit()
+    return None
+
+@router.get("/{project_id}/stats", response_model=schemas.ProjectStats)
+def get_project_stats(project_id: int, db: Session = Depends(get_db)):
+    """Récupérer les statistiques d'un projet"""
+    project = db.query(models.Project).filter(models.Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail=f"Projet {project_id} non trouvé")
+    
+    # Calculer statistiques
+    nb_matchs_total = db.query(models.Match).filter(models.Match.project_id == project_id).count()
+    nb_matchs_planifies = db.query(models.Match).filter(
+        models.Match.project_id == project_id,
+        models.Match.semaine.isnot(None)
+    ).count()
+    nb_matchs_fixes = db.query(models.Match).filter(
+        models.Match.project_id == project_id,
+        models.Match.est_fixe == True
+    ).count()
+    nb_matchs_a_planifier = nb_matchs_total - nb_matchs_planifies
+    
+    nb_equipes = db.query(models.Team).filter(models.Team.project_id == project_id).count()
+    nb_gymnases = db.query(models.Venue).filter(models.Venue.project_id == project_id).count()
+    
+    return schemas.ProjectStats(
+        nb_matchs_total=nb_matchs_total,
+        nb_matchs_planifies=nb_matchs_planifies,
+        nb_matchs_fixes=nb_matchs_fixes,
+        nb_matchs_a_planifier=nb_matchs_a_planifier,
+        nb_equipes=nb_equipes,
+        nb_gymnases=nb_gymnases
+    )
+```
+
+---
+
+### Sous-tâche 1.5.4 : Routes Teams et Venues
+
+**📁 Fichiers à créer** : `backend/api/routes/teams.py`, `backend/api/routes/venues.py`
+
+**Pattern CRUD identique** pour chaque :
+
+```python
+# teams.py ou venues.py
+from fastapi import APIRouter, Depends, HTTPException, status, Query
+from sqlalchemy.orm import Session
+from typing import List, Optional
+
+from backend.database.engine import get_db
+from backend.database import models
+from backend.schemas import team as schemas  # ou venue as schemas
+
+router = APIRouter()
+
+@router.get("/", response_model=List[schemas.TeamResponse])  # ou VenueResponse
+def list_items(
+    project_id: Optional[int] = Query(None, description="Filtrer par projet"),
+    db: Session = Depends(get_db)
+):
+    query = db.query(models.Team)  # ou models.Venue
+    if project_id is not None:
+        query = query.filter(models.Team.project_id == project_id)
+    return query.all()
+
+# GET /{id}, POST /, PUT /{id}, DELETE /{id} → Pattern identique à projects
+```
+
+---
+
+### Impact et liens avec autres modules
+
+**Utilisation par le frontend** (Phase 2) :
+```typescript
+// frontend/src/api/endpoints/matches.ts
+export const matchesApi = {
+  list: (projectId?: number) => axios.get(`/matches/`, { params: { project_id: projectId } }),
+  move: (matchId: number, data: MatchMove) => axios.post(`/matches/${matchId}/move`, data),
+  fix: (matchId: number) => axios.post(`/matches/${matchId}/fix`),
+  unfix: (matchId: number) => axios.post(`/matches/${matchId}/unfix`),
+}
+```
+
+**Service de synchronisation** (Tâche 1.6) :
+- Utilise les routes POST pour créer projects/teams/venues/matches après import Excel
+- Ou crée directement les modèles ORM (pas besoin de passer par l'API)
+
+---
+
+## À faire/vérifier
+
+**Checklist de développement** :
+
+1. ✅ Créer `backend/api/main.py` avec FastAPI app, CORS, routes de base
+2. ✅ Créer `backend/api/routes/matches.py` avec 8 endpoints (list, get, create, update, move, fix, unfix, delete)
+3. ✅ Créer `backend/api/routes/projects.py` avec CRUD + stats
+4. ✅ Créer `backend/api/routes/teams.py` avec CRUD + filtre project_id
+5. ✅ Créer `backend/api/routes/venues.py` avec CRUD + filtre project_id
+6. ✅ Décommenter les imports de routers dans `main.py`
+
+**Checklist de validation** :
+
+1. ✅ Démarrer le serveur API :
+   ```bash
+   cd backend
+   uvicorn api.main:app --reload --port 8000
+   ```
+   → Doit démarrer sans erreur
+
+2. ✅ Accéder à la documentation Swagger :
+   ```bash
+   # Ouvrir http://localhost:8000/docs
+   ```
+   → Doit afficher tous les endpoints (Matches, Projects, Teams, Venues)
+
+3. ✅ Tester un endpoint avec curl :
+   ```bash
+   # Health check
+   curl http://localhost:8000/health
+   # {"status":"ok"}
+   
+   # Lister matchs (vide si DB vide)
+   curl http://localhost:8000/matches/
+   # []
+   ```
+
+4. ✅ Tester CORS (depuis frontend) :
+   ```bash
+   # Depuis localhost:5173, faire un fetch vers localhost:8000
+   # Doit fonctionner grâce au CORS configuré
+   ```
+
+5. ✅ Tester la logique métier (fix/unfix) :
+   ```python
+   # Via Swagger UI ou curl
+   # 1. Créer un match
+   # 2. Le fixer : POST /matches/{id}/fix
+   # 3. Essayer de le déplacer : POST /matches/{id}/move → Doit échouer (400)
+   # 4. Le défixer : POST /matches/{id}/unfix
+   # 5. Le déplacer : POST /matches/{id}/move → Doit réussir
+   ```
+
+**Commandes de test** :
+```bash
+# Démarrer API
+uvicorn backend.api.main:app --reload --port 8000
+
+# Test health check
+curl http://localhost:8000/health
+
+# Test Swagger
+xdg-open http://localhost:8000/docs  # Linux
+open http://localhost:8000/docs      # Mac
+
+# Tester création projet
+curl -X POST http://localhost:8000/projects/ \
+  -H "Content-Type: application/json" \
+  -d '{"nom":"Test","sport":"Volley","nb_semaines":26,"semaine_min":1}'
+```
+
+---
+
+## Questions
+
+**Questions critiques à poser si quelque chose n'est pas clair** :
+
+1. **Authentification** :
+   - Faut-il ajouter une authentification (JWT, OAuth) ou rester en API ouverte ?
+   - Faut-il limiter certaines routes (ex: DELETE) aux utilisateurs authentifiés ?
+
+2. **Validation supplémentaire** :
+   - Faut-il vérifier que `semaine` est dans [1, nb_semaines] du projet ?
+   - Faut-il vérifier que le gymnase existe avant de déplacer un match ?
+   - Faut-il vérifier la capacité du gymnase (nombre de matchs simultanés) ?
+
+3. **Endpoints supplémentaires** :
+   - Faut-il un endpoint bulk pour fixer/défixer plusieurs matchs ?
+   - Faut-il un endpoint pour réinitialiser tous les matchs d'un projet ?
+   - Faut-il un endpoint pour exporter le calendrier en Excel/PDF ?
+
+4. **Gestion d'erreurs** :
+   - Faut-il un handler global d'exceptions (ex: ValidationError → 422) ?
+   - Faut-il logger les erreurs dans un fichier ?
+
+5. **Performance** :
+   - Faut-il paginer les résultats (ex: GET /matches/?page=1&limit=50) ?
+   - Faut-il ajouter un cache (ex: Redis pour /projects/{id}/stats) ?
+
+---
+
+## Documentation
+
+Rester concis : documenter uniquement les choix non évidents :
+- **CORS** : Expliquer pourquoi nécessaire pour React (différent domaine/port)
+- **Logique métier** : Documenter vérification `est_modifiable` avant déplacement
+- **Cascade delete** : Expliquer que DELETE project supprime aussi matchs/équipes/gymnases
+- **Stats endpoint** : Documenter calculs (matchs planifiés, fixes, etc.)
+- **Pattern CRUD** : Documenter une fois le pattern commun (GET list, GET detail, POST, PUT, DELETE)
+
+Éviter la sur-documentation des concepts FastAPI standards.

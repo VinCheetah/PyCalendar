@@ -1,0 +1,807 @@
+# Prompt 2.1 : Initialisation React + TypeScript + Vite# Prompt 2.1 : Initialisation projet React
+
+
+
+## Contexte global## Contexte global
+
+PyCalendar V2 est une application web de planification de calendriers sportifs avec backend FastAPI et frontend React. Le frontend doit afficher et manipuler les matchs planifiés par le backend, en tenant compte de la double configuration (YAML + Excel).PyCalendar V2 propose une interface web moderne pour la gestion et l'optimisation de calendriers sportifs. Le frontend utilise React avec TypeScript, Vite comme bundler, et communique avec le backend via une API REST. L'architecture doit être modulaire, maintenable et facilement extensible.
+
+
+
+**RAPPEL - Double configuration** :## Contexte technique
+
+- **Fichier YAML** : Hyperparamètres (poids contraintes, nb_semaines, semaine_minimum, stratégie solver)Cette tâche concerne l'initialisation du projet React avec Vite, l'installation des dépendances principales (React Query, FullCalendar, Axios, React Router), et la configuration du serveur de développement avec proxy API.
+
+- **Fichier Excel** : Données détaillées (équipes, gymnases, indisponibilités, préférences)
+
+- **Base de données** : Projects stockent config_yaml_path, config_excel_path, config_yaml_data, config_excel_data## Résumé du travail précédent
+
+- **API** : Endpoints retournent ces informations pour affichage dans l'interface- Le backend est opérationnel avec API REST (FastAPI) sur port 8000.
+
+- Les schémas Pydantic et modèles SQLAlchemy sont en place.
+
+## Contexte technique- L'API expose les endpoints pour projets, équipes, gymnases, matchs.
+
+Cette tâche initialise le projet React avec TypeScript, Vite, et configure les dépendances nécessaires pour l'interface de calendrier.- Les besoins d'interaction avec l'API et d'affichage du calendrier sont identifiés.
+
+
+
+## Résumé du travail précédent## Objectifs
+
+- Backend FastAPI opérationnel avec modèles, routes, services (Phase 1)- Initialiser le projet React avec Vite et TypeScript.
+
+- API expose endpoints : /projects, /teams, /venues, /matches- Installer et configurer les dépendances principales.
+
+- Matchs peuvent être déplacés (move), fixés (fix), défixés (unfix)- Configurer le proxy API pour éviter les problèmes CORS en développement.
+
+- Projects contiennent config_yaml_data et config_excel_data (JSON)- Prévoir l'organisation des dossiers et fichiers pour faciliter l'évolution.
+
+
+
+## Objectifs## Détails techniques
+
+1. Initialiser projet React avec Vite + TypeScript
+
+2. Configurer structure de dossiers optimale### Étapes d'initialisation
+
+3. Installer dépendances essentielles (React Query, Axios, FullCalendar)
+
+4. Configurer proxy vers backend FastAPI1. **Créer projet Vite** :
+
+5. Préparer structure pour composants et hooks   - Se placer à la racine du projet PyCalendar
+
+   - Exécuter : `npm create vite@latest frontend -- --template react-ts`
+
+## Détails techniques   - Naviguer : `cd frontend`
+
+   - Installer : `npm install`
+
+### Initialisation du projet
+
+2. **Installer dépendances principales** :
+
+**Commande de création** :
+
+```bash**State management et data fetching** :
+
+# Depuis la racine PyCalendar/- `@tanstack/react-query` : Gestion du cache et des requêtes API
+
+npm create vite@latest frontend -- --template react-ts- `axios` : Client HTTP pour appels API
+
+- `zustand` : State management global (optionnel, pour états UI)
+
+cd frontend
+
+npm install**Calendrier et drag & drop** :
+
+```- `@fullcalendar/react` : Composant calendrier
+
+- `@fullcalendar/daygrid` : Vue grille jour
+
+**Structure générée** :- `@fullcalendar/timegrid` : Vue grille temps
+
+```- `@fullcalendar/interaction` : Support drag & drop
+
+frontend/
+
+├── public/               # Assets statiques**Routing** :
+
+├── src/- `react-router-dom` : Navigation entre pages
+
+│   ├── App.tsx          # Composant racine
+
+│   ├── main.tsx         # Point d'entrée**UI (recommandé)** :
+
+│   ├── vite-env.d.ts    # Types Vite- `tailwindcss`, `postcss`, `autoprefixer` : Framework CSS utilitaire
+
+│   └── assets/          # Images, styles- Initialiser Tailwind : `npx tailwindcss init -p`
+
+├── index.html           # Template HTML
+
+├── package.json**Commandes** :
+
+├── tsconfig.json        # Config TypeScript```bash
+
+└── vite.config.ts       # Config Vitenpm install @tanstack/react-query axios zustand
+
+```npm install @fullcalendar/react @fullcalendar/daygrid @fullcalendar/timegrid @fullcalendar/interaction
+
+npm install react-router-dom
+
+---npm install -D tailwindcss postcss autoprefixer
+
+npx tailwindcss init -p
+
+### Configuration TypeScript```
+
+
+
+**📁 Fichier à modifier** : `frontend/tsconfig.json`3. **Configurer Vite pour proxy API** :
+
+
+
+**Modifications** :**Fichier à modifier** : `frontend/vite.config.ts`
+
+```json
+
+{**Configuration requise** :
+
+  "compilerOptions": {- **resolve.alias** : Créer alias `@` pointant vers `./src` pour imports propres
+
+    "target": "ES2020",- **server.port** : 5173 (correspond au CORS configuré dans backend)
+
+    "useDefineForClassFields": true,- **server.proxy** : Rediriger `/api` vers `http://localhost:8000` avec `changeOrigin: true`
+
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+
+    "module": "ESNext",**Exemple** :
+
+    "skipLibCheck": true,```typescript
+
+import { defineConfig } from 'vite'
+
+    /* Bundler mode */import react from '@vitejs/plugin-react'
+
+    "moduleResolution": "bundler",import path from 'path'
+
+    "allowImportingTsExtensions": true,
+
+    "resolveJsonModule": true,export default defineConfig({
+
+    "isolatedModules": true,  plugins: [react()],
+
+    "noEmit": true,  resolve: {
+
+    "jsx": "react-jsx",    alias: {
+
+      '@': path.resolve(__dirname, './src')
+
+    /* Linting */    }
+
+    "strict": true,  },
+
+    "noUnusedLocals": true,  server: {
+
+    "noUnusedParameters": true,    port: 5173,
+
+    "noFallthroughCasesInSwitch": true,    proxy: {
+
+      '/api': {
+
+    /* Path aliases */        target: 'http://localhost:8000',
+
+    "baseUrl": ".",        changeOrigin: true
+
+    "paths": {      }
+
+      "@/*": ["./src/*"],    }
+
+      "@components/*": ["./src/components/*"],  }
+
+      "@hooks/*": ["./src/hooks/*"],})
+
+      "@services/*": ["./src/services/*"],```
+
+      "@types/*": ["./src/types/*"],
+
+      "@utils/*": ["./src/utils/*"]### Structure des dossiers recommandée
+
+    }```
+
+  },frontend/
+
+  "include": ["src"],├── src/
+
+  "references": [{ "path": "./tsconfig.node.json" }]│   ├── api/           # Client Axios et endpoints
+
+}│   ├── components/    # Composants React
+
+```│   ├── hooks/         # React Query hooks
+
+│   ├── pages/         # Pages/routes
+
+**Points clés** :│   ├── types/         # Interfaces TypeScript
+
+- **strict: true** : TypeScript strict mode│   ├── App.tsx        # Composant racine
+
+- **paths** : Alias pour imports cleans (`@components/Calendar` au lieu de `../../components/Calendar`)│   └── main.tsx       # Point d'entrée
+
+├── public/
+
+---├── package.json
+
+└── vite.config.ts
+
+### Configuration Vite```
+
+
+
+**📁 Fichier à modifier** : `frontend/vite.config.ts`### Consignes d'organisation
+
+- Alias `@` pour imports propres (`@/components/...` au lieu de `../../components/...`)
+
+**Contenu complet** :- Proxy API permet d'éviter CORS en dev (requêtes vers `/api/...` redirigées vers backend)
+
+```typescript- Port 5173 correspond au CORS configuré dans le backend FastAPI
+
+import { defineConfig } from 'vite'- En production, remplacer proxy par variable d'environnement pointant vers backend
+
+import react from '@vitejs/plugin-react'
+
+import path from 'path'### Impact et liens
+
+- Le backend API (`backend/api/main.py`) doit être démarré pour que le proxy fonctionne.
+
+// https://vitejs.dev/config/- Les composants React (`frontend/src/components/`) utiliseront les hooks et le client API.
+
+export default defineConfig({- La configuration Vite facilite le développement et la construction pour production.
+
+  plugins: [react()],
+
+  resolve: {## À faire/vérifier
+
+    alias: {- Créer le projet React avec Vite et template TypeScript
+
+      '@': path.resolve(__dirname, './src'),- Installer toutes les dépendances listées
+
+      '@components': path.resolve(__dirname, './src/components'),- Configurer vite.config.ts avec alias et proxy
+
+      '@hooks': path.resolve(__dirname, './src/hooks'),- Démarrer le serveur de développement : `npm run dev`
+
+      '@services': path.resolve(__dirname, './src/services'),- Vérifier que http://localhost:5173 affiche la page React par défaut
+
+      '@types': path.resolve(__dirname, './src/types'),- Vérifier que le hot reload fonctionne (modifier App.tsx, observer le changement)
+
+      '@utils': path.resolve(__dirname, './src/utils'),- Tester le proxy : faire un appel à `/api/health` depuis le frontend (doit retourner {"status": "ok"})
+
+    },
+
+  },## Questions
+
+  server: {Poser des questions si des points sur la configuration Vite, le proxy, les dépendances ou l'organisation ne sont pas clairs.
+
+    port: 5173,
+
+    proxy: {## Documentation
+
+      '/api': {Rester concis, ne pas ajouter de documentation excessive. Commenter brièvement la configuration Vite si besoin.
+
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, ''),
+      },
+    },
+  },
+})
+```
+
+**Points clés** :
+- **alias** : Résolution des paths aliases TypeScript
+- **proxy /api** : Rediriger `/api/*` vers `http://localhost:8000/*` (backend FastAPI)
+- **port 5173** : Port par défaut Vite
+
+**Exemple d'utilisation proxy** :
+- Frontend appelle : `GET /api/projects`
+- Vite redirige vers : `GET http://localhost:8000/projects`
+
+---
+
+### Installation des dépendances
+
+**📁 Fichier à modifier** : `frontend/package.json`
+
+**Commandes d'installation** :
+```bash
+# UI et routing
+npm install react-router-dom
+
+# État et data fetching
+npm install @tanstack/react-query
+npm install @tanstack/react-query-devtools
+
+# HTTP client
+npm install axios
+
+# Calendrier
+npm install @fullcalendar/react @fullcalendar/core @fullcalendar/daygrid @fullcalendar/interaction
+
+# UI components (optionnel, recommandé)
+npm install @headlessui/react @heroicons/react
+
+# Utils
+npm install date-fns
+
+# Dev dependencies
+npm install -D @types/node
+```
+
+**package.json résultant** (extrait) :
+```json
+{
+  "name": "pycalendar-frontend",
+  "version": "2.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.22.0",
+    "@tanstack/react-query": "^5.28.0",
+    "@tanstack/react-query-devtools": "^5.28.0",
+    "axios": "^1.6.7",
+    "@fullcalendar/react": "^6.1.11",
+    "@fullcalendar/core": "^6.1.11",
+    "@fullcalendar/daygrid": "^6.1.11",
+    "@fullcalendar/interaction": "^6.1.11",
+    "@headlessui/react": "^1.7.18",
+    "@heroicons/react": "^2.1.1",
+    "date-fns": "^3.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.1",
+    "@types/react-dom": "^18.3.0",
+    "@types/node": "^20.11.24",
+    "@vitejs/plugin-react": "^4.3.0",
+    "typescript": "^5.4.2",
+    "vite": "^5.2.0"
+  }
+}
+```
+
+**Justification des dépendances** :
+- **react-router-dom** : Navigation entre pages (calendrier, stats, config)
+- **@tanstack/react-query** : Gestion état serveur, cache, mutations
+- **axios** : HTTP client pour API (plus simple que fetch)
+- **@fullcalendar/*** : Composant calendrier interactif
+- **date-fns** : Manipulation dates (formatage, calculs)
+
+---
+
+### Structure de dossiers
+
+**📁 Structure à créer** :
+```
+frontend/src/
+├── main.tsx                  # Point d'entrée
+├── App.tsx                   # Composant racine + routing
+├── vite-env.d.ts
+├── components/               # Composants UI
+│   ├── Calendar/
+│   │   ├── Calendar.tsx
+│   │   └── EventDetailsModal.tsx
+│   ├── Project/
+│   │   ├── ProjectSelector.tsx
+│   │   └── ProjectStats.tsx
+│   └── Layout/
+│       ├── Header.tsx
+│       └── Sidebar.tsx
+├── hooks/                    # Custom hooks
+│   ├── useProjects.ts
+│   ├── useMatches.ts
+│   ├── useTeams.ts
+│   └── useVenues.ts
+├── services/                 # API clients
+│   ├── api.ts               # Axios instance configurée
+│   ├── projectsApi.ts
+│   ├── matchesApi.ts
+│   ├── teamsApi.ts
+│   └── venuesApi.ts
+├── types/                    # Types TypeScript
+│   ├── project.ts
+│   ├── match.ts
+│   ├── team.ts
+│   └── venue.ts
+├── utils/                    # Fonctions utilitaires
+│   ├── dateHelpers.ts
+│   └── matchHelpers.ts
+└── assets/                   # Images, styles
+    └── styles/
+        └── calendar.css
+```
+
+**Créer dossiers** :
+```bash
+cd frontend/src
+mkdir -p components/{Calendar,Project,Layout} hooks services types utils assets/styles
+```
+
+---
+
+### Configuration React Query
+
+**📁 Fichier à créer** : `frontend/src/main.tsx`
+
+**Contenu complet** :
+```typescript
+import React from 'react'
+import ReactDOM from 'react-dom/client'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
+import App from './App.tsx'
+import './index.css'
+
+// Configuration React Query
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false,  // Ne pas refetch au focus
+      retry: 1,                      // 1 seul retry en cas d'erreur
+      staleTime: 5 * 60 * 1000,     // 5 minutes avant de considérer stale
+    },
+  },
+})
+
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <QueryClientProvider client={queryClient}>
+      <App />
+      <ReactQueryDevtools initialIsOpen={false} />
+    </QueryClientProvider>
+  </React.StrictMode>,
+)
+```
+
+**Points clés** :
+- **QueryClientProvider** : Wrapper React Query pour toute l'app
+- **ReactQueryDevtools** : Outils de debug (panneau en bas à gauche)
+- **staleTime: 5min** : Cache données 5 minutes
+
+---
+
+### Configuration Axios
+
+**📁 Fichier à créer** : `frontend/src/services/api.ts`
+
+**Contenu complet** :
+```typescript
+import axios from 'axios'
+
+// Instance Axios configurée pour l'API PyCalendar
+const api = axios.create({
+  baseURL: '/api',  // Proxy Vite redirigera vers http://localhost:8000
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  timeout: 10000,  // 10s timeout
+})
+
+// Interceptor pour logging (optionnel, utile en dev)
+api.interceptors.request.use(
+  (config) => {
+    console.log(`[API] ${config.method?.toUpperCase()} ${config.url}`)
+    return config
+  },
+  (error) => {
+    console.error('[API] Request error:', error)
+    return Promise.reject(error)
+  }
+)
+
+api.interceptors.response.use(
+  (response) => {
+    console.log(`[API] Response ${response.status} from ${response.config.url}`)
+    return response
+  },
+  (error) => {
+    console.error('[API] Response error:', error.response?.data || error.message)
+    return Promise.reject(error)
+  }
+)
+
+export default api
+```
+
+**Points clés** :
+- **baseURL: '/api'** : Utilise proxy Vite
+- **interceptors** : Logging automatique des requêtes/réponses
+- **timeout: 10s** : Éviter blocages infinis
+
+---
+
+### App.tsx basique avec routing
+
+**📁 Fichier à modifier** : `frontend/src/App.tsx`
+
+**Contenu complet** :
+```typescript
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import './App.css'
+
+function App() {
+  return (
+    <BrowserRouter>
+      <div className="min-h-screen bg-gray-50">
+        <Routes>
+          <Route path="/" element={<Navigate to="/calendar" replace />} />
+          <Route path="/calendar" element={<CalendarPage />} />
+          <Route path="/projects" element={<ProjectsPage />} />
+          <Route path="/stats" element={<StatsPage />} />
+        </Routes>
+      </div>
+    </BrowserRouter>
+  )
+}
+
+// Composants temporaires (à remplacer par vrais composants)
+function CalendarPage() {
+  return (
+    <div className="p-8">
+      <h1 className="text-3xl font-bold mb-4">Calendrier PyCalendar</h1>
+      <p className="text-gray-600">Composant calendrier à implémenter (Prompt 2.5)</p>
+    </div>
+  )
+}
+
+function ProjectsPage() {
+  return (
+    <div className="p-8">
+      <h1 className="text-3xl font-bold mb-4">Projets</h1>
+      <p className="text-gray-600">Sélecteur de projets à implémenter</p>
+    </div>
+  )
+}
+
+function StatsPage() {
+  return (
+    <div className="p-8">
+      <h1 className="text-3xl font-bold mb-4">Statistiques</h1>
+      <p className="text-gray-600">Statistiques projet à implémenter</p>
+    </div>
+  )
+}
+
+export default App
+```
+
+**Points clés** :
+- **BrowserRouter** : Routing côté client
+- **Routes** : Navigation entre /calendar, /projects, /stats
+- **Navigate** : Redirection automatique / → /calendar
+- **Composants temporaires** : Placeholders en attendant implémentation
+
+---
+
+### Styles de base
+
+**📁 Fichier à créer** : `frontend/src/index.css`
+
+**Contenu** :
+```css
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color-scheme: light;
+  color: rgba(0, 0, 0, 0.87);
+  background-color: #fafafa;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+#root {
+  min-height: 100vh;
+}
+```
+
+**Note** : Si Tailwind CSS n'est pas installé, remplacer par styles basiques ou installer :
+```bash
+npm install -D tailwindcss postcss autoprefixer
+npx tailwindcss init -p
+```
+
+---
+
+### Configuration Tailwind (optionnel mais recommandé)
+
+**📁 Fichier à créer** : `frontend/tailwind.config.js`
+
+**Contenu** :
+```javascript
+/** @type {import('tailwindcss').Config} */
+export default {
+  content: [
+    "./index.html",
+    "./src/**/*.{js,ts,jsx,tsx}",
+  ],
+  theme: {
+    extend: {
+      colors: {
+        primary: {
+          50: '#eff6ff',
+          100: '#dbeafe',
+          500: '#3b82f6',
+          600: '#2563eb',
+          700: '#1d4ed8',
+        },
+      },
+    },
+  },
+  plugins: [],
+}
+```
+
+---
+
+### Fichier .env pour configuration
+
+**📁 Fichier à créer** : `frontend/.env`
+
+**Contenu** :
+```env
+VITE_API_BASE_URL=http://localhost:8000
+VITE_APP_NAME=PyCalendar
+VITE_APP_VERSION=2.0.0
+```
+
+**Usage dans le code** :
+```typescript
+const API_URL = import.meta.env.VITE_API_BASE_URL
+```
+
+---
+
+## À faire/vérifier
+
+**Checklist de développement** :
+
+1. ✅ Initialiser projet Vite + React + TypeScript :
+   ```bash
+   npm create vite@latest frontend -- --template react-ts
+   cd frontend
+   npm install
+   ```
+
+2. ✅ Configurer TypeScript :
+   - Modifier `tsconfig.json` avec paths aliases
+   - Ajouter strict mode
+
+3. ✅ Configurer Vite :
+   - Modifier `vite.config.ts` avec alias + proxy /api
+   - Port 5173
+
+4. ✅ Installer dépendances :
+   ```bash
+   npm install react-router-dom @tanstack/react-query @tanstack/react-query-devtools axios @fullcalendar/react @fullcalendar/core @fullcalendar/daygrid @fullcalendar/interaction date-fns
+   npm install -D @types/node
+   ```
+
+5. ✅ Créer structure de dossiers :
+   ```bash
+   cd src
+   mkdir -p components/{Calendar,Project,Layout} hooks services types utils assets/styles
+   ```
+
+6. ✅ Configurer React Query :
+   - Créer `main.tsx` avec QueryClientProvider
+   - Activer ReactQueryDevtools
+
+7. ✅ Configurer Axios :
+   - Créer `services/api.ts` avec baseURL /api
+   - Ajouter interceptors pour logging
+
+8. ✅ Créer App.tsx avec routing :
+   - BrowserRouter + Routes
+   - Placeholders pour /calendar, /projects, /stats
+
+9. ✅ Créer styles de base :
+   - `index.css` avec styles globaux
+   - Optionnel : Tailwind CSS
+
+**Checklist de validation** :
+
+1. ✅ **Démarrer le dev server** :
+   ```bash
+   cd frontend
+   npm run dev
+   # Doit ouvrir http://localhost:5173
+   ```
+
+2. ✅ **Vérifier proxy API** :
+   ```bash
+   # Terminal 1 : Backend
+   cd /path/to/PyCalendar
+   uvicorn backend.api.main:app --reload
+   
+   # Terminal 2 : Frontend
+   cd frontend
+   npm run dev
+   
+   # Ouvrir console navigateur et tester :
+   fetch('/api/projects').then(r => r.json()).then(console.log)
+   # Doit afficher [] ou liste de projets
+   ```
+
+3. ✅ **Vérifier imports avec alias** :
+   ```typescript
+   // Dans un composant
+   import api from '@services/api'  // Doit fonctionner sans erreur
+   ```
+
+4. ✅ **Vérifier React Query DevTools** :
+   - Ouvrir http://localhost:5173
+   - Vérifier icône React Query en bas à gauche
+
+5. ✅ **Build de production** :
+   ```bash
+   npm run build
+   # Doit créer dist/ sans erreurs TypeScript
+   ```
+
+**Commandes de test rapide** :
+```bash
+# Vérifier structure
+ls -la frontend/src/
+
+# Tester build
+npm run build
+
+# Tester dev
+npm run dev
+
+# Vérifier types
+npx tsc --noEmit
+```
+
+---
+
+## Questions
+
+**Questions critiques à poser si quelque chose n'est pas clair** :
+
+1. **Proxy API** :
+   - Le backend tourne-t-il sur http://localhost:8000 par défaut ?
+   - Faut-il configurer CORS sur le backend FastAPI ?
+   - Faut-il gérer l'authentification (tokens JWT) ?
+
+2. **UI Framework** :
+   - Faut-il installer Tailwind CSS (recommandé) ?
+   - Ou utiliser un autre framework (Material-UI, Chakra UI) ?
+   - Faut-il un design system spécifique FFSU ?
+
+3. **Structure de navigation** :
+   - Quelles pages principales ? (Calendrier, Projets, Stats, Config ?)
+   - Faut-il une sidebar permanente avec navigation ?
+   - Faut-il un header avec breadcrumbs ?
+
+4. **Gestion d'erreurs** :
+   - Faut-il un composant ErrorBoundary global ?
+   - Faut-il des toasts/notifications (react-hot-toast) ?
+   - Faut-il un ErrorPage pour 404/500 ?
+
+5. **Internationalisation** :
+   - Application en français uniquement ?
+   - Ou besoin de i18n (react-i18next) pour multilingue ?
+
+6. **Environnements** :
+   - Faut-il plusieurs .env (.env.development, .env.production) ?
+   - URL API différente en production ?
+
+---
+
+## Documentation
+
+Rester concis : documenter uniquement les choix non évidents :
+- **Proxy Vite** : Expliquer /api → http://localhost:8000 pour éviter CORS
+- **React Query** : Expliquer staleTime 5min pour cache intelligent
+- **Path aliases** : Expliquer @components pour imports propres
+- **Interceptors Axios** : Expliquer logging pour debug
+
+Éviter la sur-documentation des concepts React/Vite standards.

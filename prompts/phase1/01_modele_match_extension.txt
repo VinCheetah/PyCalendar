@@ -1,0 +1,434 @@
+# Prompt 1.1 : Extension du Modèle Match# Prompt 1.1 : Extension du Modèle Match
+
+
+
+## Contexte global## Contexte global
+
+PyCalendar V2 transforme une application CLI/Excel d'optimisation de calendriers sportifs en application web full-stack. L'architecture préserve totalement le code existant (solvers/, constraints/, generators/, validation/) et ajoute une couche backend (FastAPI, SQLAlchemy, SQLite) + frontend (React, TypeScript, FullCalendar). PyCalendar V2 transforme une application CLI/Excel d'optimisation de calendriers sportifs en application web full-stack. L'architecture préserve totalement le code existant (solvers/, constraints/, generators/, validation/) et ajoute une couche backend (FastAPI, SQLAlchemy, SQLite) + frontend (React, TypeScript, FullCalendar). Le modèle métier Match doit être enrichi pour supporter les matchs fixes (non replanifiables), les statuts, les scores et les notes.
+
+
+
+**IMPORTANT - Double configuration** :## Contexte technique
+
+- **Fichier YAML** (ex: `configs/default.yaml`) : Hyperparamètres, poids des contraintes, stratégie solver, temps maxCette tâche enrichit la dataclass `Match` dans `core/models.py` avec de nouveaux champs essentiels pour la logique métier, l'API REST et l'interface utilisateur. Les modifications doivent être rétrocompatibles (valeurs par défaut) pour ne pas casser le CLI existant ni les générateurs de matchs.
+
+- **Fichier Excel** (ex: `config_exemple.xlsx`) : Données détaillées (équipes, gymnases, indisponibilités, préférences, contraintes spécifiques) avec 7+ feuilles
+
+- Le fichier `core/config.py` charge le YAML (qui référence le chemin Excel via `fichiers.donnees`)## Résumé du travail précédent
+
+- Les données Excel sont chargées par `core/config_manager.py` (classe `ConfigManager`)- Le fichier `core/models.py` contient déjà la dataclass `Match` avec les champs de base : `equipe1`, `equipe2`, `poule`, `creneau` (Creneau), `priorite` (int)
+
+- La configuration dans `core/config.py` gère les paramètres du projet (équipes, gymnases, créneaux)
+
+Le modèle métier Match doit être enrichi pour supporter les matchs fixes (non replanifiables), les statuts, les scores et les notes.- Les modules `solvers/`, `constraints/`, `generators/`, `validation/` sont préservés et utilisent ce modèle
+
+- Le CLI `main.py` doit continuer à fonctionner sans modification
+
+## Contexte technique
+
+Cette tâche enrichit la dataclass `Match` dans `core/models.py` avec de nouveaux champs essentiels pour la logique métier, l'API REST et l'interface utilisateur. Les modifications doivent être rétrocompatibles pour ne pas casser le CLI existant ni les générateurs de matchs.## Objectifs
+
+1. Ajouter 5 nouveaux champs à la dataclass `Match` avec valeurs par défaut (rétrocompatibilité)
+
+## Résumé du travail précédent2. Ajouter une méthode `est_modifiable()` et une property `est_planifie` pour la logique métier
+
+- Le fichier `core/models.py` contient déjà la dataclass `Match` avec les champs de base : `equipe1`, `equipe2`, `poule`, `creneau` (Creneau), `priorite` (int)3. Garantir la compatibilité avec le code existant (générateurs, solvers, CLI)
+
+- La configuration YAML dans `core/config.py` gère les hyperparamètres (poids contraintes, nb_semaines, stratégie)4. Préparer le modèle pour l'intégration avec SQLAlchemy (backend/database/models.py) et Pydantic (backend/schemas/match.py)
+
+- La configuration Excel via `ConfigManager` gère les données détaillées (équipes, gymnases, indispos, préférences)
+
+- Les modules `solvers/`, `constraints/`, `generators/`, `validation/` sont préservés et utilisent ce modèle## Détails techniques
+
+- Le CLI `main.py` doit continuer à fonctionner sans modification
+
+### Fichier à modifier
+
+## Objectifs**`core/models.py`** - Dataclass `Match`
+
+1. Ajouter 5 nouveaux champs à la dataclass `Match` avec valeurs par défaut (rétrocompatibilité)
+
+2. Ajouter une méthode `est_modifiable()` et une property `est_planifie` pour la logique métier### Imports à ajouter (si absents)
+
+3. Garantir la compatibilité avec le code existant (générateurs, solvers, CLI)```python
+
+4. Préparer le modèle pour l'intégration avec SQLAlchemy (backend/database/models.py) et Pydantic (backend/schemas/match.py)from typing import Optional
+
+```
+
+## Détails techniques
+
+### Champs à ajouter à la dataclass Match
+
+### Fichier à modifier
+
+**`core/models.py`** - Dataclass `Match`**1. Champ `est_fixe` (gestion des matchs verrouillés)** :
+
+```python
+
+### Imports à ajouter (si absents)est_fixe: bool = False
+
+```python```
+
+from typing import Optional- **Usage** : Indique si le match est verrouillé (non replanifiable par le solver)
+
+```- **Valeur par défaut** : `False` (tous les matchs sont modifiables par défaut)
+
+- **Impact** : Les solvers devront filtrer les matchs avec `est_fixe=True` avant planification
+
+### Champs à ajouter à la dataclass Match
+
+**2. Champ `statut` (état du match)** :
+
+**1. Champ `est_fixe` (gestion des matchs verrouillés)** :```python
+
+```pythonstatut: str = "a_planifier"
+
+est_fixe: bool = False```
+
+```- **Valeurs possibles** : `"a_planifier"`, `"planifie"`, `"fixe"`, `"termine"`, `"annule"`
+
+- **Usage** : Indique si le match est verrouillé (non replanifiable par le solver)- **Valeur par défaut** : `"a_planifier"`
+
+- **Valeur par défaut** : `False` (tous les matchs sont modifiables par défaut)- **Impact** : L'API REST utilisera ce champ pour filtrer les matchs, l'UI pour l'affichage couleur
+
+- **Source des données** : Les matchs fixes seront marqués dans la base de données web (interface utilisateur) ou potentiellement dans une feuille Excel future (à discuter si nécessaire)
+
+- **Impact** : Les solvers devront filtrer les matchs avec `est_fixe=True` avant planification**3. Champs `score_equipe1` et `score_equipe2` (résultats)** :
+
+```python
+
+**2. Champ `statut` (état du match)** :score_equipe1: Optional[int] = None
+
+```pythonscore_equipe2: Optional[int] = None
+
+statut: str = "a_planifier"```
+
+```- **Usage** : Stocker les scores quand le match est terminé
+
+- **Valeurs possibles** : `"a_planifier"`, `"planifie"`, `"fixe"`, `"termine"`, `"annule"`- **Type** : `Optional[int]` car vide tant que match non joué
+
+- **Valeur par défaut** : `"a_planifier"`- **Impact** : Sérialisés en JSON via Pydantic, affichés dans l'UI
+
+- **Impact** : L'API REST utilisera ce champ pour filtrer les matchs, l'UI pour l'affichage couleur
+
+**4. Champ `notes` (commentaires libres)** :
+
+**3. Champs `score_equipe1` et `score_equipe2` (résultats)** :```python
+
+```pythonnotes: str = ""
+
+score_equipe1: Optional[int] = None```
+
+score_equipe2: Optional[int] = None- **Usage** : Notes libres sur le match (raison annulation, contrainte particulière, etc.)
+
+```- **Valeur par défaut** : chaîne vide
+
+- **Usage** : Stocker les scores quand le match est terminé- **Impact** : Texte libre stocké en DB, affiché dans l'UI
+
+- **Type** : `Optional[int]` car vide tant que match non joué
+
+- **Impact** : Sérialisés en JSON via Pydantic, affichés dans l'UI### Méthodes à ajouter à la dataclass Match
+
+
+
+**4. Champ `notes` (commentaires libres)** :**1. Méthode `est_modifiable()` (logique de verrouillage)** :
+
+```python```python
+
+notes: str = ""def est_modifiable(self) -> bool:
+
+```    """Retourne True si le match peut être replanifié (pas fixe, pas terminé/annulé)"""
+
+- **Usage** : Notes libres sur le match (raison annulation, contrainte particulière, etc.)    if self.est_fixe:
+
+- **Valeur par défaut** : chaîne vide        return False
+
+- **Impact** : Texte libre stocké en DB, affiché dans l'UI    if self.statut in ["fixe", "termine", "annule"]:
+
+        return False
+
+### Méthodes à ajouter à la dataclass Match    return True
+
+```
+
+**1. Méthode `est_modifiable()` (logique de verrouillage)** :- **Usage** : Les solvers l'utiliseront pour filtrer les matchs à planifier
+
+```python- **Logique** : `False` si `est_fixe=True` OU `statut` dans états finaux
+
+def est_modifiable(self) -> bool:
+
+    """Retourne True si le match peut être replanifié (pas fixe, pas terminé/annulé)"""**2. Property `est_planifie` (vérification planification)** :
+
+    if self.est_fixe:```python
+
+        return False@property
+
+    if self.statut in ["fixe", "termine", "annule"]:def est_planifie(self) -> bool:
+
+        return False    """Retourne True si le match a un créneau assigné"""
+
+    return True    return self.creneau is not None and self.creneau.semaine is not None
+
+``````
+
+- **Usage** : Les solvers l'utiliseront pour filtrer les matchs à planifier- **Usage** : Vérifier rapidement si un match est planifié (a un créneau avec semaine)
+
+- **Logique** : `False` si `est_fixe=True` OU `statut` dans états finaux- **Implémentation** : property (pas de parenthèses à l'appel)
+
+
+
+**2. Property `est_planifie` (vérification planification)** :### Structure finale attendue de la dataclass Match
+
+```python
+
+@property```python
+
+def est_planifie(self) -> bool:from dataclasses import dataclass
+
+    """Retourne True si le match a un créneau assigné"""from typing import Optional
+
+    return self.creneau is not None and self.creneau.semaine is not None
+
+```@dataclass
+
+- **Usage** : Vérifier rapidement si un match est planifié (a un créneau avec semaine)class Match:
+
+- **Implémentation** : property (pas de parenthèses à l'appel)    # Champs existants (NE PAS MODIFIER)
+
+    equipe1: 'Equipe'
+
+### Structure finale attendue de la dataclass Match    equipe2: 'Equipe'
+
+    poule: str
+
+```python    creneau: Optional['Creneau'] = None
+
+from dataclasses import dataclass    priorite: int = 0
+
+from typing import Optional    
+
+    # Nouveaux champs (AJOUTER)
+
+@dataclass    est_fixe: bool = False
+
+class Match:    statut: str = "a_planifier"
+
+    # Champs existants (NE PAS MODIFIER)    score_equipe1: Optional[int] = None
+
+    equipe1: 'Equipe'    score_equipe2: Optional[int] = None
+
+    equipe2: 'Equipe'    notes: str = ""
+
+    poule: str    
+
+    creneau: Optional['Creneau'] = None    # Nouvelles méthodes (AJOUTER)
+
+    priorite: int = 0    def est_modifiable(self) -> bool:
+
+            if self.est_fixe:
+
+    # Nouveaux champs (AJOUTER)            return False
+
+    est_fixe: bool = False        if self.statut in ["fixe", "termine", "annule"]:
+
+    statut: str = "a_planifier"            return False
+
+    score_equipe1: Optional[int] = None        return True
+
+    score_equipe2: Optional[int] = None    
+
+    notes: str = ""    @property
+
+        def est_planifie(self) -> bool:
+
+    # Nouvelles méthodes (AJOUTER)        return self.creneau is not None and self.creneau.semaine is not None
+
+    def est_modifiable(self) -> bool:```
+
+        if self.est_fixe:
+
+            return False### Impact et liens avec autres modules
+
+        if self.statut in ["fixe", "termine", "annule"]:
+
+            return False**Impact sur modules existants** :
+
+        return True- `generators/match_generator.py` : Continue de créer des matchs avec valeurs par défaut → aucun changement requis
+
+    - `solvers/cpsat_solver.py`, `solvers/greedy_solver.py` : Devront filtrer les matchs avec `est_modifiable()=False` (Tâche 3.1)
+
+    @property- `main.py` (CLI) : Continue de fonctionner car nouveaux champs optionnels avec défauts
+
+    def est_planifie(self) -> bool:
+
+        return self.creneau is not None and self.creneau.semaine is not None**Intégration future avec backend** :
+
+```- `backend/database/models.py` (Tâche 1.3) : Model SQLAlchemy `Match` reproduira ces champs
+
+- `backend/schemas/match.py` (Tâche 1.4) : Schemas Pydantic pour sérialisation API
+
+### Impact et liens avec autres modules- `frontend/src/types/match.ts` (Tâche 2.2) : Interface TypeScript correspondante
+
+
+
+**Impact sur modules existants** :### Consignes d'organisation
+
+- `generators/match_generator.py` : Continue de créer des matchs avec valeurs par défaut → aucun changement requis- Ajouter les champs **après** les champs existants pour ne pas perturber le code legacy
+
+- `solvers/cpsat_solver.py`, `solvers/greedy_solver.py` : Devront filtrer les matchs avec `est_modifiable()=False` (Tâche 3.1)- Utiliser **toujours** des valeurs par défaut (compatibilité avec code existant)
+
+- `main.py` (CLI) : Continue de fonctionner car nouveaux champs optionnels avec défauts- Documenter brièvement chaque nouveau champ avec un commentaire inline si nécessaire
+
+- Ne **jamais** modifier les champs existants (`equipe1`, `equipe2`, `poule`, `creneau`, `priorite`)
+
+**Intégration future avec backend** :
+
+- `backend/database/models.py` (Tâche 1.3) : Model SQLAlchemy `Match` reproduira ces champs## À faire/vérifier
+
+- `backend/schemas/match.py` (Tâche 1.4) : Schemas Pydantic pour sérialisation API
+
+- `frontend/src/types/match.ts` (Tâche 2.2) : Interface TypeScript correspondante**Checklist de développement** :
+
+1. ✅ Localiser la dataclass `Match` dans `core/models.py`
+
+**Note sur la configuration** :2. ✅ Vérifier si `Optional` est importé depuis `typing`, sinon l'ajouter
+
+- Ces nouveaux champs (`est_fixe`, `statut`, `scores`, `notes`) ne sont PAS dans le fichier Excel de configuration initial3. ✅ Ajouter les 5 nouveaux champs avec leurs valeurs par défaut exactes
+
+- Ils seront gérés uniquement via l'interface web (database) et l'API4. ✅ Implémenter la méthode `est_modifiable()` avec la logique de verrouillage
+
+- Le CLI existant continue de fonctionner sans ces champs (valeurs par défaut)5. ✅ Implémenter la property `est_planifie` (vérifier `creneau` et `creneau.semaine`)
+
+6. ✅ Vérifier que la structure finale correspond exactement à l'exemple ci-dessus
+
+### Consignes d'organisation
+
+- Ajouter les champs **après** les champs existants pour ne pas perturber le code legacy**Checklist de validation** :
+
+- Utiliser **toujours** des valeurs par défaut (compatibilité avec code existant)1. ✅ Exécuter le CLI pour vérifier la compatibilité :
+
+- Documenter brièvement chaque nouveau champ avec un commentaire inline si nécessaire   ```bash
+
+- Ne **jamais** modifier les champs existants (`equipe1`, `equipe2`, `poule`, `creneau`, `priorite`)   python main.py configs/config_volley.yaml
+
+   ```
+
+## À faire/vérifier   → Doit fonctionner sans erreur, générer un calendrier Excel/HTML
+
+
+
+**Checklist de développement** :2. ✅ Tester les nouvelles propriétés en console Python :
+
+1. ✅ Localiser la dataclass `Match` dans `core/models.py`   ```python
+
+2. ✅ Vérifier si `Optional` est importé depuis `typing`, sinon l'ajouter   from core.models import Match, Equipe, Creneau
+
+3. ✅ Ajouter les 5 nouveaux champs avec leurs valeurs par défaut exactes   
+
+4. ✅ Implémenter la méthode `est_modifiable()` avec la logique de verrouillage   # Match standard
+
+5. ✅ Implémenter la property `est_planifie` (vérifier `creneau` et `creneau.semaine`)   m1 = Match(equipe1=..., equipe2=..., poule="A")
+
+6. ✅ Vérifier que la structure finale correspond exactement à l'exemple ci-dessus   assert m1.est_fixe == False
+
+   assert m1.statut == "a_planifier"
+
+**Checklist de validation** :   assert m1.est_modifiable() == True
+
+1. ✅ Exécuter le CLI pour vérifier la compatibilité :   assert m1.est_planifie == False
+
+   ```bash   
+
+   python main.py configs/config_volley.yaml   # Match fixe
+
+   ```   m2 = Match(..., est_fixe=True)
+
+   → Doit fonctionner sans erreur, générer un calendrier Excel/HTML   assert m2.est_modifiable() == False
+
+   
+
+2. ✅ Tester les nouvelles propriétés en console Python :   # Match terminé
+
+   ```python   m3 = Match(..., statut="termine", score_equipe1=25, score_equipe2=20)
+
+   from core.models import Match, Equipe, Creneau   assert m3.est_modifiable() == False
+
+      
+
+   # Match standard   # Match planifié
+
+   m1 = Match(equipe1=..., equipe2=..., poule="A")   m4 = Match(..., creneau=Creneau(semaine=5, jour="Mercredi", heure="14h00"))
+
+   assert m1.est_fixe == False   assert m4.est_planifie == True
+
+   assert m1.statut == "a_planifier"   ```
+
+   assert m1.est_modifiable() == True
+
+   assert m1.est_planifie == False3. ✅ Vérifier que les générateurs fonctionnent (ils créent des matchs avec défauts) :
+
+      ```python
+
+   # Match fixe   from generators.match_generator import generer_matchs_poule
+
+   m2 = Match(..., est_fixe=True)   matchs = generer_matchs_poule(...)
+
+   assert m2.est_modifiable() == False   assert all(m.est_fixe == False for m in matchs)
+
+      assert all(m.statut == "a_planifier" for m in matchs)
+
+   # Match terminé   ```
+
+   m3 = Match(..., statut="termine", score_equipe1=25, score_equipe2=20)
+
+   assert m3.est_modifiable() == False**Commandes de test** :
+
+   ```bash
+
+   # Match planifié# Test CLI (doit fonctionner sans changement)
+
+   m4 = Match(..., creneau=Creneau(semaine=5, jour="Mercredi", heure="14h00"))python main.py configs/config_volley.yaml
+
+   assert m4.est_planifie == True
+
+   ```# Test console Python (vérifier nouvelles propriétés)
+
+python -c "from core.models import Match; print(Match.__annotations__)"
+
+3. ✅ Vérifier que les générateurs fonctionnent (ils créent des matchs avec défauts) :```
+
+   ```python
+
+   from generators.match_generator import generer_matchs_poule## Questions
+
+   matchs = generer_matchs_poule(...)- Les valeurs du champ `statut` sont-elles exhaustives ? Faut-il ajouter d'autres états ?
+
+   assert all(m.est_fixe == False for m in matchs)- Faut-il valider les transitions de statut (ex: `a_planifier` → `planifie` → `termine`) ?
+
+   assert all(m.statut == "a_planifier" for m in matchs)- Les scores doivent-ils être validés (ex: score >= 0) ou accepter n'importe quel entier ?
+
+   ```- Faut-il ajouter un timestamp `date_modification` pour tracer les changements ?
+
+
+
+**Commandes de test** :## Documentation
+
+```bashRester concis : documenter uniquement les champs/méthodes nouveaux avec des commentaires inline courts. Éviter la sur-documentation des concepts évidents (ex: pas besoin d'expliquer qu'un bool est True/False).
+
+# Test CLI (doit fonctionner sans changement)
+python main.py configs/config_volley.yaml
+
+# Test console Python (vérifier nouvelles propriétés)
+python -c "from core.models import Match; print(Match.__annotations__)"
+```
+
+## Questions
+- Les valeurs du champ `statut` sont-elles exhaustives ? Faut-il ajouter d'autres états ?
+- Faut-il valider les transitions de statut (ex: `a_planifier` → `planifie` → `termine`) ?
+- Les scores doivent-ils être validés (ex: score >= 0) ou accepter n'importe quel entier ?
+- Faut-il ajouter un timestamp `date_modification` pour tracer les changements ?
+- **Faut-il ajouter une feuille Excel pour les matchs fixes initiaux, ou est-ce uniquement géré via l'interface web ?**
+
+## Documentation
+Rester concis : documenter uniquement les champs/méthodes nouveaux avec des commentaires inline courts. Éviter la sur-documentation des concepts évidents (ex: pas besoin d'expliquer qu'un bool est True/False).

@@ -1,0 +1,884 @@
+# Prompt 2.2 : Types TypeScript pour l'API# Prompt 2.2 : Définition des types TypeScript
+
+
+
+## Contexte global## Contexte global
+
+PyCalendar V2 utilise TypeScript pour un typage fort entre frontend React et backend FastAPI. Les types doivent refléter exactement les schémas Pydantic de l'API, incluant la double configuration (YAML + Excel).PyCalendar V2 doit garantir la cohérence des données entre le backend et le frontend. Les types TypeScript assurent la type-safety, facilitent le développement (autocomplétion IDE) et la maintenabilité du code frontend.
+
+
+
+**RAPPEL - Double configuration** :## Contexte technique
+
+- **config_yaml_path** : Chemin vers fichier YAML (hyperparamètres)Cette tâche concerne la définition des interfaces TypeScript pour les entités principales (Match, Project, Team, Venue), en cohérence exacte avec les schémas Pydantic du backend.
+
+- **config_excel_path** : Chemin vers fichier Excel (données détaillées)
+
+- **config_yaml_data** : Contenu JSON du YAML (sport, nb_semaines, semaine_minimum, poids contraintes, etc.)## Résumé du travail précédent
+
+- **config_excel_data** : Métadonnées JSON de l'Excel (nb équipes, gymnases, feuilles présentes)- Le backend expose des schémas Pydantic (`backend/schemas/`) pour validation/sérialisation.
+
+- Le projet React est initialisé avec TypeScript et les dépendances principales.
+
+## Contexte technique- Les besoins de typage pour les appels API et les composants sont identifiés.
+
+Cette tâche crée les types TypeScript pour tous les modèles de l'API : Project, Team, Venue, Match. Ces types seront utilisés par React Query, Axios et les composants React.
+
+## Objectifs
+
+## Résumé du travail précédent- Définir des interfaces TypeScript claires et extensibles pour chaque entité.
+
+- Backend expose schémas Pydantic avec config_yaml_data, config_excel_data (Tâche 1.4)- S'assurer de la correspondance exacte avec les schémas Pydantic backend.
+
+- API retourne JSON conforme aux schémas ProjectResponse, TeamResponse, etc.- Utiliser les types littéraux et unions pour renforcer la type-safety.
+
+- Frontend initialisé avec Vite + TypeScript + React Query (Tâche 2.1)- Prévoir l'évolution des types pour de futurs champs.
+
+
+
+## Objectifs## Détails techniques
+
+1. Créer types TypeScript pour tous les modèles API
+
+2. Assurer correspondance exacte avec schémas Pydantic backend### Fichiers à créer
+
+3. Inclure types pour config_yaml_data et config_excel_dataDossier : `frontend/src/types/`
+
+4. Créer types utilitaires (MatchCreate, MatchUpdate, etc.)
+
+5. Exporter tout depuis index.ts### Types Match
+
+**Fichier** : `frontend/src/types/match.ts`
+
+## Détails techniques
+
+**Type union pour statut** :
+
+### Types Project```typescript
+
+export type MatchStatus = 'a_planifier' | 'planifie' | 'fixe' | 'termine' | 'annule'
+
+**📁 Fichier à créer** : `frontend/src/types/project.ts````
+
+
+
+**Contenu complet** :**Interface Match** (correspondance avec MatchResponse backend) :
+
+- `id: number`
+
+```typescript- `project_id: number`
+
+/**- Équipe 1 : `equipe1_nom: string`, `equipe1_institution: string`, `equipe1_genre: string`
+
+ * Types pour les projets PyCalendar.- Équipe 2 : `equipe2_nom: string`, `equipe2_institution: string`, `equipe2_genre: string`
+
+ * - `poule: string`
+
+ * IMPORTANT : config_yaml_data et config_excel_data contiennent les- Créneau : `semaine: number | null`, `horaire: string | null`, `gymnase: string | null`
+
+ * configurations complètes (YAML hyperparamètres + Excel données).- État : `est_fixe: boolean`, `statut: MatchStatus`, `priorite: number`
+
+ */- Scores : `score_equipe1: number | null`, `score_equipe2: number | null`
+
+- `notes: string`
+
+// ============================================- Timestamps : `created_at: string`, `updated_at: string | null`
+
+// Config YAML Structure
+
+// ============================================**Interface MatchUpdate** :
+
+- Tous champs optionnels sauf id
+
+/**- Exemple : `semaine?: number`, `horaire?: string`, etc.
+
+ * Contenu du fichier YAML de configuration.
+
+ * **Interface MatchMove** (pour drag & drop) :
+
+ * Source : configs/default.yaml, configs/config_volley.yaml- Champs requis : `semaine: number`, `horaire: string`, `gymnase: string`
+
+ */
+
+export interface ConfigYamlData {**Interface MatchCreate** (pour création) :
+
+  sport: string- Tous les champs de Match sauf `id`, `created_at`, `updated_at`
+
+  - `project_id` requis
+
+  semaines: {
+
+    nb_semaines: number### Types Project
+
+    semaine_minimum: number  // Première semaine modifiable par le solver**Fichier** : `frontend/src/types/project.ts`
+
+  }
+
+  **Type union pour sport** (optionnel) :
+
+  contraintes: {```typescript
+
+    poids: {export type SportType = 'volleyball' | 'handball' | 'autre'
+
+      respect_repos: number```
+
+      equilibre_domicile_exterieur: number
+
+      respect_indisponibilites: number**Interface Project** :
+
+      respect_preferences: number- `id: number`
+
+      respect_semaine_min?: number- `nom: string`
+
+      // Autres poids possibles...- `sport: string` (ou `SportType` si union type)
+
+    }- `config_yaml_path: string | null`
+
+  }- `config_data: any | null` (ou typer la structure config si besoin)
+
+  - `nb_semaines: number`
+
+  solver: {- `semaine_min: number`
+
+    strategie: 'optimal' | 'heuristique' | 'hybride'- `created_at: string`
+
+    temps_max_secondes: number- `updated_at: string | null`
+
+  }
+
+  **Interface ProjectUpdate** :
+
+  fichiers: {- Tous champs optionnels
+
+    donnees: string  // Chemin vers fichier Excel
+
+  }**Interface ProjectCreate** :
+
+}- `nom: string` (requis)
+
+- `sport: string` (requis)
+
+// ============================================- Autres champs optionnels avec valeurs par défaut
+
+// Config Excel Metadata
+
+// ============================================### Types Team
+
+**Fichier** : `frontend/src/types/team.ts`
+
+/**
+
+ * Métadonnées du fichier Excel (structure, comptages).**Interface Team** :
+
+ * - `id: number`
+
+ * NE CONTIENT PAS les données brutes Excel (trop volumineuses),- `project_id: number`
+
+ * seulement les métadonnées utiles pour l'affichage.- `nom: string`
+
+ */- `institution: string`
+
+export interface ConfigExcelData {- `numero_equipe: string | null`
+
+  nb_equipes: number- `genre: string`
+
+  nb_gymnases: number- `poule: string`
+
+  nb_poules: number- `horaires_preferes: string[]`
+
+  - `lieux_preferes: string[]`
+
+  feuilles_presentes: string[]  // Ex: ["Equipes", "Gymnases", "Indispos_Gymnases", ...]- `created_at: string`
+
+  
+
+  // Métadonnées supplémentaires (optionnel)**Interface TeamUpdate** :
+
+  niveaux?: string[]            // Ex: ["Minimes", "Cadets", "Juniors"]- Tous champs optionnels
+
+  categories?: string[]         // Ex: ["Garçons", "Filles"]
+
+  institutions?: string[]       // Ex: ["Lycée A", "Lycée B"]**Interface TeamCreate** :
+
+}- `project_id: number` (requis)
+
+- Autres champs selon modèle
+
+// ============================================
+
+// Project Types### Types Venue
+
+// ============================================**Fichier** : `frontend/src/types/venue.ts`
+
+
+
+/****Interface Venue** :
+
+ * Projet complet retourné par l'API.- `id: number`
+
+ * - `project_id: number`
+
+ * Correspond au schéma Pydantic ProjectResponse (Tâche 1.4).- `nom: string`
+
+ */- `capacite: number`
+
+export interface Project {- `horaires_disponibles: string[]`
+
+  id: number- `created_at: string`
+
+  nom: string
+
+  sport: string**Interface VenueUpdate** :
+
+  nb_semaines: number- Tous champs optionnels
+
+  semaine_min: number  // Première semaine modifiable (depuis YAML semaine_minimum)
+
+  **Interface VenueCreate** :
+
+  // Configuration YAML + Excel- `project_id: number` (requis)
+
+  config_yaml_path: string- Autres champs selon modèle
+
+  config_excel_path: string
+
+  config_yaml_data: ConfigYamlData### Fichier index pour exports centralisés
+
+  config_excel_data: ConfigExcelData**Fichier** : `frontend/src/types/index.ts`
+
+  
+
+  // Timestamps```typescript
+
+  created_at: string  // ISO 8601export * from './match'
+
+  updated_at: string  // ISO 8601export * from './project'
+
+}export * from './team'
+
+export * from './venue'
+
+/**```
+
+ * Données pour créer un nouveau projet.
+
+ * ### Consignes d'organisation
+
+ * Correspond au schéma Pydantic ProjectCreate (Tâche 1.4).- Les types doivent matcher **EXACTEMENT** les schemas Pydantic backend
+
+ */- Utiliser union types littéraux pour statuts et enums (autocomplétion IDE, validation à la compilation)
+
+export interface ProjectCreate {- `Date` côté Python devient `string` (format ISO) côté TypeScript
+
+  nom: string- Arrays JSON backend (`List[str]`) deviennent `string[]` TypeScript
+
+  sport: string- Préférer `interface` pour objets, `type` pour unions/alias
+
+  nb_semaines: number- Commenter brièvement les champs si besoin de clarification
+
+  semaine_min: number
+
+  ### Impact et liens
+
+  config_yaml_path: string- Le client API (`frontend/src/api/`) utilisera ces types pour typer les requêtes/réponses.
+
+  config_excel_path: string- Les hooks React Query (`frontend/src/hooks/`) utiliseront ces types pour typer les données.
+
+  config_yaml_data: ConfigYamlData- Les composants React (`frontend/src/components/`) utiliseront ces types pour props et state.
+
+  config_excel_data: ConfigExcelData
+
+}## À faire/vérifier
+
+- Créer le dossier `frontend/src/types/`
+
+/**- Définir toutes les interfaces pour Match, Project, Team, Venue
+
+ * Statistiques d'un projet.- Créer le fichier index.ts pour exports centralisés
+
+ * - Vérifier la correspondance exacte avec les schémas Pydantic backend :
+
+ * Correspond au schéma Pydantic ProjectStats (Tâche 1.4).  - Comparer avec `backend/schemas/match.py`, `project.py`, etc.
+
+ */  - Vérifier les types nullable (`| null`)
+
+export interface ProjectStats {  - Vérifier les arrays (`string[]`)
+
+  project_id: number- Tester l'import : `import { Match, Project } from '@/types'`
+
+  nb_equipes: number- Vérifier l'autocomplétion IDE avec un objet Match
+
+  nb_gymnases: number
+
+  nb_matchs: number## Questions
+
+  nb_matchs_planifies: numberPoser des questions si des points sur la correspondance backend/frontend, les types unions, la structure ou l'organisation ne sont pas clairs.
+
+  nb_matchs_fixes: number
+
+  taux_planification: number  // Pourcentage (0-100)## Documentation
+
+}Rester concis, ne pas ajouter de documentation excessive. Commenter brièvement les types complexes ou ambigus si besoin.
+
+```
+
+**Points clés** :
+- **ConfigYamlData** : Structure exacte du YAML (sport, semaines, contraintes, solver)
+- **ConfigExcelData** : Métadonnées Excel (comptages, feuilles présentes)
+- **Project** : Correspond à ProjectResponse Pydantic
+- **semaine_min** : Attention, c'est semaine_min dans API (pas semaine_minimum comme YAML)
+
+---
+
+### Types Team
+
+**📁 Fichier à créer** : `frontend/src/types/team.ts`
+
+**Contenu complet** :
+
+```typescript
+/**
+ * Types pour les équipes.
+ * 
+ * Source Excel : Feuille "Equipes" avec colonnes :
+ * - Institution, Numéro équipe, Niveau, Catégorie, Poule, Gymnase préféré
+ */
+
+export interface Team {
+  id: number
+  project_id: number
+  
+  // Identité équipe (depuis feuille Equipes)
+  nom: string              // Format: "{Institution} - {Numéro}" (ex: "Lycée A - 1")
+  institution: string      // Lycée/Collège
+  numero: number           // Numéro équipe dans l'institution
+  niveau: string           // Minimes, Cadets, Juniors, etc.
+  categorie: string        // Garçons, Filles, Mixte
+  poule: string            // P1, P2, P3, etc.
+  
+  // Préférences (depuis feuille Equipes ou Preferences_Gymnases)
+  gymnase_prefere?: string | null
+  
+  // Timestamps
+  created_at: string
+}
+
+export interface TeamCreate {
+  project_id: number
+  nom: string
+  institution: string
+  numero: number
+  niveau: string
+  categorie: string
+  poule: string
+  gymnase_prefere?: string | null
+}
+```
+
+**Points clés** :
+- **nom** : Format "{Institution} - {Numéro}" généré par backend
+- **Source** : Feuille Excel "Equipes"
+- **gymnase_prefere** : Nullable (équipe peut ne pas avoir de préférence)
+
+---
+
+### Types Venue
+
+**📁 Fichier à créer** : `frontend/src/types/venue.ts`
+
+**Contenu complet** :
+
+```typescript
+/**
+ * Types pour les gymnases.
+ * 
+ * Source Excel : Feuille "Gymnases" avec colonnes :
+ * - Nom, Capacité, Adresse
+ */
+
+export interface Venue {
+  id: number
+  project_id: number
+  
+  // Informations gymnase (depuis feuille Gymnases)
+  nom: string
+  capacite?: number | null
+  adresse?: string | null
+  
+  // Timestamps
+  created_at: string
+}
+
+export interface VenueCreate {
+  project_id: number
+  nom: string
+  capacite?: number | null
+  adresse?: string | null
+}
+```
+
+**Points clés** :
+- **Source** : Feuille Excel "Gymnases"
+- **capacite, adresse** : Optionnels (nullable)
+
+---
+
+### Types Match
+
+**📁 Fichier à créer** : `frontend/src/types/match.ts`
+
+**Contenu complet** :
+
+```typescript
+/**
+ * Types pour les matchs.
+ * 
+ * IMPORTANT :
+ * - Matchs générés automatiquement par MultiPoolGenerator (backend)
+ * - Matchs fixes : définis via UI web (pas depuis Excel initial)
+ * - Semaine < semaine_min : Non modifiable par solver
+ */
+
+import { Team } from './team'
+import { Venue } from './venue'
+
+export interface Match {
+  id: number
+  project_id: number
+  
+  // Équipes et lieu
+  equipe_domicile_id: number
+  equipe_exterieur_id: number
+  gymnase_id: number | null  // Peut être null si pas encore assigné
+  
+  // Planification
+  semaine: number | null      // Null si pas encore planifié
+  jour_semaine?: string | null  // "Mercredi", "Samedi", etc. (optionnel)
+  heure_debut?: string | null   // "14:00" format HH:MM (optionnel)
+  
+  // État du match
+  est_fixe: boolean            // True = non modifiable par solver
+  
+  // Relations (populated par API avec ?include_relations=true)
+  equipe_domicile?: Team
+  equipe_exterieur?: Team
+  gymnase?: Venue
+  
+  // Timestamps
+  created_at: string
+}
+
+export interface MatchCreate {
+  project_id: number
+  equipe_domicile_id: number
+  equipe_exterieur_id: number
+  gymnase_id?: number | null
+  semaine?: number | null
+  jour_semaine?: string | null
+  heure_debut?: string | null
+  est_fixe?: boolean
+}
+
+export interface MatchUpdate {
+  gymnase_id?: number | null
+  semaine?: number | null
+  jour_semaine?: string | null
+  heure_debut?: string | null
+  est_fixe?: boolean
+}
+
+/**
+ * Payload pour déplacer un match.
+ */
+export interface MatchMovePayload {
+  nouvelle_semaine: number
+}
+
+/**
+ * Match étendu avec informations calculées.
+ * 
+ * Utile pour l'affichage dans le calendrier.
+ */
+export interface MatchExtended extends Match {
+  // Informations calculées côté frontend
+  est_modifiable: boolean     // False si est_fixe ou semaine < semaine_min
+  titre: string               // Ex: "Lycée A - 1 vs Lycée B - 2"
+  couleur?: string            // Couleur pour calendrier (par poule, niveau, etc.)
+}
+```
+
+**Points clés** :
+- **est_fixe** : Matchs fixés par utilisateur via UI (non modifiables)
+- **semaine** : Nullable si match pas encore planifié
+- **Relations** : Team/Venue peuvent être populated par API (param ?include_relations=true)
+- **MatchExtended** : Type dérivé avec infos calculées (est_modifiable, titre, couleur)
+
+---
+
+### Types utilitaires
+
+**📁 Fichier à créer** : `frontend/src/types/api.ts`
+
+**Contenu complet** :
+
+```typescript
+/**
+ * Types utilitaires pour l'API.
+ */
+
+/**
+ * Réponse API générique paginée (si implémenté côté backend).
+ */
+export interface PaginatedResponse<T> {
+  items: T[]
+  total: number
+  page: number
+  per_page: number
+  total_pages: number
+}
+
+/**
+ * Erreur API standardisée.
+ */
+export interface ApiError {
+  detail: string
+  status_code: number
+}
+
+/**
+ * Options de query pour lister les matchs.
+ */
+export interface MatchQueryParams {
+  project_id?: number
+  semaine?: number
+  equipe_id?: number
+  gymnase_id?: number
+  est_fixe?: boolean
+  include_relations?: boolean  // Inclure Team/Venue dans réponse
+}
+
+/**
+ * Options de query pour lister les équipes.
+ */
+export interface TeamQueryParams {
+  project_id?: number
+  poule?: string
+  niveau?: string
+  categorie?: string
+  institution?: string
+}
+
+/**
+ * Options de query pour lister les gymnases.
+ */
+export interface VenueQueryParams {
+  project_id?: number
+}
+```
+
+**Points clés** :
+- **PaginatedResponse** : Si pagination implémentée côté backend
+- **ApiError** : Structure erreur FastAPI (detail + status_code)
+- **QueryParams** : Types pour filtres API (optionnel mais utile pour autocomplétion)
+
+---
+
+### Index d'export
+
+**📁 Fichier à créer** : `frontend/src/types/index.ts`
+
+**Contenu complet** :
+
+```typescript
+/**
+ * Export centralisé de tous les types.
+ * 
+ * Usage :
+ *   import { Project, Match, Team, Venue } from '@types'
+ */
+
+// Project types
+export type {
+  Project,
+  ProjectCreate,
+  ProjectStats,
+  ConfigYamlData,
+  ConfigExcelData,
+} from './project'
+
+// Team types
+export type {
+  Team,
+  TeamCreate,
+} from './team'
+
+// Venue types
+export type {
+  Venue,
+  VenueCreate,
+} from './venue'
+
+// Match types
+export type {
+  Match,
+  MatchCreate,
+  MatchUpdate,
+  MatchMovePayload,
+  MatchExtended,
+} from './match'
+
+// API utilities
+export type {
+  PaginatedResponse,
+  ApiError,
+  MatchQueryParams,
+  TeamQueryParams,
+  VenueQueryParams,
+} from './api'
+```
+
+---
+
+### Helpers de transformation
+
+**📁 Fichier à créer** : `frontend/src/utils/matchHelpers.ts`
+
+**Contenu complet** :
+
+```typescript
+/**
+ * Fonctions utilitaires pour manipuler les matchs.
+ */
+
+import { Match, MatchExtended } from '@types'
+
+/**
+ * Vérifie si un match est modifiable.
+ * 
+ * Un match est NON modifiable si :
+ * - Il est fixé (est_fixe = true)
+ * - Sa semaine est < semaine_min du projet
+ * 
+ * @param match Match à vérifier
+ * @param semaineMin Semaine minimum du projet
+ */
+export function isMatchModifiable(match: Match, semaineMin: number): boolean {
+  if (match.est_fixe) return false
+  if (match.semaine !== null && match.semaine < semaineMin) return false
+  return true
+}
+
+/**
+ * Transforme un Match en MatchExtended avec infos calculées.
+ * 
+ * @param match Match de base
+ * @param semaineMin Semaine minimum du projet
+ */
+export function toMatchExtended(match: Match, semaineMin: number): MatchExtended {
+  // Générer titre
+  const domicile = match.equipe_domicile?.nom || `Équipe ${match.equipe_domicile_id}`
+  const exterieur = match.equipe_exterieur?.nom || `Équipe ${match.equipe_exterieur_id}`
+  const titre = `${domicile} vs ${exterieur}`
+  
+  // Calculer modifiable
+  const est_modifiable = isMatchModifiable(match, semaineMin)
+  
+  // Générer couleur (exemple : par poule de l'équipe domicile)
+  const couleur = match.equipe_domicile?.poule 
+    ? getPouleColor(match.equipe_domicile.poule)
+    : '#3b82f6'  // Bleu par défaut
+  
+  return {
+    ...match,
+    est_modifiable,
+    titre,
+    couleur,
+  }
+}
+
+/**
+ * Attribue une couleur à une poule (pour affichage calendrier).
+ */
+function getPouleColor(poule: string): string {
+  const colors: Record<string, string> = {
+    'P1': '#ef4444',  // Rouge
+    'P2': '#3b82f6',  // Bleu
+    'P3': '#10b981',  // Vert
+    'P4': '#f59e0b',  // Orange
+    'P5': '#8b5cf6',  // Violet
+    'P6': '#ec4899',  // Rose
+  }
+  return colors[poule] || '#6b7280'  // Gris par défaut
+}
+```
+
+**Points clés** :
+- **isMatchModifiable** : Logique métier centralisée
+- **toMatchExtended** : Enrichit Match avec titre, couleur, est_modifiable
+- **getPouleColor** : Map poule → couleur pour calendrier
+
+---
+
+## À faire/vérifier
+
+**Checklist de développement** :
+
+1. ✅ Créer `types/project.ts` avec :
+   - ConfigYamlData (structure YAML complète)
+   - ConfigExcelData (métadonnées Excel)
+   - Project, ProjectCreate, ProjectStats
+
+2. ✅ Créer `types/team.ts` avec :
+   - Team (source : feuille Equipes)
+   - TeamCreate
+
+3. ✅ Créer `types/venue.ts` avec :
+   - Venue (source : feuille Gymnases)
+   - VenueCreate
+
+4. ✅ Créer `types/match.ts` avec :
+   - Match (avec relations optionnelles)
+   - MatchCreate, MatchUpdate, MatchMovePayload
+   - MatchExtended (avec est_modifiable, titre, couleur)
+
+5. ✅ Créer `types/api.ts` avec :
+   - PaginatedResponse, ApiError
+   - MatchQueryParams, TeamQueryParams, VenueQueryParams
+
+6. ✅ Créer `types/index.ts` :
+   - Export centralisé de tous les types
+
+7. ✅ Créer `utils/matchHelpers.ts` avec :
+   - isMatchModifiable(match, semaineMin)
+   - toMatchExtended(match, semaineMin)
+   - getPouleColor(poule)
+
+**Checklist de validation** :
+
+1. ✅ **Vérifier imports** :
+   ```typescript
+   import { Project, Match, Team, Venue } from '@types'
+   // Doit fonctionner sans erreur
+   ```
+
+2. ✅ **Vérifier correspondance avec backend** :
+   ```bash
+   # Comparer avec schémas Pydantic (Tâche 1.4)
+   cat backend/api/schemas.py
+   
+   # Vérifier ProjectResponse = Project TypeScript
+   # Vérifier MatchResponse = Match TypeScript
+   ```
+
+3. ✅ **Test TypeScript** :
+   ```typescript
+   // Dans un fichier .ts temporaire
+   import { Project, ConfigYamlData } from '@types'
+   
+   const yamlData: ConfigYamlData = {
+     sport: "Volleyball",
+     semaines: { nb_semaines: 10, semaine_minimum: 2 },
+     contraintes: { poids: { respect_repos: 10 } },
+     solver: { strategie: "optimal", temps_max_secondes: 300 },
+     fichiers: { donnees: "config.xlsx" }
+   }
+   
+   const project: Project = {
+     id: 1,
+     nom: "Test",
+     sport: "Volleyball",
+     nb_semaines: 10,
+     semaine_min: 2,
+     config_yaml_path: "/configs/test.yaml",
+     config_excel_path: "/data/test.xlsx",
+     config_yaml_data: yamlData,
+     config_excel_data: { nb_equipes: 10, nb_gymnases: 5, nb_poules: 2, feuilles_presentes: [] },
+     created_at: new Date().toISOString(),
+     updated_at: new Date().toISOString()
+   }
+   ```
+
+4. ✅ **Test helpers** :
+   ```typescript
+   import { isMatchModifiable, toMatchExtended } from '@utils/matchHelpers'
+   
+   const match: Match = {
+     id: 1,
+     project_id: 1,
+     equipe_domicile_id: 1,
+     equipe_exterieur_id: 2,
+     gymnase_id: 1,
+     semaine: 3,
+     est_fixe: false,
+     created_at: new Date().toISOString()
+   }
+   
+   console.log(isMatchModifiable(match, 2))  // true (semaine 3 >= semaine_min 2)
+   console.log(toMatchExtended(match, 2))    // MatchExtended avec titre, couleur
+   ```
+
+5. ✅ **Vérifier TypeScript strict** :
+   ```bash
+   npx tsc --noEmit
+   # Ne doit afficher AUCUNE erreur
+   ```
+
+**Commandes de test rapide** :
+```bash
+# Vérifier types
+npx tsc --noEmit
+
+# Vérifier imports
+grep -r "from '@types'" frontend/src/
+
+# Lister types exportés
+cat frontend/src/types/index.ts
+```
+
+---
+
+## Questions
+
+**Questions critiques à poser si quelque chose n'est pas clair** :
+
+1. **Structure config_yaml_data** :
+   - Le YAML a-t-il d'autres sections que celles listées (semaines, contraintes, solver, fichiers) ?
+   - Y a-t-il des contraintes supplémentaires (respect_horaires, respect_distance, etc.) ?
+   - Faut-il typer plus strictement les valeurs (enum pour strategie, min/max pour poids) ?
+
+2. **Structure config_excel_data** :
+   - Quelles métadonnées Excel doivent être stockées ?
+   - Faut-il inclure des infos sur les indisponibilités (nb_indispos_gymnases, nb_indispos_equipes) ?
+   - Faut-il des stats par feuille (ex: nb_lignes_equipes, nb_lignes_gymnases) ?
+
+3. **Relations Match** :
+   - L'API inclut-elle toujours equipe_domicile, equipe_exterieur, gymnase ?
+   - Ou faut-il un param ?include_relations=true pour les charger ?
+   - Faut-il des types séparés MatchWithRelations vs Match ?
+
+4. **Matchs fixes** :
+   - Les matchs fixes initiaux viennent-ils de l'Excel ou uniquement de l'UI ?
+   - Y a-t-il une colonne "est_fixe" dans une feuille Excel ?
+   - Ou est-ce géré 100% via l'interface web ?
+
+5. **Champs optionnels** :
+   - jour_semaine et heure_debut sont-ils toujours null initialement ?
+   - Sont-ils remplis manuellement via UI ou automatiquement par solver ?
+   - Faut-il des types stricts ("Mercredi" | "Samedi") ou string libre ?
+
+6. **Couleurs calendrier** :
+   - Couleurs par poule, niveau, catégorie, ou institution ?
+   - Faut-il des couleurs configurables (depuis config YAML) ?
+   - Faut-il un système de thèmes (clair/sombre) ?
+
+---
+
+## Documentation
+
+Rester concis : documenter uniquement les choix non évidents :
+- **ConfigYamlData** : Expliquer structure YAML (semaines, contraintes, solver)
+- **config_excel_data** : Expliquer que ce sont des métadonnées, pas les données brutes
+- **semaine_min vs semaine_minimum** : Expliquer différence naming (API vs YAML)
+- **MatchExtended** : Expliquer enrichissement côté frontend (titre, couleur, est_modifiable)
+
+Éviter la sur-documentation des concepts TypeScript standards.

@@ -1,0 +1,65 @@
+/* Styles personnalisés FullCalendar */
+
+/* Événements */
+.fc-event {
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.fc-event:hover {
+  opacity: 0.9;
+}
+
+/* Événements non modifiables (grisés) */
+.fc-event:not(.fc-event-draggable) {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Badge "Fixé" */
+.fc-event .badge-fixed {
+  background-color: rgba(239, 68, 68, 0.8);
+  color: white;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  margin-left: 4px;
+}
+
+/* Titre calendrier */
+.fc-toolbar-title {
+  font-size: 1.5rem !important;
+  font-weight: 600 !important;
+  color: #1f2937;
+}
+
+/* Boutons */
+.fc-button {
+  background-color: #3b82f6 !important;
+  border-color: #3b82f6 !important;
+}
+
+.fc-button:hover {
+  background-color: #2563eb !important;
+  border-color: #2563eb !important;
+}
+
+.fc-button-active {
+  background-color: #1d4ed8 !important;
+  border-color: #1d4ed8 !important;
+}
+
+/* Cellules jours */
+.fc-daygrid-day {
+  cursor: pointer;
+}
+
+.fc-daygrid-day:hover {
+  background-color: #f3f4f6;
+}
+
+/* Événements en cours de drag */
+.fc-event-dragging {
+  opacity: 0.5;
+}

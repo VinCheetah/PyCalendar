@@ -304,6 +304,12 @@ class CPSATSolver(BaseSolver):
             
         Returns:
             Solution trouvée
+            
+        IMPORTANT - Gestion des matchs fixes:
+        - Matchs avec est_fixe=True : exclus du modèle CP-SAT, conservés tels quels
+        - Matchs avec creneau.semaine < semaine_minimum : traités comme fixes
+        - Créneaux utilisés par matchs fixes : exclus des créneaux disponibles
+        - Équipes jouant dans matchs fixes : ne peuvent pas jouer ailleurs à la même semaine
         """
         
         if self.config.afficher_progression:
@@ -312,37 +318,101 @@ class CPSATSolver(BaseSolver):
         if obligations_presence is None:
             obligations_presence = {}
         
+        # ÉTAPE 1: Séparer matchs fixes et modifiables
+        semaine_minimum = getattr(self.config, 'semaine_minimum', 1)
+        matchs_fixes = []
+        matchs_modifiables = []
+        matchs_fixes_indices = []
+        
+        for i, match in enumerate(matchs):
+            # Un match est fixe si:
+            # 1. est_fixe = True (fixé via UI web)
+            # 2. creneau.semaine < semaine_minimum (matchs déjà joués/planifiés)
+            if match.est_fixe or (match.creneau and match.creneau.semaine < semaine_minimum):
+                matchs_fixes.append(match)
+                matchs_fixes_indices.append(i)
+            else:
+                matchs_modifiables.append(match)
+        
+        if self.config.afficher_progression:
+            print(f"   Matchs fixes: {len(matchs_fixes)}, Matchs modifiables: {len(matchs_modifiables)}")
+        
+        # ÉTAPE 2: Identifier créneaux réservés par matchs fixes
+        creneaux_reserves = set()
+        for match in matchs_fixes:
+            if match.creneau:
+                creneaux_reserves.add((match.creneau.semaine, match.creneau.horaire, match.creneau.gymnase))
+            elif self.config.afficher_progression:
+                print(f"   Warning: Match fixé {match} sans créneau assigné")
+        
+        # ÉTAPE 3: Filtrer créneaux disponibles (exclure réservés et < semaine_minimum)
+        creneaux_disponibles = []
+        for creneau in creneaux:
+            # Exclure si réservé par match fixe
+            if (creneau.semaine, creneau.horaire, creneau.gymnase) in creneaux_reserves:
+                continue
+            # Exclure si avant semaine_minimum
+            if creneau.semaine < semaine_minimum:
+                continue
+            creneaux_disponibles.append(creneau)
+        
+        if self.config.afficher_progression:
+            print(f"   Créneaux disponibles: {len(creneaux_disponibles)}/{len(creneaux)}")
+        
         model = cp_model.CpModel()
         
         assignment_vars = {}
         match_assigned = []
         
-        # Créer les variables
+        # ÉTAPE 4: Créer variables UNIQUEMENT pour matchs modifiables
         for i, match in enumerate(matchs):
+            # Si match fixe, pas de variables
+            if i in matchs_fixes_indices:
+                match_assigned.append(None)
+                continue
+            
             # Variable pour savoir si le match est assigné
             assigned_var = model.NewBoolVar(f'match_{i}_assigned')
             match_assigned.append(assigned_var)
             
-            for j, creneau in enumerate(creneaux):
+            # Créer variables seulement pour créneaux disponibles
+            for j, creneau in enumerate(creneaux_disponibles):
                 var = model.NewBoolVar(f'match_{i}_creneau_{j}')
                 assignment_vars[(i, j)] = var
         
         # CONTRAINTE 1: Chaque match est assigné à exactement 1 créneau (ou aucun)
+        # Sauf pour les matchs fixés qui sont déjà assignés
         for i in range(len(matchs)):
-            model.Add(sum(assignment_vars[(i, j)] for j in range(len(creneaux))) == match_assigned[i])
+            if i in matchs_fixes_indices:
+                continue  # Les matchs fixés sont déjà assignés
+            model.Add(sum(assignment_vars[(i, j)] for j in range(len(creneaux_disponibles))) == match_assigned[i])
         
         # CONTRAINTE 2: Capacité des gymnases (avec support de capacité réduite)
-        for j in range(len(creneaux)):
-            creneau = creneaux[j]
+        for j in range(len(creneaux_disponibles)):
+            creneau = creneaux_disponibles[j]
             gymnase = gymnases.get(creneau.gymnase)
             if gymnase:
                 # Utiliser la capacité disponible (qui peut être réduite)
                 capacite_disponible = gymnase.get_capacite_disponible(creneau.semaine, creneau.horaire)
-                model.Add(sum(assignment_vars[(i, j)] for i in range(len(matchs))) <= capacite_disponible)
+                
+                # Compter les matchs fixes qui utilisent ce créneau
+                matchs_fixes_sur_creneau = sum(
+                    1 for m in matchs_fixes 
+                    if m.creneau and 
+                    m.creneau.semaine == creneau.semaine and 
+                    m.creneau.horaire == creneau.horaire and 
+                    m.creneau.gymnase == creneau.gymnase
+                )
+                
+                # Réduire la capacité disponible
+                capacite_restante = max(0, capacite_disponible - matchs_fixes_sur_creneau)
+                model.Add(sum(assignment_vars[(i, j)] for i in range(len(matchs)) if i not in matchs_fixes_indices) <= capacite_restante)
         
         # CONTRAINTE 3: Disponibilité des équipes (DURE)
         for i, match in enumerate(matchs):
-            for j, creneau in enumerate(creneaux):
+            if i in matchs_fixes_indices:
+                continue
+            for j, creneau in enumerate(creneaux_disponibles):
                 if not match.equipe1.est_disponible(creneau.semaine, creneau.horaire):
                     model.Add(assignment_vars[(i, j)] == 0)
                 if not match.equipe2.est_disponible(creneau.semaine, creneau.horaire):
@@ -351,9 +421,11 @@ class CPSATSolver(BaseSolver):
         # CONTRAINTE 3bis: Contraintes temporelles (mode dur si activé)
         if self.config.contrainte_temporelle_actif and self.config.contrainte_temporelle_dure:
             for i, match in enumerate(matchs):
+                if i in matchs_fixes_indices:
+                    continue
                 contrainte = self._get_contrainte_temporelle(match)
                 if contrainte:
-                    for j, creneau in enumerate(creneaux):
+                    for j, creneau in enumerate(creneaux_disponibles):
                         # Si la contrainte n'est pas respectée, bloquer ce placement
                         if not contrainte.est_respectee(creneau.semaine):
                             model.Add(assignment_vars[(i, j)] == 0)
@@ -361,7 +433,7 @@ class CPSATSolver(BaseSolver):
         # CONTRAINTE 4: Une équipe ne peut jouer qu'une fois par (semaine, horaire)
         # Grouper les créneaux par (semaine, horaire)
         creneaux_par_semaine_horaire = {}
-        for j, creneau in enumerate(creneaux):
+        for j, creneau in enumerate(creneaux_disponibles):
             key = (creneau.semaine, creneau.horaire)
             if key not in creneaux_par_semaine_horaire:
                 creneaux_par_semaine_horaire[key] = []
@@ -379,36 +451,77 @@ class CPSATSolver(BaseSolver):
                 # Trouver tous les matchs où cette équipe joue à ce (semaine, horaire)
                 vars_equipe = []
                 for i, match in enumerate(matchs):
+                    if i in matchs_fixes_indices:
+                        continue  # Les matchs fixés ne sont pas dans les variables
                     if match.equipe1.id_unique == equipe_id or match.equipe2.id_unique == equipe_id:
                         for j in indices_creneaux:
-                            vars_equipe.append(assignment_vars[(i, j)])
+                            if (i, j) in assignment_vars:
+                                vars_equipe.append(assignment_vars[(i, j)])
                 
                 # L'équipe ne peut jouer qu'une fois à ce (semaine, horaire)
                 if len(vars_equipe) > 1:
                     model.Add(sum(vars_equipe) <= 1)
         
-        # CONTRAINTE 5: Max matchs par équipe par semaine
+        # CONTRAINTE 4bis: Éviter conflits d'équipes avec matchs fixes
+        # Une équipe qui joue dans un match fixe ne peut pas jouer ailleurs à la même semaine
+        for match_fixe in matchs_fixes:
+            if not match_fixe.creneau:
+                continue
+            semaine_fixe = match_fixe.creneau.semaine
+            
+            # Trouver toutes les équipes du match fixe
+            equipes_fixes = {match_fixe.equipe1.id_unique, match_fixe.equipe2.id_unique}
+            
+            # Interdire aux matchs modifiables de placer ces équipes à la même semaine
+            for i, match_mod in enumerate(matchs):
+                if i in matchs_fixes_indices:
+                    continue
+                
+                # Si le match modifiable partage une équipe avec le match fixe
+                if (match_mod.equipe1.id_unique in equipes_fixes or 
+                    match_mod.equipe2.id_unique in equipes_fixes):
+                    # Interdire tous les créneaux de cette semaine
+                    for j, creneau in enumerate(creneaux_disponibles):
+                        if creneau.semaine == semaine_fixe and (i, j) in assignment_vars:
+                            model.Add(assignment_vars[(i, j)] == 0)
+        
+        # CONTRAINTE 5: Max matchs par équipe par semaine (adapter pour matchs fixes)
         max_matchs_semaine = self.config.max_matchs_par_equipe_par_semaine
         
         for equipe_id in equipes_uniques:
-            for semaine in range(1, self.config.nb_semaines + 1):
-                # Trouver tous les créneaux de cette semaine
-                indices_semaine = [j for j, c in enumerate(creneaux) if c.semaine == semaine]
+            for semaine in range(semaine_minimum, self.config.nb_semaines + 1):
+                # Compter les matchs fixes de cette équipe à cette semaine
+                nb_matchs_fixes = sum(
+                    1 for m in matchs_fixes 
+                    if m.creneau and m.creneau.semaine == semaine and
+                    (m.equipe1.id_unique == equipe_id or m.equipe2.id_unique == equipe_id)
+                )
                 
-                # Trouver tous les matchs où cette équipe joue
+                # Trouver tous les créneaux disponibles de cette semaine
+                indices_semaine = [j for j, c in enumerate(creneaux_disponibles) if c.semaine == semaine]
+                
+                # Trouver tous les matchs modifiables où cette équipe joue
                 vars_equipe_semaine = []
                 for i, match in enumerate(matchs):
+                    if i in matchs_fixes_indices:
+                        continue
                     if match.equipe1.id_unique == equipe_id or match.equipe2.id_unique == equipe_id:
                         for j in indices_semaine:
-                            vars_equipe_semaine.append(assignment_vars[(i, j)])
+                            if (i, j) in assignment_vars:
+                                vars_equipe_semaine.append(assignment_vars[(i, j)])
                 
-                # Limiter le nombre de matchs
+                # Limiter le nombre de matchs (en tenant compte des matchs fixes)
                 if vars_equipe_semaine:
-                    model.Add(sum(vars_equipe_semaine) <= max_matchs_semaine)
+                    limite_restante = max(0, max_matchs_semaine - nb_matchs_fixes)
+                    model.Add(sum(vars_equipe_semaine) <= limite_restante)
         
         # CONTRAINTE 6: Obligations de présence
         for i, match in enumerate(matchs):
-            for j, creneau in enumerate(creneaux):
+            if i in matchs_fixes_indices:
+                continue
+            for j, creneau in enumerate(creneaux_disponibles):
+                if (i, j) not in assignment_vars:
+                    continue
                 institution_requise = obligations_presence.get(creneau.gymnase)
                 
                 if institution_requise:
@@ -422,7 +535,11 @@ class CPSATSolver(BaseSolver):
         
         # CONTRAINTE 7: Disponibilité des gymnases
         for i, match in enumerate(matchs):
-            for j, creneau in enumerate(creneaux):
+            if i in matchs_fixes_indices:
+                continue
+            for j, creneau in enumerate(creneaux_disponibles):
+                if (i, j) not in assignment_vars:
+                    continue
                 gymnase = gymnases.get(creneau.gymnase)
                 if gymnase and not gymnase.est_disponible(creneau.semaine, creneau.horaire):
                     model.Add(assignment_vars[(i, j)] == 0)
@@ -433,6 +550,8 @@ class CPSATSolver(BaseSolver):
         # Grand bonus pour chaque match assigné (poids très élevé)
         # SAUF pour les ententes qui ont un bonus réduit (= pénalité plus faible si non planifiés)
         for i, match in enumerate(matchs):
+            if i in matchs_fixes_indices:
+                continue  # Les matchs fixés ne sont pas dans l'objectif
             if self._est_entente(match):
                 # Match entente : bonus réduit = pénalité faible si non planifié
                 bonus = int(self._get_penalite_entente(match))
@@ -443,7 +562,11 @@ class CPSATSolver(BaseSolver):
         
         # Pénalités pour préférences horaires (sophistiquée avec distance)
         for i, match in enumerate(matchs):
-            for j, creneau in enumerate(creneaux):
+            if i in matchs_fixes_indices:
+                continue
+            for j, creneau in enumerate(creneaux_disponibles):
+                if (i, j) not in assignment_vars:
+                    continue
                 penalty = self._calculate_time_preference_penalty(match, creneau)
                 
                 if penalty > 0:
@@ -452,9 +575,13 @@ class CPSATSolver(BaseSolver):
         # Pénalité pour contraintes temporelles violées (mode souple uniquement)
         if self.config.contrainte_temporelle_actif and not self.config.contrainte_temporelle_dure:
             for i, match in enumerate(matchs):
+                if i in matchs_fixes_indices:
+                    continue
                 contrainte = self._get_contrainte_temporelle(match)
                 if contrainte:
-                    for j, creneau in enumerate(creneaux):
+                    for j, creneau in enumerate(creneaux_disponibles):
+                        if (i, j) not in assignment_vars:
+                            continue
                         # Si la contrainte n'est pas respectée, ajouter une pénalité
                         if not contrainte.est_respectee(creneau.semaine):
                             penalty = int(self.config.contrainte_temporelle_penalite)
@@ -465,7 +592,11 @@ class CPSATSolver(BaseSolver):
             base_penalty = 2 * max(self.config.bonus_preferences_gymnases)
             
             for i, match in enumerate(matchs):
-                for j, creneau in enumerate(creneaux):
+                if i in matchs_fixes_indices:
+                    continue
+                for j, creneau in enumerate(creneaux_disponibles):
+                    if (i, j) not in assignment_vars:
+                        continue
                     penalty = base_penalty
                     
                     # Soustraire bonus si équipe 1 a ce gymnase dans ses préférences
@@ -760,9 +891,14 @@ class CPSATSolver(BaseSolver):
         
         if status in [cp_model.OPTIMAL, cp_model.FEASIBLE]:
             for i, match in enumerate(matchs):
+                # Si le match est fixé, il est déjà planifié
+                if i in matchs_fixes_indices:
+                    matchs_planifies.append(match)
+                    continue
+                
                 assigned = False
-                for j, creneau in enumerate(creneaux):
-                    if solver.Value(assignment_vars[(i, j)]) == 1:
+                for j, creneau in enumerate(creneaux_disponibles):
+                    if (i, j) in assignment_vars and solver.Value(assignment_vars[(i, j)]) == 1:
                         match.creneau = creneau
                         matchs_planifies.append(match)
                         assigned = True
@@ -771,7 +907,12 @@ class CPSATSolver(BaseSolver):
                 if not assigned:
                     matchs_non_planifies.append(match)
         else:
-            matchs_non_planifies = matchs
+            # En cas d'échec, les matchs fixés restent planifiés
+            for i, match in enumerate(matchs):
+                if i in matchs_fixes_indices:
+                    matchs_planifies.append(match)
+                else:
+                    matchs_non_planifies.append(match)
         
         return Solution(
             matchs_planifies=matchs_planifies,

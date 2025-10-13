@@ -1,0 +1,61 @@
+[run]
+# Fichiers sources à analyser
+source = backend
+
+# Fichiers à exclure
+omit = 
+    */tests/*
+    */test_*
+    */__pycache__/*
+    */venv/*
+    */.venv/*
+    */migrations/*
+    */conftest.py
+
+# Configuration parallèle
+parallel = True
+concurrency = multiprocessing
+
+[report]
+# Format du rapport
+precision = 2
+show_missing = True
+skip_covered = False
+skip_empty = True
+
+# Colonnes à afficher
+# Nom, Stmts, Miss, Cover
+exclude_lines =
+    # Exclure pragma no cover
+    pragma: no cover
+    
+    # Exclure fonctions abstraites
+    def __repr__
+    raise AssertionError
+    raise NotImplementedError
+    
+    # Exclure blocs if __name__ == "__main__"
+    if __name__ == .__main__.:
+    
+    # Exclure imports conditionnels
+    if TYPE_CHECKING:
+    
+    # Exclure pass et ellipsis
+    pass
+    \.\.\.
+
+[html]
+# Configuration rapport HTML
+directory = htmlcov
+title = PyCalendar Test Coverage Report
+
+[term]
+# Configuration terminal
+show_missing = True
+skip_covered = False
+
+[paths]
+# Chemins pour regroupement
+source =
+    backend/
+    */backend/

@@ -182,30 +182,82 @@ class GreedySolver(BaseSolver):
                    gymnases: Dict[str, Gymnase]) -> Solution:
         """Single greedy solve attempt."""
         
-        # Trier les matchs pour placer les ententes en dernier (priorité plus faible)
+        # ÉTAPE 1: Récupérer semaine_minimum pour respecter les matchs déjà planifiés
+        semaine_minimum = getattr(self.config, 'semaine_minimum', 1)
+        
+        # ÉTAPE 2: Séparer matchs fixes et modifiables
+        # Un match est fixe si:
+        # 1. est_fixe = True (fixé via UI web)
+        # 2. creneau.semaine < semaine_minimum (matchs déjà joués/planifiés dans le passé)
+        matchs_fixes = []
+        matchs_a_planifier = []
+        
+        for match in matchs:
+            if match.est_fixe or (match.creneau and match.creneau.semaine < semaine_minimum):
+                matchs_fixes.append(match)
+            elif match.est_modifiable():
+                # Ne planifier que si match est modifiable (pas terminé, annulé, etc.)
+                matchs_a_planifier.append(match)
+        
+        # ÉTAPE 3: Identifier créneaux réservés par matchs fixes
+        creneaux_reserves = set()
+        for match_fixe in matchs_fixes:
+            if match_fixe.creneau:
+                creneaux_reserves.add((match_fixe.creneau.semaine, match_fixe.creneau.horaire, match_fixe.creneau.gymnase))
+        
+        # ÉTAPE 4: Filtrer créneaux disponibles
+        # Exclure les créneaux réservés + avant semaine_minimum
+        creneaux_disponibles = [
+            c for c in creneaux 
+            if (c.semaine, c.horaire, c.gymnase) not in creneaux_reserves
+            and c.semaine >= semaine_minimum
+        ]
+        
+        if self.config.niveau_log >= 2:
+            print(f"    [GreedySolver] Matchs fixes: {len(matchs_fixes)}, Matchs à planifier: {len(matchs_a_planifier)}")
+            print(f"    [GreedySolver] Créneaux réservés: {len(creneaux_reserves)}, Créneaux disponibles: {len(creneaux_disponibles)}")
+        
+        # Trier les matchs à planifier pour placer les ententes en dernier (priorité plus faible)
         if self.config.entente_actif:
-            matchs_normaux = [m for m in matchs if not self._est_entente(m)]
-            matchs_ententes = [m for m in matchs if self._est_entente(m)]
+            matchs_normaux = [m for m in matchs_a_planifier if not self._est_entente(m)]
+            matchs_ententes = [m for m in matchs_a_planifier if self._est_entente(m)]
             random.shuffle(matchs_normaux)
             random.shuffle(matchs_ententes)
-            matchs = matchs_normaux + matchs_ententes
+            matchs_a_planifier = matchs_normaux + matchs_ententes
         else:
-            random.shuffle(matchs)
+            random.shuffle(matchs_a_planifier)
         
-        random.shuffle(creneaux)
+        random.shuffle(creneaux_disponibles)
         
-        solution_state = self._create_solution_state()
-        matchs_planifies = []
+        # Initialiser l'état de la solution avec tous les champs nécessaires
+        from collections import defaultdict
+        solution_state = self._create_solution_state()  # Utilise la méthode de BaseSolver
+        solution_state['matchs_par_equipe'] = defaultdict(list)  # Champ additionnel pour GreedySolver
+        
+        matchs_planifies = matchs_fixes.copy()  # Commencer avec les matchs fixés
         matchs_non_planifies = []
         total_penalty = 0.0
         
-        for match in matchs:
+        # Enregistrer les matchs fixés dans l'état de la solution
+        for match in matchs_fixes:
+            if match.creneau:
+                # Utiliser la méthode standard pour mettre à jour l'état
+                self._update_solution_state(solution_state, match, match.creneau)
+                solution_state['matchs_par_equipe'][match.equipe1.nom].append(match)
+                solution_state['matchs_par_equipe'][match.equipe2.nom].append(match)
+        
+        for match in matchs_a_planifier:
             best_creneau = None
             best_penalty = float('inf')
             
-            for creneau in creneaux:
+            for creneau in creneaux_disponibles:
                 if match.creneau:
                     break
+                
+                # CONTRAINTE SPÉCIALE: Vérifier conflit avec matchs fixes
+                # Si une équipe du match joue déjà dans un match fixe cette semaine, bloquer
+                if self._conflit_avec_matchs_fixes(match, creneau, matchs_fixes):
+                    continue
                 
                 # Vérifier la contrainte temporelle
                 if not self._respecte_contrainte_temporelle(match, creneau):
@@ -307,6 +359,38 @@ class GreedySolver(BaseSolver):
                 match1.equipe1.genre == match2.equipe2.genre and
                 match1.equipe2.genre == match2.equipe1.genre and
                 match1.poule == match2.poule)
+    
+    def _conflit_avec_matchs_fixes(self, match: Match, creneau: Creneau, matchs_fixes: List[Match]) -> bool:
+        """
+        Vérifie si le placement d'un match à un créneau cause un conflit avec les matchs fixes.
+        
+        Un conflit existe si une équipe du match joue déjà dans un match fixe la même semaine.
+        
+        Args:
+            match: Le match à planifier
+            creneau: Le créneau candidat
+            matchs_fixes: Liste des matchs fixes (déjà planifiés ou verrouillés)
+            
+        Returns:
+            True si un conflit existe, False sinon
+        """
+        equipes_du_match = {match.equipe1.id_unique, match.equipe2.id_unique}
+        
+        for match_fixe in matchs_fixes:
+            if not match_fixe.creneau:
+                continue
+            
+            # Vérifier si c'est la même semaine
+            if match_fixe.creneau.semaine != creneau.semaine:
+                continue
+            
+            # Vérifier si une équipe commune joue
+            equipes_du_fixe = {match_fixe.equipe1.id_unique, match_fixe.equipe2.id_unique}
+            
+            if equipes_du_match & equipes_du_fixe:  # Intersection non-vide
+                return True
+        
+        return False
     
     def _matchs_partagent_groupe_non_simultaneite(self, match1: Match, match2: Match) -> bool:
         """

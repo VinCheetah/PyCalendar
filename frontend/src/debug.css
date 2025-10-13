@@ -1,0 +1,51 @@
+/* Variables CSS from PyCalendar Visualization */
+:root {
+    /* Palette Tricolore Française Moderne */
+    --primary: #0055A4;
+    --primary-hover: #1E3A8A;
+    --primary-light: rgba(0, 85, 164, 0.08);
+    --primary-lighter: #EFF6FF;
+    
+    --danger: #EF4444;
+    --danger-dark: #DC2626;
+    --danger-light: rgba(239, 68, 68, 0.1);
+    
+    --secondary: #10B981;
+    --warning: #F59E0B;
+    --accent: #8B5CF6;
+    
+    --dark: #1E293B;
+    --gray: #64748B;
+    --border: #E2E8F0;
+    --white: #FFFFFF;
+    
+    --male: #3B82F6;
+    --female: #EC4899;
+}
+
+/* Debug styles - visible indicators */
+body {
+    background: linear-gradient(135deg, #1E3A8A 0%, #0055A4 35%, #3B82F6 70%, #EF4444 100%) !important;
+    min-height: 100vh;
+}
+
+#root {
+    min-height: 100vh;
+}
+
+/* Force le gradient sur le MainLayout */
+[class*="min-h-screen"] {
+    background: linear-gradient(135deg, #1E3A8A 0%, #0055A4 35%, #3B82F6 70%, #EF4444 100%) !important;
+}
+
+/* Debug: Ajouter une bordure rouge aux cartes blanches */
+[class*="bg-white"][class*="rounded"] {
+    border: 2px solid red !important;
+    background: white !important;
+}
+
+/* Debug: Header visible */
+header {
+    background: rgba(255, 255, 255, 0.98) !important;
+    backdrop-filter: blur(20px) !important;
+}

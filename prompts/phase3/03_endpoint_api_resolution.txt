@@ -1,0 +1,743 @@
+# Prompt 3.3 : Endpoint API pour Résolution# Prompt 3.3 : Endpoint API – Résolution projet
+
+
+
+## Contexte global## Contexte global
+
+PyCalendar V2 expose un endpoint API FastAPI pour déclencher la résolution d'un projet via le solveur. L'endpoint doit utiliser SolverService, respecter les matchs fixes, et retourner les résultats.PyCalendar V2 doit permettre de lancer la résolution d'un projet via une API REST. L'endpoint doit être clair, sécurisé et facilement extensible pour supporter différentes stratégies de résolution ou options de configuration.
+
+
+
+**RAPPEL - Double configuration et résolution** :## Contexte technique
+
+- **Stratégie solver** : Depuis config_yaml_data.solver.strategie ("optimal", "heuristique", "hybride")Cette tâche concerne la création d'un endpoint API FastAPI permettant de lancer le solveur sur un projet donné et de récupérer les résultats (nombre de matchs planifiés, durée, etc.).
+
+- **Matchs fixes** : Préservés par SolverService (Tâche 3.2)
+
+- **Résultat** : Mise à jour des matchs en DB (semaines, gymnases assignés)## Résumé du travail précédent
+
+- Le service Solveur est opérationnel (`backend/services/solver_service.py`).
+
+## Contexte technique- Les solveurs sont modifiés pour gérer les matchs fixes (`solvers/`).
+
+Cette tâche crée les routes API FastAPI pour résoudre un projet, récupérer le statut de résolution, et annuler une résolution en cours.- Le backend gère les entités et l'API REST (`backend/api/routes/`).
+
+
+
+## Résumé du travail précédent## Objectifs
+
+- SolverService créé (Tâche 3.2)- Créer un endpoint API clair et sécurisé pour la résolution de projets.
+
+- Routes API projects, matches créées (Tâche 1.5)- S'assurer de la robustesse, de la gestion des erreurs et de la clarté du code.
+
+- Schémas Pydantic ProjectResponse, MatchResponse (Tâche 1.4)- Prévoir l'évolution pour d'autres solveurs, paramètres ou exécution asynchrone.
+
+
+
+## Objectifs## Détails techniques
+
+1. Créer endpoint POST /projects/{id}/solve
+
+2. Créer endpoint GET /projects/{id}/solve/status### Fichier à créer
+
+3. Gérer résolution asynchrone (optionnel)`backend/api/routes/solver.py`
+
+4. Retourner résumé de résolution
+
+5. Gérer erreurs (aucune solution, timeout, etc.)### Router
+
+```python
+
+## Détails techniquesfrom fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+
+from sqlalchemy.orm import Session
+
+### Schémas Pydantic pour résolutionfrom pydantic import BaseModel
+
+from backend.database.engine import get_db
+
+**📁 Fichier à modifier** : `backend/api/schemas.py`from backend.database import models
+
+from backend.services.solver_service import SolverService
+
+**Ajout des schémas** :
+
+router = APIRouter()
+
+```python```
+
+from pydantic import BaseModel
+
+from typing import Optional### Schema Pydantic
+
+```python
+
+# ... Schémas existants (ProjectResponse, MatchResponse, etc.) ...class SolveRequest(BaseModel):
+
+    strategy: str = "cpsat"  # "cpsat" ou "greedy"
+
+# ============================================    
+
+# Schémas Résolution    class Config:
+
+# ============================================        schema_extra = {
+
+            "example": {
+
+class SolveRequest(BaseModel):                "strategy": "cpsat"
+
+    """            }
+
+    Requête pour résoudre un projet.        }
+
+    ```
+
+    Optionnel : override de stratégie (si différente de config YAML).
+
+    """### Endpoint principal
+
+    strategie: Optional[str] = None  # "optimal", "heuristique", "hybride"**`POST /projects/{project_id}/solve`**
+
+    temps_max_secondes: Optional[int] = None  # Override temps_max du YAML
+
+**Paramètres** :
+
+class SolveResponse(BaseModel):- Path : `project_id: int`
+
+    """- Body : `request: SolveRequest`
+
+    Résultat de la résolution d'un projet.- Dependencies : `db: Session = Depends(get_db)`
+
+    """
+
+    project_id: int**Implémentation (Option A - Synchrone)** :
+
+    strategie: str```python
+
+    nb_matchs_total: int@router.post("/{project_id}/solve")
+
+    nb_matchs_fixes: intdef solve_project(
+
+    nb_matchs_planifies: int    project_id: int,
+
+    nb_matchs_modifiables: int    request: SolveRequest,
+
+    temps_execution_secondes: float    db: Session = Depends(get_db)
+
+    erreurs: Optional[list[str]] = None):
+
+    """
+
+class SolveStatus(BaseModel):    Lance la résolution d'un projet avec la stratégie choisie.
+
+    """    
+
+    Statut de résolution d'un projet.    Stratégies disponibles:
+
+        - cpsat: Optimisation CP-SAT (Google OR-Tools)
+
+    Utilisé pour résolution asynchrone (optionnel).    - greedy: Heuristique gloutonne rapide
+
+    """    """
+
+    project_id: int    
+
+    status: str  # "pending", "running", "completed", "failed"    # Vérifier projet existe
+
+    progress: Optional[float] = None  # 0.0 à 1.0    project = db.query(models.Project).filter(models.Project.id == project_id).first()
+
+    message: Optional[str] = None    if not project:
+
+    result: Optional[SolveResponse] = None        raise HTTPException(status_code=404, detail="Projet non trouvé")
+
+```    
+
+    # Valider stratégie
+
+**Points clés** :    if request.strategy not in ["cpsat", "greedy"]:
+
+- **SolveRequest** : Override optionnel de stratégie/temps_max        raise HTTPException(
+
+- **SolveResponse** : Résumé complet de résolution            status_code=400, 
+
+- **SolveStatus** : Pour résolution asynchrone (optionnel)            detail=f"Stratégie invalide: {request.strategy}. Utiliser 'cpsat' ou 'greedy'"
+
+        )
+
+---    
+
+    # Instancier service
+
+### Endpoint de résolution    service = SolverService(db)
+
+    
+
+**📁 Fichier à créer/modifier** : `backend/api/routes/projects.py`    # Résoudre
+
+    try:
+
+**Ajout de l'endpoint** :        solution = service.solve_project(project_id, request.strategy)
+
+        
+
+```python        return {
+
+from fastapi import APIRouter, Depends, HTTPException            "message": "Résolution terminée avec succès",
+
+from sqlalchemy.orm import Session            "project_id": project_id,
+
+import time            "strategy": request.strategy,
+
+            "matchs_planifies": len(solution.matchs_planifies),
+
+from backend.database.engine import get_db            "cout_total": solution.cout_total
+
+from backend.api.schemas import SolveRequest, SolveResponse        }
+
+from backend.services.solver_service import SolverService, SolverError    except Exception as e:
+
+        raise HTTPException(status_code=500, detail=f"Erreur résolution: {str(e)}")
+
+router = APIRouter()```
+
+
+
+# ... Endpoints existants (GET /projects, POST /projects, etc.) ...**Implémentation (Option B - Asynchrone, recommandée si solver lent)** :
+
+```python
+
+@router.post("/{project_id}/solve", response_model=SolveResponse)@router.post("/{project_id}/solve")
+
+def solve_project(def solve_project(
+
+    project_id: int,    project_id: int,
+
+    request: SolveRequest = SolveRequest(),  # Body optionnel    request: SolveRequest,
+
+    db: Session = Depends(get_db)    background_tasks: BackgroundTasks,
+
+):    db: Session = Depends(get_db)
+
+    """):
+
+    Résout le calendrier d'un projet.    """
+
+        Lance la résolution d'un projet en arrière-plan.
+
+    **Workflow** :    """
+
+    1. Charge projet depuis DB (config YAML + Excel)    
+
+    2. Exécute solveur selon stratégie (config YAML ou override)    # Vérifications identiques
+
+    3. Met à jour matchs en DB    project = db.query(models.Project).filter(models.Project.id == project_id).first()
+
+    4. Retourne résumé de résolution    if not project:
+
+            raise HTTPException(status_code=404, detail="Projet non trouvé")
+
+    **IMPORTANT** :    
+
+    - Respecte les matchs fixes (est_fixe=True)    if request.strategy not in ["cpsat", "greedy"]:
+
+    - Ne modifie que les matchs >= semaine_minimum        raise HTTPException(status_code=400, detail=f"Stratégie invalide: {request.strategy}")
+
+    - Stratégie depuis config YAML (ou override dans request)    
+
+        # Lancer résolution en arrière-plan
+
+    **Exemples** :    background_tasks.add_task(
+
+    - `POST /projects/1/solve` : Résoudre avec stratégie du config YAML        _solve_project_background,
+
+    - `POST /projects/1/solve` + body `{"strategie": "heuristique"}` : Override        db,
+
+    """        project_id,
+
+    service = SolverService(db)        request.strategy
+
+        )
+
+    # Override config si fourni dans request    
+
+    if request.strategie or request.temps_max_secondes:    return {
+
+        # TODO: Implémenter override (modifier config avant résolution)        "message": "Résolution lancée en arrière-plan",
+
+        pass        "project_id": project_id,
+
+            "strategy": request.strategy
+
+    # Mesurer temps d'exécution    }
+
+    start_time = time.time()
+
+    def _solve_project_background(db: Session, project_id: int, strategy: str):
+
+    try:    """Fonction exécutée en arrière-plan"""
+
+        # Exécuter résolution    service = SolverService(db)
+
+        result = service.solve_project(project_id)    try:
+
+                solution = service.solve_project(project_id, strategy)
+
+        # Calculer temps exécution        print(f"✅ Résolution projet {project_id} terminée: {len(solution.matchs_planifies)} matchs")
+
+        temps_execution = time.time() - start_time    except Exception as e:
+
+                print(f"❌ Erreur résolution projet {project_id}: {e}")
+
+        # Retourner résultat```
+
+        return SolveResponse(
+
+            project_id=result['project_id'],### Inclusion dans l'application
+
+            strategie=result['strategie'],**Modifier** : `backend/api/main.py`
+
+            nb_matchs_total=result['nb_matchs_total'],
+
+            nb_matchs_fixes=result['nb_matchs_fixes'],```python
+
+            nb_matchs_planifies=result['nb_matchs_planifies'],from backend.api.routes import matches, projects, teams, venues, solver
+
+            nb_matchs_modifiables=result['nb_matchs_modifiables'],
+
+            temps_execution_secondes=round(temps_execution, 2),# ...
+
+            erreurs=None
+
+        )app.include_router(solver.router, prefix="/api/projects", tags=["Solver"])
+
+    ```
+
+    except SolverError as e:
+
+        # Erreur métier (aucune solution, contraintes invalides, etc.)### Consignes d'organisation
+
+        raise HTTPException(- Valider la stratégie (doit être "cpsat" ou "greedy")
+
+            status_code=400,- Vérifier que le projet existe (404 si non trouvé)
+
+            detail=f"Erreur lors de la résolution : {str(e)}"- Gérer les erreurs du solver (500 avec message clair)
+
+        )- Considérer l'exécution asynchrone si le solver est lent (>5s)
+
+    - Logs pour tracking (début/fin résolution, durée, erreurs)
+
+    except Exception as e:- En production : ajouter authentification/autorisation si nécessaire
+
+        # Erreur inattendue
+
+        raise HTTPException(### Impact et liens
+
+            status_code=500,- Le frontend (`frontend/src/api/endpoints/solver.ts`) appellera cet endpoint.
+
+            detail=f"Erreur serveur : {str(e)}"- Le hook React Query (`frontend/src/hooks/useSolver.ts`) gérera l'invalidation du cache.
+
+        )- Le service Solveur (`backend/services/solver_service.py`) sera appelé.
+
+```
+
+## À faire/vérifier
+
+**Points clés** :- Créer le fichier routes/solver.py avec le router
+
+- **POST /projects/{id}/solve** : Déclenche résolution- Définir le schema SolveRequest
+
+- **SolveRequest optionnel** : Override stratégie/temps_max (body JSON)- Implémenter l'endpoint POST /projects/{id}/solve
+
+- **Mesure temps** : time.time() avant/après résolution- Choisir entre exécution synchrone ou asynchrone selon performance
+
+- **Gestion erreurs** : SolverError → 400, Exception → 500- Inclure le router dans main.py
+
+- Tester l'endpoint :
+
+---  - Backend démarré : `uvicorn backend.api.main:app --reload`
+
+  - Importer projet : `python scripts/import_excel.py configs/config_volley.yaml "Test"`
+
+### Endpoint de statut (résolution asynchrone optionnelle)  - Fixer 2-3 matchs via API : `POST /api/matches/{id}/fix`
+
+  - Lancer résolution :
+
+**📁 Fichier** : `backend/api/routes/projects.py`    ```bash
+
+    curl -X POST http://localhost:8000/api/projects/1/solve \
+
+**Ajout (optionnel pour résolution async)** :      -H "Content-Type: application/json" \
+
+      -d '{"strategy": "cpsat"}'
+
+```python    ```
+
+# Stockage temporaire des statuts (en production, utiliser Redis ou DB)  - Vérifier réponse 200 avec nombre de matchs planifiés
+
+solve_statuses: dict[int, SolveStatus] = {}  - Vérifier en DB : matchs mis à jour, fixes inchangés
+
+- Tester les erreurs :
+
+@router.get("/{project_id}/solve/status", response_model=SolveStatus)  - Projet inexistant (404)
+
+def get_solve_status(  - Stratégie invalide (400)
+
+    project_id: int,  - Erreur solver (500 avec message)
+
+    db: Session = Depends(get_db)- Tester avec stratégie "greedy"
+
+):- Vérifier les logs (début/fin résolution, durée)
+
+    """
+
+    Récupère le statut de résolution d'un projet.## Questions
+
+    Poser des questions si des points sur l'exécution asynchrone, la validation, la sécurité, les status codes ou l'intégration ne sont pas clairs.
+
+    Utilisé pour résolution asynchrone (optionnel).
+
+    ## Documentation
+
+    **Statuts possibles** :Rester concis, ne pas ajouter de documentation excessive. Utiliser docstrings pour décrire l'endpoint et les paramètres.
+
+    - "pending" : En attente de démarrage
+    - "running" : En cours d'exécution
+    - "completed" : Terminé avec succès
+    - "failed" : Échec
+    """
+    status = solve_statuses.get(project_id)
+    
+    if not status:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Aucune résolution en cours pour le projet {project_id}"
+        )
+    
+    return status
+
+@router.delete("/{project_id}/solve", status_code=204)
+def cancel_solve(
+    project_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Annule une résolution en cours.
+    
+    **Note** : Nécessite résolution asynchrone avec threading/celery.
+    """
+    if project_id not in solve_statuses:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Aucune résolution en cours pour le projet {project_id}"
+        )
+    
+    # TODO: Implémenter annulation (kill thread/task)
+    del solve_statuses[project_id]
+    
+    return None
+```
+
+**Points clés** :
+- **GET /solve/status** : Récupérer statut asynchrone
+- **DELETE /solve** : Annuler résolution en cours
+- **solve_statuses** : Dict temporaire (remplacer par Redis/DB en prod)
+
+---
+
+### Résolution asynchrone avec BackgroundTasks
+
+**📁 Fichier** : `backend/api/routes/projects.py`
+
+**Version asynchrone avec FastAPI BackgroundTasks** :
+
+```python
+from fastapi import BackgroundTasks
+
+@router.post("/{project_id}/solve", response_model=SolveStatus)
+def solve_project_async(
+    project_id: int,
+    background_tasks: BackgroundTasks,
+    request: SolveRequest = SolveRequest(),
+    db: Session = Depends(get_db)
+):
+    """
+    Résout le calendrier en arrière-plan (asynchrone).
+    
+    Retourne immédiatement un statut "pending" et lance la résolution en background.
+    Utiliser GET /projects/{id}/solve/status pour suivre la progression.
+    """
+    # Créer statut initial
+    status = SolveStatus(
+        project_id=project_id,
+        status="pending",
+        message="Résolution en attente de démarrage"
+    )
+    solve_statuses[project_id] = status
+    
+    # Lancer résolution en background
+    background_tasks.add_task(
+        run_solver_background,
+        project_id=project_id,
+        request=request
+    )
+    
+    return status
+
+def run_solver_background(project_id: int, request: SolveRequest):
+    """
+    Fonction exécutée en arrière-plan pour résoudre le projet.
+    """
+    from backend.database.engine import SessionLocal
+    
+    db = SessionLocal()
+    service = SolverService(db)
+    
+    try:
+        # Mettre à jour statut : running
+        solve_statuses[project_id].status = "running"
+        solve_statuses[project_id].message = "Résolution en cours..."
+        
+        # Exécuter résolution
+        start_time = time.time()
+        result = service.solve_project(project_id)
+        temps_execution = time.time() - start_time
+        
+        # Mettre à jour statut : completed
+        solve_statuses[project_id].status = "completed"
+        solve_statuses[project_id].message = "Résolution terminée avec succès"
+        solve_statuses[project_id].result = SolveResponse(
+            project_id=result['project_id'],
+            strategie=result['strategie'],
+            nb_matchs_total=result['nb_matchs_total'],
+            nb_matchs_fixes=result['nb_matchs_fixes'],
+            nb_matchs_planifies=result['nb_matchs_planifies'],
+            nb_matchs_modifiables=result['nb_matchs_modifiables'],
+            temps_execution_secondes=round(temps_execution, 2),
+            erreurs=None
+        )
+    
+    except Exception as e:
+        # Mettre à jour statut : failed
+        solve_statuses[project_id].status = "failed"
+        solve_statuses[project_id].message = f"Erreur : {str(e)}"
+    
+    finally:
+        db.close()
+```
+
+**Points clés** :
+- **BackgroundTasks** : FastAPI built-in pour tasks async simples
+- **run_solver_background** : Fonction exécutée en background
+- **Statuts** : pending → running → completed/failed
+- **SessionLocal()** : Nouvelle session DB pour background task
+
+---
+
+### Documentation OpenAPI
+
+**📁 Fichier** : `backend/api/routes/projects.py`
+
+**Améliorer docstrings pour OpenAPI** :
+
+```python
+@router.post("/{project_id}/solve", response_model=SolveResponse, tags=["Solver"])
+def solve_project(
+    project_id: int,
+    request: SolveRequest = SolveRequest(),
+    db: Session = Depends(get_db)
+):
+    """
+    Résout le calendrier d'un projet avec le solveur configuré.
+    
+    ## Workflow
+    
+    1. **Chargement** : Récupère projet, matchs, équipes, gymnases depuis DB
+    2. **Filtrage** : Identifie matchs fixes (est_fixe=True ou semaine < semaine_minimum)
+    3. **Résolution** : Exécute solveur (optimal, heuristique, ou hybride)
+    4. **Persistance** : Met à jour matchs modifiables dans DB
+    5. **Validation** : Vérifie contraintes (matchs fixes, conflits équipes/gymnases)
+    
+    ## Stratégies disponibles
+    
+    - **optimal** : Solveur CP-SAT (OR-Tools) pour solution optimale
+    - **heuristique** : Algorithme heuristique rapide
+    - **hybride** : Optimal avec fallback heuristique si échec/timeout
+    
+    ## Contraintes respectées
+    
+    - Matchs fixes non modifiés (est_fixe=True)
+    - Matchs avant semaine_minimum non modifiés
+    - Respect des indisponibilités (équipes, gymnases, institutions)
+    - Équilibre domicile/extérieur
+    - Temps de repos entre matchs
+    
+    ## Exemples
+    
+    ```bash
+    # Résolution avec stratégie du config YAML
+    curl -X POST http://localhost:8000/projects/1/solve
+    
+    # Override stratégie
+    curl -X POST http://localhost:8000/projects/1/solve \\
+      -H "Content-Type: application/json" \\
+      -d '{"strategie": "heuristique", "temps_max_secondes": 60}'
+    ```
+    
+    ## Réponse
+    
+    Retourne un résumé de résolution :
+    - Stratégie utilisée
+    - Nombre de matchs total, fixes, planifiés, modifiables
+    - Temps d'exécution
+    - Erreurs éventuelles
+    """
+    # ... code existant ...
+```
+
+**Points clés** :
+- **tags=["Solver"]** : Grouper dans section Solver de OpenAPI
+- **Docstring complète** : Workflow, stratégies, contraintes, exemples
+- **Code blocks** : Exemples curl dans docstring
+
+---
+
+## À faire/vérifier
+
+**Checklist de développement** :
+
+1. ✅ Créer schémas dans `backend/api/schemas.py` :
+   - SolveRequest (strategie, temps_max_secondes optionnels)
+   - SolveResponse (résumé résolution)
+   - SolveStatus (statut async optionnel)
+
+2. ✅ Créer endpoint dans `backend/api/routes/projects.py` :
+   - POST /projects/{id}/solve (résolution synchrone)
+   - GET /projects/{id}/solve/status (statut async optionnel)
+   - DELETE /projects/{id}/solve (annuler async optionnel)
+
+3. ✅ Implémenter résolution asynchrone (optionnel) :
+   - Version BackgroundTasks (simple)
+   - Ou version Celery (production)
+
+4. ✅ Améliorer documentation OpenAPI :
+   - Docstrings complètes
+   - Tags pour grouper endpoints
+   - Exemples curl
+
+**Checklist de validation** :
+
+1. ✅ **Test endpoint synchrone** :
+   ```bash
+   # Importer projet
+   python scripts/import_excel.py configs/config_volley.yaml
+   
+   # Résoudre
+   curl -X POST http://localhost:8000/projects/1/solve
+   
+   # Vérifier réponse JSON
+   # {
+   #   "project_id": 1,
+   #   "strategie": "optimal",
+   #   "nb_matchs_planifies": 45,
+   #   ...
+   # }
+   ```
+
+2. ✅ **Test override stratégie** :
+   ```bash
+   curl -X POST http://localhost:8000/projects/1/solve \
+     -H "Content-Type: application/json" \
+     -d '{"strategie": "heuristique"}'
+   ```
+
+3. ✅ **Test erreurs** :
+   ```bash
+   # Projet inexistant
+   curl -X POST http://localhost:8000/projects/999/solve
+   # Doit retourner 404
+   
+   # Aucun match modifiable (tous fixes)
+   # Doit retourner 400 avec message SolverError
+   ```
+
+4. ✅ **Test async (si implémenté)** :
+   ```bash
+   # Lancer résolution async
+   curl -X POST http://localhost:8000/projects/1/solve
+   # {"status": "pending", ...}
+   
+   # Polling statut
+   curl http://localhost:8000/projects/1/solve/status
+   # {"status": "running", "progress": 0.5, ...}
+   
+   # Attendre completion
+   curl http://localhost:8000/projects/1/solve/status
+   # {"status": "completed", "result": {...}}
+   ```
+
+5. ✅ **Test documentation OpenAPI** :
+   ```bash
+   # Ouvrir http://localhost:8000/docs
+   # Vérifier section "Solver" avec POST /projects/{id}/solve
+   # Vérifier exemples, schémas, descriptions
+   ```
+
+**Commandes de test** :
+```bash
+# Backend
+uvicorn backend.api.main:app --reload
+
+# Test résolution
+curl -X POST http://localhost:8000/projects/1/solve
+
+# Test avec override
+curl -X POST http://localhost:8000/projects/1/solve \
+  -H "Content-Type: application/json" \
+  -d '{"strategie": "heuristique", "temps_max_secondes": 30}'
+
+# Vérifier matchs mis à jour
+curl http://localhost:8000/projects/1/matches
+```
+
+---
+
+## Questions
+
+**Questions critiques** :
+
+1. **Résolution synchrone vs asynchrone** :
+   - Résolution synchrone acceptable (blocage quelques secondes) ?
+   - Ou résolution async obligatoire (temps > 1min) ?
+   - Faut-il Celery pour production ou BackgroundTasks suffisant ?
+
+2. **Override config** :
+   - Faut-il vraiment permettre override stratégie/temps_max ?
+   - Ou forcer utilisation config YAML (plus propre) ?
+   - Si override, faut-il persister dans DB ou temporaire ?
+
+3. **Gestion erreurs** :
+   - Que retourner si aucune solution trouvée (400, 404, 500) ?
+   - Faut-il des codes d'erreur spécifiques (SOLVER_TIMEOUT, NO_SOLUTION) ?
+   - Faut-il rollback DB si validation échoue après persist ?
+
+4. **Cache résultats** :
+   - Faut-il cacher résultats de résolution (éviter recalcul) ?
+   - Invalidation cache : quand ? (après fix/unfix match, après import) ?
+
+5. **Notifications** :
+   - Faut-il notifier l'utilisateur quand résolution async terminée ?
+   - Websockets, SSE, ou polling simple ?
+
+6. **Logs** :
+   - Faut-il logger chaque résolution (projet, stratégie, temps, résultat) ?
+   - Dans fichier, DB, ou service externe (Sentry, Datadog) ?
+
+---
+
+## Documentation
+
+Documenter uniquement :
+- **POST /solve** : Expliquer workflow complet (chargement, filtrage, résolution, validation)
+- **Stratégies** : Expliquer différences optimal/heuristique/hybride
+- **Override** : Expliquer SolveRequest pour override temporaire
+- **Async** : Expliquer BackgroundTasks vs Celery si implémenté

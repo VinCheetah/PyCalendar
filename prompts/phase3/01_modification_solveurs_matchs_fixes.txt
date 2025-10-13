@@ -1,0 +1,597 @@
+# Prompt 3.1 : Modification des Solveurs pour Matchs Fixes# Prompt 3.1 : Modification des solveurs – Gestion matchs fixes
+
+
+
+## Contexte global## Contexte global
+
+PyCalendar V2 doit respecter les matchs fixes définis par l'utilisateur via l'interface web. Les solveurs (optimal, heuristique) ne doivent PAS modifier ces matchs lors de l'optimisation.PyCalendar V2 intègre des solveurs d'optimisation (CP-SAT, Greedy) pour planifier les matchs sportifs. L'architecture doit permettre l'ajout de nouvelles contraintes, la gestion des matchs fixes (non replanifiables) et la maintenance des algorithmes existants sans régression.
+
+
+
+**RAPPEL - Double configuration et matchs fixes** :## Contexte technique
+
+- **Matchs fixes** : Définis via UI web (POST /matches/{id}/fix), pas depuis Excel initialCette tâche concerne la modification des solveurs CP-SAT et Greedy pour prendre en compte les matchs fixes (non replanifiables) et la contrainte semaine_min dans la logique d'optimisation.
+
+- **est_fixe = true** : Le solveur DOIT conserver semaine, gymnase, horaire
+
+- **semaine_minimum** (YAML) : Première semaine modifiable par le solver## Résumé du travail précédent
+
+- **Matchs semaine < semaine_minimum** : Non modifiables, traités comme fixes- Les solveurs sont en place et fonctionnent avec les contraintes de base (`solvers/cpsat_solver.py`, `solvers/greedy_solver.py`).
+
+- La gestion des matchs fixes a été ajoutée au modèle métier (`core/models.py` : champs `est_fixe`, `statut`, méthode `est_modifiable()`).
+
+## Contexte technique- La contrainte `semaine_min` a été ajoutée à la configuration (`core/config.py`).
+
+Cette tâche modifie les solveurs existants pour respecter les contraintes de matchs fixes et semaine_minimum sans casser le code existant.- Le backend et l'API sont opérationnels.
+
+
+
+## Résumé du travail précédent## Objectifs
+
+- Solveurs existants : optimal (CP-SAT), heuristique (Tâche originale)- Adapter les solveurs pour filtrer et respecter les matchs fixes.
+
+- Générateurs de matchs : MultiPoolGenerator (préserve code existant)- Intégrer la contrainte semaine_min dans la génération des créneaux disponibles.
+
+- Modèle Match avec champ est_fixe (Tâche 1.3)- S'assurer de la robustesse, de l'extensibilité et de la non-régression du code.
+
+- Config charge semaine_minimum depuis YAML (Tâche 1.2)- Préserver la signature des méthodes et l'architecture existante.
+
+
+
+## Objectifs## Détails techniques
+
+1. Identifier matchs fixes dans les solveurs
+
+2. Ajouter contraintes pour préserver matchs fixes### Fichiers à modifier
+
+3. Respecter semaine_minimum (filtrer matchs modifiables)- `solvers/cpsat_solver.py` : méthode `CPSATSolver.solve()`
+
+4. NE PAS casser le code existant (solvers/, constraints/)- `solvers/greedy_solver.py` : méthode `GreedySolver.solve()`
+
+5. Documenter modifications minimales
+
+### Algorithme de modification (CP-SAT Solver)
+
+## Détails techniques
+
+**Méthode concernée** : `CPSATSolver.solve(matchs, creneaux, gymnases)`
+
+### Analyse du code existant
+
+**Modifications à apporter au début de la méthode (avant création model CP-SAT)** :
+
+**📁 Fichiers concernés** :
+
+- `solvers/optimal.py` : Solveur CP-SAT avec contraintes OR-Tools1. **Séparer matchs fixes et modifiables** :
+
+- `solvers/heuristique.py` : Solveur heuristique   ```python
+
+- `constraints/` : Contraintes existantes (repos, domicile/extérieur, etc.)   matchs_fixes = [m for m in matchs if m.est_fixe or m.statut == "fixe"]
+
+   matchs_modifiables = [m for m in matchs if m.est_modifiable()]
+
+**Principe de modification** :   ```
+
+1. **Filtrer matchs modifiables** : Exclure matchs fixes et semaine < semaine_minimum
+
+2. **Ajouter contraintes fixes** : Forcer assignment des matchs fixes2. **Identifier créneaux réservés par matchs fixes** :
+
+3. **Préserver comportement** : Ne modifier que le nécessaire   ```python
+
+   creneaux_reserves = set()
+
+---   for m in matchs_fixes:
+
+       if m.creneau:
+
+### Modification du solveur optimal (CP-SAT)           creneaux_reserves.add((m.creneau.semaine, m.creneau.horaire, m.creneau.gymnase))
+
+       else:
+
+**📁 Fichier à modifier** : `solvers/optimal.py`           # Log warning : match fixé sans créneau
+
+           print(f"Warning: Match fixé {m.id} sans créneau assigné")
+
+**Étape 1 : Identifier matchs fixes et modifiables**   ```
+
+
+
+**Localisation** : Début de la fonction `solve()` ou `run()`3. **Filtrer créneaux disponibles** :
+
+   ```python
+
+**Ajout de code** :   creneaux_disponibles = [
+
+       c for c in creneaux 
+
+```python       if (c.semaine, c.horaire, c.gymnase) not in creneaux_reserves
+
+def solve(self, config, matchs, equipes, gymnases):   ]
+
+    """   ```
+
+    Résout le problème de planification avec CP-SAT.
+
+    4. **Appliquer contrainte semaine_min** :
+
+    IMPORTANT : Respecte les matchs fixes (est_fixe=True) et semaine_minimum.   ```python
+
+    """   semaine_min = getattr(self.config, 'semaine_min', 1)
+
+    from ortools.sat.python import cp_model   creneaux_disponibles = [
+
+           c for c in creneaux_disponibles 
+
+    model = cp_model.CpModel()       if c.semaine >= semaine_min
+
+       ]
+
+    # NOUVEAU : Récupérer semaine_minimum depuis config   ```
+
+    semaine_minimum = config.semaines.get('semaine_minimum', 1)
+
+    5. **Résoudre avec matchs_modifiables et creneaux_disponibles** :
+
+    # NOUVEAU : Séparer matchs fixes et modifiables   - Toute la logique existante du solver CP-SAT
+
+    matchs_fixes = []   - Ne créer variables CP-SAT que pour `matchs_modifiables`
+
+    matchs_modifiables = []   - Ne considérer que `creneaux_disponibles`
+
+    
+
+    for match in matchs:6. **Après résolution, reconstruire solution complète** :
+
+        # Un match est fixe si :   ```python
+
+        # 1. est_fixe = True (fixé via UI web)   # Après extraction de la solution
+
+        # 2. semaine < semaine_minimum (matchs déjà joués/planifiés)   # Ajouter matchs fixes à la solution
+
+        if match.est_fixe or (match.semaine is not None and match.semaine < semaine_minimum):   for m in matchs_fixes:
+
+            matchs_fixes.append(match)       if m.creneau:
+
+        else:           solution.matchs_planifies.append(m)
+
+            matchs_modifiables.append(match)   
+
+       # solution contient maintenant matchs fixes + matchs résolus
+
+    print(f"[Solveur Optimal] {len(matchs_fixes)} matchs fixes, {len(matchs_modifiables)} modifiables")   ```
+
+    
+
+    # Suite du code existant...### Algorithme de modification (Greedy Solver)
+
+    # Ne créer des variables CP-SAT QUE pour matchs_modifiables
+
+```**Méthode concernée** : `GreedySolver.solve(matchs, creneaux, gymnases)`
+
+
+
+**Points clés** :**Appliquer la même logique de filtrage** :
+
+- **semaine_minimum** : Récupéré depuis `config.semaines['semaine_minimum']`- Séparer matchs fixes et modifiables
+
+- **Filtrage** : Match fixe si `est_fixe=True` OU `semaine < semaine_minimum`- Identifier créneaux réservés
+
+- **Logging** : Afficher nombre de matchs fixes vs modifiables- Filtrer créneaux disponibles
+
+- Appliquer semaine_min
+
+---- Résoudre avec matchs_modifiables
+
+- Reconstruire solution avec matchs fixes
+
+**Étape 2 : Créer variables CP-SAT uniquement pour matchs modifiables**
+
+### Consignes d'organisation
+
+**Localisation** : Boucle de création des variables (probablement une boucle `for match in matchs`)- **NE PAS modifier** la signature de la méthode `solve()`
+
+- **Préserver** toute la logique existante du solver (juste filtrer les inputs)
+
+**Modification** :- **Vérifier** que les matchs fixes ont un créneau valide (log warning sinon)
+
+- **Utiliser** la méthode `est_modifiable()` ajoutée en Phase 1
+
+```python- **Tester** la non-régression : les solveurs doivent toujours fonctionner sans matchs fixes
+
+# AVANT (code existant à remplacer)
+
+# for match in matchs:### Impact et liens
+
+#     match_vars[match.id] = {}- Le service solveur (`backend/services/solver_service.py`) appellera ces méthodes modifiées.
+
+#     for semaine in range(1, config.nb_semaines + 1):- Les matchs fixes seront créés via l'API (`backend/api/routes/matches.py` : endpoints fix/unfix).
+
+#         match_vars[match.id][semaine] = model.NewBoolVar(f'match_{match.id}_semaine_{semaine}')- La solution retournée contiendra à la fois matchs fixes et matchs planifiés.
+
+
+
+# APRÈS (nouveau code)## À faire/vérifier
+
+match_vars = {}- Modifier `CPSATSolver.solve()` selon l'algorithme décrit
+
+- Modifier `GreedySolver.solve()` selon le même pattern
+
+# 1. Créer variables SEULEMENT pour matchs modifiables- Vérifier la logique de filtrage :
+
+for match in matchs_modifiables:  - Matchs fixes correctement identifiés
+
+    match_vars[match.id] = {}  - Créneaux réservés bien exclus
+
+    for semaine in range(semaine_minimum, config.nb_semaines + 1):  # Commencer à semaine_minimum  - Contrainte semaine_min appliquée
+
+        match_vars[match.id][semaine] = model.NewBoolVar(f'match_{match.id}_semaine_{semaine}')- Tester avec données mixtes :
+
+  - Créer 10 matchs, fixer 3 d'entre eux sur différents créneaux
+
+# 2. Pour matchs fixes : NE PAS créer de variables, simplement les conserver  - Lancer solver
+
+# (ils seront réintégrés à la fin sans modification)  - Vérifier que :
+
+```    - Les 3 matchs fixes restent inchangés
+
+    - Les 7 autres sont planifiés sans conflit
+
+**Points clés** :    - Aucun match n'est assigné aux créneaux des matchs fixes
+
+- **range(semaine_minimum, ...)** : Ne planifier qu'à partir de semaine_minimum- Tester semaine_min :
+
+- **Pas de variables pour fixes** : Matchs fixes ne sont PAS dans le modèle CP-SAT  - Config avec `semaine_min: 5`
+
+- **Réintégration finale** : Matchs fixes ajoutés à la solution sans changement  - Vérifier qu'aucun match n'est planifié avant semaine 5
+
+- Tester la non-régression :
+
+---  - Lancer solver sans matchs fixes → doit fonctionner comme avant
+
+
+
+**Étape 3 : Ajouter contraintes pour respecter matchs fixes**## Questions
+
+Poser des questions si des points sur la logique d'optimisation, le filtrage, l'intégration ou la non-régression ne sont pas clairs.
+
+**Localisation** : Section des contraintes (probablement après création des variables)
+
+## Documentation
+
+**Ajout de code** :Rester concis, ne pas ajouter de documentation excessive. Commenter brièvement la logique de filtrage dans le code si besoin.
+
+
+```python
+# NOUVEAU : Contraintes pour éviter conflits avec matchs fixes
+for match_fixe in matchs_fixes:
+    # Si match fixe utilise une équipe, cette équipe ne peut pas jouer ailleurs cette semaine
+    for match_mod in matchs_modifiables:
+        if (match_fixe.equipe_domicile_id == match_mod.equipe_domicile_id or
+            match_fixe.equipe_domicile_id == match_mod.equipe_exterieur_id or
+            match_fixe.equipe_exterieur_id == match_mod.equipe_domicile_id or
+            match_fixe.equipe_exterieur_id == match_mod.equipe_exterieur_id):
+            
+            # Interdire au match modifiable d'être à la même semaine que le match fixe
+            if match_fixe.semaine in match_vars.get(match_mod.id, {}):
+                model.Add(match_vars[match_mod.id][match_fixe.semaine] == 0)
+    
+    # Si match fixe utilise un gymnase, ce gymnase ne peut pas être utilisé ailleurs cette semaine
+    # (cette contrainte peut déjà exister dans le code, vérifier pour éviter duplication)
+```
+
+**Points clés** :
+- **Éviter conflits équipes** : Une équipe ne peut pas jouer 2 matchs la même semaine
+- **Éviter conflits gymnases** : Un gymnase ne peut pas accueillir 2 matchs simultanément
+- **Vérifier code existant** : Ces contraintes existent peut-être déjà, adapter si nécessaire
+
+---
+
+**Étape 4 : Réintégrer matchs fixes dans la solution**
+
+**Localisation** : Fin de la fonction, après résolution du modèle
+
+**Modification** :
+
+```python
+# Résoudre le modèle CP-SAT (code existant)
+solver = cp_model.CpSolver()
+status = solver.Solve(model)
+
+if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
+    # Extraire solution pour matchs modifiables (code existant)
+    solution = []
+    for match in matchs_modifiables:
+        for semaine in range(semaine_minimum, config.nb_semaines + 1):
+            if solver.Value(match_vars[match.id][semaine]) == 1:
+                solution.append({
+                    'match_id': match.id,
+                    'semaine': semaine,
+                    'gymnase_id': match.gymnase_id,  # Ou extrait du modèle
+                })
+    
+    # NOUVEAU : Ajouter matchs fixes à la solution SANS modification
+    for match_fixe in matchs_fixes:
+        solution.append({
+            'match_id': match_fixe.id,
+            'semaine': match_fixe.semaine,
+            'gymnase_id': match_fixe.gymnase_id,
+            'est_fixe': True,  # Marqueur pour indiquer que c'est un match fixe
+        })
+    
+    return solution
+else:
+    raise ValueError("Aucune solution trouvée par le solveur optimal")
+```
+
+**Points clés** :
+- **Solution = modifiables + fixes** : Combiner les deux listes
+- **Conserver valeurs fixes** : semaine, gymnase_id inchangés
+- **Marqueur est_fixe** : Optionnel, pour debug/logging
+
+---
+
+### Modification du solveur heuristique
+
+**📁 Fichier à modifier** : `solvers/heuristique.py`
+
+**Principe identique** :
+
+1. **Filtrer matchs** :
+```python
+def solve(self, config, matchs, equipes, gymnases):
+    semaine_minimum = config.semaines.get('semaine_minimum', 1)
+    
+    matchs_fixes = [m for m in matchs if m.est_fixe or (m.semaine and m.semaine < semaine_minimum)]
+    matchs_modifiables = [m for m in matchs if m not in matchs_fixes]
+    
+    # Suite heuristique sur matchs_modifiables uniquement...
+```
+
+2. **Éviter conflits** :
+```python
+def is_valid_assignment(self, match, semaine, matchs_fixes):
+    # Vérifier qu'aucun match fixe n'utilise la même équipe cette semaine
+    for match_fixe in matchs_fixes:
+        if match_fixe.semaine == semaine:
+            if (match.equipe_domicile_id in [match_fixe.equipe_domicile_id, match_fixe.equipe_exterieur_id] or
+                match.equipe_exterieur_id in [match_fixe.equipe_domicile_id, match_fixe.equipe_exterieur_id]):
+                return False
+    return True
+```
+
+3. **Réintégrer matchs fixes** :
+```python
+# À la fin
+solution_complete = solution_heuristique + [
+    {'match_id': m.id, 'semaine': m.semaine, 'gymnase_id': m.gymnase_id}
+    for m in matchs_fixes
+]
+return solution_complete
+```
+
+---
+
+### Modification des contraintes existantes
+
+**📁 Fichiers à vérifier** : `constraints/*.py`
+
+**Principe** : Adapter les contraintes pour ignorer matchs fixes
+
+**Exemple avec contrainte de repos** :
+
+```python
+# constraints/repos.py
+
+def apply(self, model, match_vars, matchs, config):
+    """
+    Contrainte : Respecter temps de repos entre matchs d'une équipe.
+    
+    IMPORTANT : Ne s'applique QU'aux matchs modifiables.
+    Les matchs fixes sont déjà respectés par construction.
+    """
+    semaine_minimum = config.semaines.get('semaine_minimum', 1)
+    
+    # Filtrer matchs modifiables (ceux qui ont des variables dans match_vars)
+    matchs_modifiables = [m for m in matchs if m.id in match_vars]
+    
+    # Appliquer contrainte uniquement sur matchs modifiables
+    for equipe in equipes:
+        matchs_equipe = [m for m in matchs_modifiables if 
+                        m.equipe_domicile_id == equipe.id or 
+                        m.equipe_exterieur_id == equipe.id]
+        
+        # Contrainte de repos (code existant)
+        # ...
+```
+
+**Points clés** :
+- **Filtrer par match_vars** : Si match.id pas dans match_vars, c'est un match fixe
+- **Ne PAS modifier contraintes si déjà OK** : Vérifier d'abord le code existant
+- **Éviter duplication** : Les contraintes existantes gèrent peut-être déjà correctement
+
+---
+
+### Validation et tests
+
+**📁 Fichier de test à créer** : `tests/test_solveur_matchs_fixes.py`
+
+**Contenu** :
+
+```python
+import pytest
+from solvers.optimal import OptimalSolver
+from core.config import Config
+
+def test_respect_matchs_fixes():
+    """Test que le solveur respecte les matchs fixes."""
+    
+    # Config avec semaine_minimum = 3
+    config = Config(
+        sport="Volleyball",
+        nb_semaines=10,
+        semaines={'semaine_minimum': 3},
+        # ... autres params
+    )
+    
+    # Matchs avec 2 fixes
+    matchs = [
+        Match(id=1, equipe_domicile_id=1, equipe_exterieur_id=2, semaine=2, est_fixe=False),  # < semaine_min : fixe
+        Match(id=2, equipe_domicile_id=3, equipe_exterieur_id=4, semaine=5, est_fixe=True),   # Fixé via UI
+        Match(id=3, equipe_domicile_id=5, equipe_exterieur_id=6, semaine=None, est_fixe=False), # Modifiable
+    ]
+    
+    solver = OptimalSolver()
+    solution = solver.solve(config, matchs, equipes, gymnases)
+    
+    # Vérifier que matchs fixes n'ont PAS changé
+    assert any(s['match_id'] == 1 and s['semaine'] == 2 for s in solution)
+    assert any(s['match_id'] == 2 and s['semaine'] == 5 for s in solution)
+    
+    # Vérifier que match modifiable a été planifié (>= semaine_minimum)
+    match3_sol = [s for s in solution if s['match_id'] == 3][0]
+    assert match3_sol['semaine'] >= 3
+
+def test_eviter_conflits_equipes():
+    """Test qu'un match fixe empêche l'équipe de jouer ailleurs la même semaine."""
+    
+    matchs = [
+        Match(id=1, equipe_domicile_id=1, equipe_exterieur_id=2, semaine=3, est_fixe=True),
+        Match(id=2, equipe_domicile_id=1, equipe_exterieur_id=3, semaine=None, est_fixe=False),  # Même équipe 1
+    ]
+    
+    solver = OptimalSolver()
+    solution = solver.solve(config, matchs, equipes, gymnases)
+    
+    # Match 2 NE DOIT PAS être à la semaine 3 (conflit avec match 1)
+    match2_sol = [s for s in solution if s['match_id'] == 2][0]
+    assert match2_sol['semaine'] != 3
+```
+
+---
+
+## À faire/vérifier
+
+**Checklist de développement** :
+
+1. ✅ **Analyser code existant** :
+   ```bash
+   # Lire solveur optimal
+   cat solvers/optimal.py | head -100
+   
+   # Lire solveur heuristique
+   cat solvers/heuristique.py | head -100
+   
+   # Lister contraintes
+   ls -la constraints/
+   ```
+
+2. ✅ **Modifier solveur optimal** :
+   - Filtrer matchs fixes (est_fixe=True ou semaine < semaine_minimum)
+   - Créer variables CP-SAT seulement pour matchs modifiables
+   - Ajouter contraintes pour éviter conflits avec matchs fixes
+   - Réintégrer matchs fixes dans solution finale
+
+3. ✅ **Modifier solveur heuristique** :
+   - Même principe de filtrage
+   - Adapter fonction is_valid_assignment
+   - Réintégrer matchs fixes
+
+4. ✅ **Vérifier contraintes existantes** :
+   - constraints/repos.py
+   - constraints/domicile_exterieur.py
+   - constraints/indisponibilites.py
+   - Adapter si nécessaire pour ignorer matchs fixes
+
+5. ✅ **Créer tests** :
+   - test_respect_matchs_fixes()
+   - test_eviter_conflits_equipes()
+   - test_semaine_minimum()
+
+**Checklist de validation** :
+
+1. ✅ **Test solveur optimal** :
+   ```bash
+   # Exécuter avec matchs fixes
+   python -m pytest tests/test_solveur_matchs_fixes.py::test_respect_matchs_fixes -v
+   ```
+
+2. ✅ **Test solveur heuristique** :
+   ```bash
+   pytest tests/test_solveur_matchs_fixes.py -v
+   ```
+
+3. ✅ **Test intégration** :
+   ```bash
+   # Importer projet avec semaine_minimum = 3
+   python scripts/import_excel.py configs/config_volley.yaml
+   
+   # Fixer un match via API
+   curl -X POST http://localhost:8000/matches/1/fix
+   
+   # Lancer solveur
+   # (via endpoint API créé en Tâche 3.3)
+   ```
+
+4. ✅ **Vérifier logs** :
+   ```bash
+   # Vérifier affichage "X matchs fixes, Y modifiables"
+   grep "matchs fixes" logs/solver.log
+   ```
+
+**Commandes de test rapide** :
+```bash
+# Lancer tests solveur
+pytest tests/test_solveur_matchs_fixes.py -v
+
+# Test avec vraies données
+python scripts/import_excel.py configs/config_volley.yaml
+python -c "from solvers.optimal import OptimalSolver; print(OptimalSolver().solve(...))"
+```
+
+---
+
+## Questions
+
+**Questions critiques à poser si quelque chose n'est pas clair** :
+
+1. **Structure solveurs** :
+   - Les solveurs ont-ils déjà une méthode `solve(config, matchs, equipes, gymnases)` ?
+   - Ou la signature est différente (ex: `run(data)`) ?
+   - Y a-t-il une classe abstraite `BaseSolver` à respecter ?
+
+2. **Variables CP-SAT** :
+   - Les variables sont-elles créées avec `NewBoolVar` (booléennes) ?
+   - Y a-t-il des variables pour gymnases, horaires (en plus de semaines) ?
+   - Faut-il modifier ces variables aussi pour matchs fixes ?
+
+3. **Contraintes existantes** :
+   - Les contraintes sont-elles dans des fichiers séparés (`constraints/`) ?
+   - Sont-elles appelées automatiquement ou manuellement ?
+   - Y a-t-il une factory/registry de contraintes ?
+
+4. **Matchs fixes et gymnases** :
+   - Un match fixe a-t-il TOUJOURS un gymnase assigné ?
+   - Ou peut-il être fixé en semaine mais sans gymnase (gymnase_id = null) ?
+   - Faut-il traiter ce cas spécial ?
+
+5. **semaine_minimum** :
+   - La valeur par défaut est-elle 1 ou 0 ?
+   - Faut-il valider que semaine_minimum <= nb_semaines ?
+   - Que faire si un match fixe est à une semaine > nb_semaines (erreur) ?
+
+6. **Performance** :
+   - Filtrer les matchs réduit-il significativement le temps de résolution ?
+   - Faut-il logger les performances (temps avant/après) ?
+   - Y a-t-il un timeout à respecter (temps_max_secondes) ?
+
+---
+
+## Documentation
+
+Rester concis : documenter uniquement les choix non évidents :
+- **Filtrage matchs** : Expliquer critère `est_fixe=True OU semaine < semaine_minimum`
+- **Pas de variables CP-SAT pour fixes** : Expliquer pourquoi (réduction espace recherche)
+- **Réintégration finale** : Expliquer combinaison matchs modifiables + fixes
+- **Contraintes conflits** : Expliquer pourquoi empêcher équipe de jouer 2 fois même semaine
+
+Éviter la sur-documentation des concepts OR-Tools/CP-SAT standards.

@@ -1,0 +1,495 @@
+# Prompt 1.2 : Ajout de la contrainte semaine_min# Prompt 1.2 : Ajout de la contrainte semaine_min
+
+
+
+## Contexte global## Contexte global
+
+PyCalendar V2 transforme une application CLI/Excel d'optimisation de calendriers sportifs en application web full-stack. L'architecture préserve totalement le code existant (solvers/, constraints/, generators/, validation/) et ajoute une couche backend (FastAPI, SQLAlchemy, SQLite) + frontend (React, TypeScript, FullCalendar).PyCalendar V2 transforme une application CLI/Excel d'optimisation de calendriers sportifs en application web full-stack. L'architecture préserve totalement le code existant (solvers/, constraints/, generators/, validation/) et ajoute une couche backend (FastAPI, SQLAlchemy, SQLite) + frontend (React, TypeScript, FullCalendar). La contrainte `semaine_min` permet de définir une semaine minimale avant laquelle aucun match ne peut être planifié.
+
+
+
+**IMPORTANT - Double configuration** :## Contexte technique
+
+- **Fichier YAML** (ex: `configs/default.yaml`) : Hyperparamètres, poids des contraintes, stratégie solver, temps max, **semaine_minimum**Cette tâche ajoute le paramètre `semaine_min` dans la dataclass `Config` de `core/config.py`. Ce paramètre doit être chargeable depuis les fichiers YAML de configuration et utilisé par les solvers pour filtrer les créneaux disponibles. La valeur par défaut de 1 garantit la rétrocompatibilité avec les configurations existantes.
+
+- **Fichier Excel** (ex: `config_exemple.xlsx`) : Données détaillées (équipes, gymnases, indisponibilités, préférences) via 7+ feuilles
+
+- Le fichier `core/config.py` charge le YAML (qui référence le chemin Excel via `fichiers.donnees`)## Résumé du travail précédent
+
+- Les données Excel sont chargées par `core/config_manager.py` (classe `ConfigManager`)- Le fichier `core/config.py` contient déjà la dataclass `Config` avec les paramètres du projet (équipes, gymnases, créneaux, nombre de semaines)
+
+- **IMPORTANT** : `core/config.py` ne contient **AUCUNE valeur par défaut** - toutes les valeurs par défaut sont dans `configs/default.yaml`- Le chargement YAML se fait via une fonction `load_config()` qui parse le fichier et instancie `Config`
+
+- Les solvers (`solvers/cpsat_solver.py`, `solvers/greedy_solver.py`) utilisent `Config` pour accéder aux contraintes
+
+La contrainte `semaine_minimum` (déjà existante dans le YAML) permet de définir une semaine minimale avant laquelle aucun match ne peut être planifié. Cette tâche vérifie que cette contrainte est bien intégrée partout.- Le modèle `Match` a été enrichi avec `est_fixe`, `statut`, scores (Tâche 1.1)
+
+
+
+## Contexte technique## Objectifs
+
+Cette tâche **ne nécessite normalement AUCUNE modification de code** car `semaine_minimum` existe déjà dans `core/config.py` et `configs/default.yaml`. Il s'agit de vérifier que tout est correct et documenté, et d'identifier ce qui doit être fait dans les tâches futures pour que cette contrainte soit respectée.1. Ajouter le champ `semaine_min: int = 1` à la dataclass `Config`
+
+2. Assurer le parsing YAML avec gestion de l'absence du champ (valeur par défaut)
+
+## Résumé du travail précédent3. Préparer l'intégration avec les solvers (filtrage des créneaux < semaine_min)
+
+- Le fichier `core/config.py` contient déjà le champ `semaine_minimum: int` dans la dataclass `Config` (SANS valeur par défaut hardcodée)4. Garantir la rétrocompatibilité avec les fichiers YAML existants
+
+- Le fichier `configs/default.yaml` définit `planification.semaine_minimum: 1` comme valeur par défaut
+
+- Le chargement YAML via `Config.from_yaml()` parse correctement ce champ## Détails techniques
+
+- Le modèle `Match` a été enrichi avec `est_fixe`, `statut`, scores (Tâche 1.1)
+
+### Fichier à modifier
+
+## Objectifs**`core/config.py`** - Dataclass `Config`
+
+1. **Vérifier** que le champ `semaine_minimum` existe dans `core/config.py` (dataclass Config)
+
+2. **Vérifier** que le champ `semaine_minimum` est chargé correctement depuis le YAML### Champ à ajouter à la dataclass Config
+
+3. **Vérifier** que la valeur par défaut est dans `configs/default.yaml` (pas dans core/config.py)
+
+4. **Documenter** comment cette contrainte sera utilisée par les solvers (Tâche 3.1)```python
+
+5. **Vérifier** la rétrocompatibilité avec les fichiers YAML existantssemaine_min: int = 1
+
+```
+
+## Détails techniques
+
+- **Usage** : Semaine minimale avant laquelle aucun match ne peut être planifié
+
+### Fichiers à vérifier (PAS à modifier normalement)- **Valeur par défaut** : `1` (planification dès la première semaine)
+
+- **Type** : `int` positif (valeurs valides : 1, 2, 3, ..., nb_semaines)
+
+**1. `core/config.py`** - Dataclass `Config`- **Impact** : Les solvers devront filtrer les créneaux avec `semaine < semaine_min`
+
+
+
+**Champ attendu** (déjà présent normalement) :### Modification du parsing YAML
+
+```python
+
+@dataclass**Fonction `load_config()` dans `core/config.py`** :
+
+class Config:
+
+    # ... autres champs ...**Logique actuelle** :
+
+    semaine_minimum: int  # SANS valeur par défaut ici (sera chargée du YAML)```python
+
+    respecter_matchs_fixes: booldef load_config(yaml_path: str) -> Config:
+
+    # ... autres champs ...    with open(yaml_path, 'r') as f:
+
+```        data = yaml.safe_load(f)
+
+    
+
+**⚠️ IMPORTANT** : `core/config.py` ne doit **JAMAIS** contenir de valeurs par défaut hardcodées. Toutes les valeurs par défaut sont dans `configs/default.yaml`.    # Parse équipes, gymnases, créneaux, etc.
+
+    return Config(
+
+**Méthode de chargement** (déjà présente normalement dans `Config.from_yaml()`) :        equipes=equipes,
+
+```python        gymnases=gymnases,
+
+@classmethod        creneaux=creneaux,
+
+def from_yaml(cls, filepath: str) -> "Config":        nb_semaines=data.get('nb_semaines', 26)
+
+    # ... chargement default.yaml puis merge user config ...    )
+
+    ```
+
+    if 'planification' in merged_data:
+
+        p = merged_data['planification']**Modification à apporter** :
+
+        # ... autres champs ...```python
+
+        config_dict['semaine_minimum'] = p.get('semaine_minimum', 1)  # Fallback si absentdef load_config(yaml_path: str) -> Config:
+
+        config_dict['respecter_matchs_fixes'] = p.get('respecter_matchs_fixes', True)    with open(yaml_path, 'r') as f:
+
+        # ... autres champs ...        data = yaml.safe_load(f)
+
+```    
+
+    # Parse équipes, gymnases, créneaux, etc.
+
+---    return Config(
+
+        equipes=equipes,
+
+**2. `configs/default.yaml`** - Valeurs par défaut        gymnases=gymnases,
+
+        creneaux=creneaux,
+
+**Section attendue** (déjà présente normalement) :        nb_semaines=data.get('nb_semaines', 26),
+
+```yaml        semaine_min=data.get('semaine_min', 1)  # AJOUTER cette ligne
+
+planification:    )
+
+  nb_semaines: 8```
+
+  taille_poule_min: 3
+
+  taille_poule_max: 6**Points clés** :
+
+  strategie: "cpsat"- Utiliser `data.get('semaine_min', 1)` pour valeur par défaut si clé absente
+
+  fallback_greedy: true- Pas de validation stricte nécessaire (les solvers géreront les valeurs invalides)
+
+  semaine_minimum: 1  # ← Semaine minimum pour la planification (utile pour replanification en cours de saison)
+
+  respecter_matchs_fixes: true  # ← Si True, les matchs marqués comme "fixés" ne seront pas replanifiés### Format YAML attendu
+
+```
+
+**Fichier de configuration avec `semaine_min`** :
+
+**Usage** :```yaml
+
+- `semaine_minimum: 1` → Planification dès la première semaine (comportement normal)nb_semaines: 26
+
+- `semaine_minimum: 5` → Ne planifier aucun match avant la semaine 5 (ex: reprise après pause)semaine_min: 5  # NOUVEAU - Ne pas planifier avant semaine 5
+
+- **Cas d'usage** : Replanification en cours de saison (semaines 1-4 déjà jouées)
+
+equipes:
+
+---  - nom: "Équipe A"
+
+    institution: "Lycée 1"
+
+**3. Format YAML utilisateur**    ...
+
+
+
+**Exemple avec `semaine_minimum`** :gymnases:
+
+```yaml  - nom: "Gymnase Central"
+
+fichiers:    ...
+
+  donnees: "mon_config.xlsx"  # Fichier Excel avec équipes, gymnases, etc.
+
+  sortie: "mon_calendrier.xlsx"creneaux:
+
+  - jour: "Mercredi"
+
+planification:    heure: "14h00"
+
+  nb_semaines: 26    ...
+
+  strategie: "cpsat"```
+
+  semaine_minimum: 10  # Ne pas planifier avant semaine 10
+
+  # Le reste vient de default.yaml automatiquement**Fichier de configuration SANS `semaine_min` (rétrocompatibilité)** :
+
+``````yaml
+
+nb_semaines: 26
+
+**Exemple SANS `semaine_minimum` (utilise défaut)** :# semaine_min absent → utilise valeur par défaut 1
+
+```yaml
+
+fichiers:equipes:
+
+  donnees: "mon_config.xlsx"  - nom: "Équipe A"
+
+  sortie: "mon_calendrier.xlsx"    ...
+
+```
+
+planification:
+
+  strategie: "greedy"### Structure finale attendue de la dataclass Config
+
+  # semaine_minimum absent → utilise valeur de default.yaml (= 1)
+
+``````python
+
+from dataclasses import dataclass
+
+---from typing import List
+
+
+
+### Impact et liens avec autres modules@dataclass
+
+class Config:
+
+**Modules actuels (aucune modification requise)** :    # Champs existants (NE PAS MODIFIER)
+
+- `core/config.py` : Champ déjà présent, chargement YAML correct    equipes: List['Equipe']
+
+- `configs/default.yaml` : Valeur par défaut déjà définie    gymnases: List['Gymnase']
+
+- `main.py` (CLI) : Continue de fonctionner (champ chargé du YAML)    creneaux: List['Creneau']
+
+- Fichiers YAML existants : Fonctionnent sans modification (valeur par défaut dans default.yaml)    nb_semaines: int = 26
+
+    
+
+**Intégration future avec solvers (Tâche 3.1)** :    # Nouveau champ (AJOUTER)
+
+- `solvers/cpsat_solver.py`, `solvers/greedy_solver.py` :    semaine_min: int = 1  # Semaine minimale de planification
+
+  - Filtrer les créneaux avec `semaine < config.semaine_minimum````
+
+  - Ne pas proposer ces créneaux lors de la planification
+
+  - Exemple : `creneaux_disponibles = [c for c in creneaux if c.semaine >= config.semaine_minimum]`### Impact et liens avec autres modules
+
+
+
+**Intégration future avec backend (Tâche 1.3 et suivantes)** :**Impact sur modules existants** :
+
+- `backend/database/models.py` : Table `projects` aura colonne `semaine_min` (Integer, default via YAML)- `core/config.py` : Ajout du champ dans `Config` et parsing YAML
+
+- `backend/schemas/project.py` : Schema Pydantic `ProjectCreate` inclura `semaine_min: int`- `main.py` (CLI) : Continue de fonctionner (champ optionnel avec défaut)
+
+- `backend/services/sync_service.py` : Import Excel→DB copiera `semaine_minimum` depuis config YAML- Fichiers YAML existants : Fonctionnent sans modification (valeur par défaut 1)
+
+
+
+**⚠️ Note importante** : Le paramètre s'appelle `semaine_minimum` dans le YAML/Config Python, mais pourrait être renommé `semaine_min` dans la base de données web pour cohérence. À décider.**Intégration future avec solvers** :
+
+- `solvers/cpsat_solver.py`, `solvers/greedy_solver.py` (Tâche 3.1) :
+
+---  - Filtrer les créneaux avec `semaine < config.semaine_min`
+
+  - Ne pas proposer ces créneaux lors de la planification
+
+### Consignes de vérification  - Exemple : `creneaux_disponibles = [c for c in creneaux if c.semaine >= config.semaine_min]`
+
+
+
+**SI le champ `semaine_minimum` est ABSENT de `core/config.py`** :**Intégration future avec backend** :
+
+1. L'ajouter dans la dataclass `Config` **SANS valeur par défaut** : `semaine_minimum: int`- `backend/database/models.py` (Tâche 1.3) : Table `projects` aura colonne `semaine_min` (Integer, default 1)
+
+2. Ajouter le parsing dans `Config.from_yaml()` : `config_dict['semaine_minimum'] = p.get('semaine_minimum', 1)`- `backend/schemas/project.py` (Tâche 1.4) : Schema Pydantic `ProjectCreate` inclura `semaine_min: int = 1`
+
+3. Vérifier que `configs/default.yaml` contient `planification.semaine_minimum: 1`- `backend/services/sync_service.py` (Tâche 1.6) : Import Excel→DB copiera `semaine_min` depuis config YAML
+
+
+
+**SI le champ existe déjà** :### Consignes d'organisation
+
+1. Vérifier qu'il n'y a **PAS de valeur par défaut hardcodée** dans `core/config.py`- Ajouter le champ `semaine_min` **après** `nb_semaines` dans la dataclass pour cohérence logique
+
+2. Vérifier que la valeur par défaut est dans `configs/default.yaml`- Utiliser **toujours** une valeur par défaut (rétrocompatibilité)
+
+3. Documenter simplement que tout est OK et passer à la suite- Ne **jamais** modifier les champs existants de `Config`
+
+- Documenter brièvement le champ avec un commentaire inline
+
+---
+
+## À faire/vérifier
+
+## À faire/vérifier
+
+**Checklist de développement** :
+
+**Checklist de vérification** :1. ✅ Localiser la dataclass `Config` dans `core/config.py`
+
+2. ✅ Ajouter le champ `semaine_min: int = 1` après `nb_semaines`
+
+1. ✅ **Vérifier `core/config.py`** :3. ✅ Localiser la fonction `load_config()` dans `core/config.py`
+
+   ```python4. ✅ Ajouter la ligne `semaine_min=data.get('semaine_min', 1)` lors de l'instanciation de `Config`
+
+   # Ouvrir core/config.py et chercher:5. ✅ Vérifier que la structure finale correspond exactement à l'exemple ci-dessus
+
+   # - Dataclass Config contient "semaine_minimum: int" (SANS "= 1" ou autre défaut)
+
+   # - Méthode from_yaml() contient "config_dict['semaine_minimum'] = p.get('semaine_minimum', 1)"**Checklist de validation** :
+
+   ```1. ✅ Charger un fichier YAML **sans** `semaine_min` :
+
+   ```bash
+
+2. ✅ **Vérifier `configs/default.yaml`** :   python main.py configs/config_volley.yaml
+
+   ```yaml   ```
+
+   # Ouvrir configs/default.yaml et chercher:   → Doit fonctionner sans erreur, utiliser `semaine_min=1` par défaut
+
+   planification:
+
+     semaine_minimum: 1  # Doit être présent avec valeur 12. ✅ Créer un fichier YAML de test **avec** `semaine_min` :
+
+   ```   ```yaml
+
+   # configs/test_semaine_min.yaml
+
+3. ✅ **Vérifier le chargement YAML** :   nb_semaines: 26
+
+   ```bash   semaine_min: 5
+
+   python -c "from core.config import Config; c = Config.from_yaml('configs/default.yaml'); print(f'semaine_minimum = {c.semaine_minimum}')"   equipes: []
+
+   # Doit afficher: semaine_minimum = 1   gymnases: []
+
+   ```   creneaux: []
+
+   ```
+
+4. ✅ **Tester avec config personnalisé** :   
+
+   ```bash   ```bash
+
+   # Créer fichier test   python main.py configs/test_semaine_min.yaml
+
+   echo "fichiers:   ```
+
+     donnees: 'test.xlsx'   → Doit charger correctement `semaine_min=5`
+
+     sortie: 'test.xlsx'
+
+   planification:3. ✅ Vérifier en console Python :
+
+     nb_semaines: 20   ```python
+
+     strategie: 'greedy'   from core.config import load_config
+
+     semaine_minimum: 7" > /tmp/test_config.yaml   
+
+      # Sans semaine_min
+
+   python -c "from core.config import Config; c = Config.from_yaml('/tmp/test_config.yaml'); print(f'semaine_minimum = {c.semaine_minimum}')"   config1 = load_config('configs/config_volley.yaml')
+
+   # Doit afficher: semaine_minimum = 7   assert config1.semaine_min == 1
+
+   ```   
+
+   # Avec semaine_min
+
+5. ✅ **Tester rétrocompatibilité (sans semaine_minimum)** :   config2 = load_config('configs/test_semaine_min.yaml')
+
+   ```bash   assert config2.semaine_min == 5
+
+   echo "fichiers:   ```
+
+     donnees: 'test.xlsx'
+
+     sortie: 'test.xlsx'4. ✅ Vérifier que les solvers peuvent accéder au champ :
+
+   planification:   ```python
+
+     strategie: 'greedy'" > /tmp/test_minimal.yaml   from core.config import load_config
+
+      config = load_config('configs/config_volley.yaml')
+
+   python -c "from core.config import Config; c = Config.from_yaml('/tmp/test_minimal.yaml'); print(f'semaine_minimum = {c.semaine_minimum}')"   print(f"Semaine min: {config.semaine_min}")  # Doit afficher 1
+
+   # Doit afficher: semaine_minimum = 1 (valeur de default.yaml)   ```
+
+   ```
+
+**Commandes de test** :
+
+**Checklist de validation CLI** :```bash
+
+# Test CLI avec config sans semaine_min (doit fonctionner)
+
+1. ✅ Charger un fichier YAML **sans** `semaine_minimum` :python main.py configs/config_volley.yaml
+
+   ```bash
+
+   python main.py configs/config_volley.yaml# Test CLI avec config personnalisée
+
+   ```echo "nb_semaines: 20
+
+   → Doit fonctionner sans erreur, utiliser `semaine_minimum=1` par défautsemaine_min: 3
+
+equipes: []
+
+2. ✅ Vérifier dans le code que la contrainte sera respectée (Tâche 3.1) :gymnases: []
+
+   - Les solvers devront filtrer `creneaux_disponibles` pour exclure `semaine < config.semaine_minimum`creneaux: []" > /tmp/test_config.yaml
+
+   - Ajouter une note/TODO dans le code si pas encore implémentépython main.py /tmp/test_config.yaml
+
+```
+
+---
+
+## Questions
+
+## Questions- Faut-il valider que `semaine_min <= nb_semaines` ? (actuellement pas de validation)
+
+- Faut-il permettre `semaine_min = 0` ou forcer >= 1 ?
+
+**Questions critiques à poser si quelque chose n'est pas clair** :- Faut-il afficher un warning si `semaine_min > 1` dans le CLI pour informer l'utilisateur ?
+
+- Faut-il documenter cette contrainte dans les fichiers YAML d'exemple ?
+
+1. **Le champ existe-t-il déjà dans `core/config.py` ?**
+
+   - Si OUI : Vérifier qu'il n'y a pas de valeur par défaut hardcodée (doit être chargée du YAML)## Documentation
+
+   - Si NON : L'ajouter selon les instructions ci-dessusRester concis : ajouter un commentaire inline sur le champ `semaine_min` dans la dataclass. Documenter brièvement dans les fichiers YAML d'exemple si pertinent (ex: `# semaine_min: 5  # Optionnel - Semaine minimale de planification (défaut: 1)`).
+
+
+2. **Le nom du champ est-il cohérent ?**
+   - `semaine_minimum` dans YAML/Config Python
+   - Faut-il utiliser `semaine_min` dans la base de données web pour cohérence ?
+
+3. **Faut-il valider `semaine_minimum <= nb_semaines` ?**
+   - Actuellement pas de validation stricte
+   - Faut-il ajouter une validation dans `Config.from_yaml()` ?
+   - Ou laisser les solvers gérer les valeurs invalides ?
+
+4. **Faut-il permettre `semaine_minimum = 0` ?**
+   - Ou forcer >= 1 (les semaines commencent à 1) ?
+
+5. **Faut-il afficher un warning dans le CLI ?**
+   - Si `semaine_minimum > 1`, informer l'utilisateur que les premières semaines seront ignorées ?
+
+6. **Faut-il documenter dans les fichiers YAML d'exemple ?**
+   - Ajouter un commentaire dans `configs/default.yaml` expliquant le cas d'usage ?
+
+---
+
+## Documentation
+
+**Ce qui doit être documenté** :
+
+1. **Dans `configs/default.yaml`** :
+   ```yaml
+   planification:
+     semaine_minimum: 1  # Semaine minimum pour planification (défaut: 1, utile pour replanification en cours de saison)
+   ```
+
+2. **Dans `core/config.py` (docstring de la classe Config)** :
+   ```python
+   @dataclass
+   class Config:
+       """
+       Configuration principale de PyCalendar.
+       
+       Toutes les valeurs par défaut sont dans configs/default.yaml.
+       Aucune valeur hardcodée ici pour éviter conflits.
+       
+       semaine_minimum: Semaine minimale de planification (ex: 5 = ignorer semaines 1-4)
+                        Utile pour replanification en cours de saison.
+       """
+   ```
+
+3. **Dans le README ou guide utilisateur** :
+   - Expliquer le cas d'usage de `semaine_minimum`
+   - Exemple : "Reprise après pause, semaines 1-4 déjà jouées"
+
+Rester concis : documenter uniquement le nécessaire pour comprendre le paramètre et son utilisation.

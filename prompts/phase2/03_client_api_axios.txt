@@ -1,0 +1,898 @@
+# Prompt 2.3 : Client API avec Axios# Prompt 2.3 : Client API – Axios
+
+
+
+## Contexte global## Contexte global
+
+PyCalendar V2 utilise Axios pour communiquer avec l'API FastAPI. Les fonctions API doivent être typées avec TypeScript et couvrir tous les endpoints (projects, teams, venues, matches).PyCalendar V2 utilise une API REST pour la gestion des données. Le frontend doit communiquer efficacement avec le backend via un client HTTP bien organisé, centralisé et facilement extensible.
+
+
+
+**RAPPEL - Double configuration** :## Contexte technique
+
+- **GET /projects/{id}** : Retourne config_yaml_data et config_excel_dataCette tâche concerne la création d'un client Axios configuré pour interagir avec l'API backend, en respectant la structure des endpoints et en assurant la gestion correcte des erreurs et des réponses.
+
+- **POST /projects** : Accepte config_yaml_path, config_excel_path, config_yaml_data, config_excel_data
+
+- **GET /projects/{id}/stats** : Retourne statistiques (nb_equipes, nb_matchs, etc.)## Résumé du travail précédent
+
+- Le backend expose une API REST sur port 8000 (`backend/api/`).
+
+## Contexte technique- Les types TypeScript sont définis (`frontend/src/types/`).
+
+Cette tâche crée les fonctions API Axios typées pour tous les endpoints backend. Ces fonctions seront utilisées par les hooks React Query (Tâche 2.4).- Le projet React est configuré avec proxy Vite (`/api` → `http://localhost:8000`).
+
+
+
+## Résumé du travail précédent## Objectifs
+
+- Backend expose endpoints REST complets (Tâche 1.5)- Créer un client Axios de base configuré avec baseURL et headers.
+
+- Types TypeScript créés pour Project, Team, Venue, Match (Tâche 2.2)- Définir les méthodes pour chaque endpoint API (Matches, Projects, Teams, Venues).
+
+- Instance Axios configurée avec proxy /api (Tâche 2.1)- S'assurer de la gestion correcte des erreurs et des réponses.
+
+- Prévoir l'extensibilité pour de nouveaux endpoints ou configurations.
+
+## Objectifs
+
+1. Créer fonctions API typées pour chaque endpoint## Détails techniques
+
+2. Utiliser instance Axios centralisée
+
+3. Gérer erreurs de manière cohérente### Sous-tâche 1 : Client Axios de base
+
+4. Documenter paramètres et retours**Fichier à créer** : `frontend/src/api/client.ts`
+
+5. Exporter tout depuis services/index.ts
+
+**Configuration requise** :
+
+## Détails techniques- Créer instance Axios avec `axios.create()`
+
+- `baseURL: '/api'` (proxy Vite redirige vers backend)
+
+### Client API Projects- Headers par défaut : `{ 'Content-Type': 'application/json' }`
+
+- (Optionnel) Interceptors pour logging, gestion erreurs globale, tokens auth
+
+**📁 Fichier à créer** : `frontend/src/services/projectsApi.ts`
+
+**Exemple** :
+
+**Contenu complet** :```typescript
+
+import axios from 'axios'
+
+```typescript
+
+/**const apiClient = axios.create({
+
+ * API client pour les projets.  baseURL: '/api',
+
+ *   headers: {
+
+ * Endpoints backend :    'Content-Type': 'application/json'
+
+ * - GET    /projects                : Liste projets  }
+
+ * - POST   /projects                : Créer projet})
+
+ * - GET    /projects/{id}           : Détails projet
+
+ * - PUT    /projects/{id}           : Mettre à jour projet// Optionnel : Interceptor pour logging
+
+ * - DELETE /projects/{id}           : Supprimer projet (cascade)apiClient.interceptors.response.use(
+
+ * - GET    /projects/{id}/stats     : Statistiques projet  response => response,
+
+ */  error => {
+
+    console.error('API Error:', error.response?.data || error.message)
+
+import api from './api'    return Promise.reject(error)
+
+import type { Project, ProjectCreate, ProjectStats } from '@types'  }
+
+)
+
+/**
+
+ * Liste tous les projets.export default apiClient
+
+ */```
+
+export async function getProjects(): Promise<Project[]> {
+
+  const response = await api.get<Project[]>('/projects')### Sous-tâche 2 : Endpoints Matches
+
+  return response.data**Fichier à créer** : `frontend/src/api/endpoints/matches.ts`
+
+}
+
+**Import** : `import apiClient from '../client'` et types depuis `@/types/match`
+
+/**
+
+ * Récupère un projet par ID.**Objet export** : `matchesApi`
+
+ * 
+
+ * Inclut config_yaml_data et config_excel_data.**Méthodes requises** :
+
+ */
+
+export async function getProject(id: number): Promise<Project> {1. **list(projectId?: number): Promise<Match[]>** :
+
+  const response = await api.get<Project>(`/projects/${id}`)   - GET `/matches/`
+
+  return response.data   - Query params : `{ project_id: projectId }` si fourni
+
+}   - Retourner `response.data`
+
+
+
+/**2. **get(id: number): Promise<Match>** :
+
+ * Crée un nouveau projet.   - GET `/matches/${id}`
+
+ *    - Retourner `response.data`
+
+ * IMPORTANT : config_yaml_data et config_excel_data doivent être fournis.
+
+ * Typiquement, ces données proviennent du service de synchronisation backend3. **create(match: MatchCreate): Promise<Match>** :
+
+ * (import depuis YAML + Excel).   - POST `/matches/`
+
+ */   - Body : match
+
+export async function createProject(data: ProjectCreate): Promise<Project> {   - Retourner `response.data`
+
+  const response = await api.post<Project>('/projects', data)
+
+  return response.data4. **update(id: number, data: MatchUpdate): Promise<Match>** :
+
+}   - PUT `/matches/${id}`
+
+   - Body : data
+
+/**   - Retourner `response.data`
+
+ * Met à jour un projet existant.
+
+ */5. **move(id: number, creneau: MatchMove): Promise<Match>** :
+
+export async function updateProject(   - POST `/matches/${id}/move`
+
+  id: number,    - Body : creneau
+
+  data: Partial<ProjectCreate>   - Retourner `response.data`
+
+): Promise<Project> {
+
+  const response = await api.put<Project>(`/projects/${id}`, data)6. **fix(id: number): Promise<{ message: string; match: Match }>** :
+
+  return response.data   - POST `/matches/${id}/fix`
+
+}   - Retourner `response.data`
+
+
+
+/**7. **unfix(id: number): Promise<{ message: string; match: Match }>** :
+
+ * Supprime un projet (cascade : teams, venues, matches).   - POST `/matches/${id}/unfix`
+
+ */   - Retourner `response.data`
+
+export async function deleteProject(id: number): Promise<void> {
+
+  await api.delete(`/projects/${id}`)8. **delete(id: number): Promise<void>** :
+
+}   - DELETE `/matches/${id}`
+
+   - Pas de retour (status 204)
+
+/**
+
+ * Récupère les statistiques d'un projet.**Exemple structure** :
+
+ * ```typescript
+
+ * Retourne :import apiClient from '../client'
+
+ * - nb_equipes, nb_gymnases, nb_matchsimport type { Match, MatchCreate, MatchUpdate, MatchMove } from '@/types/match'
+
+ * - nb_matchs_planifies, nb_matchs_fixes
+
+ * - taux_planification (%)export const matchesApi = {
+
+ */  list: async (projectId?: number): Promise<Match[]> => {
+
+export async function getProjectStats(id: number): Promise<ProjectStats> {    const params = projectId ? { project_id: projectId } : {}
+
+  const response = await api.get<ProjectStats>(`/projects/${id}/stats`)    const { data } = await apiClient.get('/matches/', { params })
+
+  return response.data    return data
+
+}  },
+
+```  
+
+  get: async (id: number): Promise<Match> => {
+
+**Points clés** :    const { data } = await apiClient.get(`/matches/${id}`)
+
+- **getProjects()** : Liste complète (pas de pagination pour l'instant)    return data
+
+- **getProject(id)** : Retourne config_yaml_data et config_excel_data  },
+
+- **createProject(data)** : Accepte ProjectCreate avec configs  
+
+- **deleteProject(id)** : Suppression en cascade (teams, venues, matches)  // ... autres méthodes
+
+- **getProjectStats(id)** : Statistiques complètes}
+
+```
+
+---
+
+### Sous-tâche 3 : Endpoints Projects
+
+### Client API Teams**Fichier à créer** : `frontend/src/api/endpoints/projects.ts`
+
+
+
+**📁 Fichier à créer** : `frontend/src/services/teamsApi.ts`**Méthodes requises** :
+
+- `list(): Promise<Project[]>` → GET `/projects/`
+
+**Contenu complet** :- `get(id: number): Promise<Project>` → GET `/projects/${id}`
+
+- `create(project: ProjectCreate): Promise<Project>` → POST `/projects/`
+
+```typescript- `update(id: number, data: ProjectUpdate): Promise<Project>` → PUT `/projects/${id}`
+
+/**- `delete(id: number): Promise<void>` → DELETE `/projects/${id}`
+
+ * API client pour les équipes.- `getStats(id: number): Promise<ProjectStats>` → GET `/projects/${id}/stats`
+
+ * 
+
+ * Endpoints backend :**Type ProjectStats** (à définir dans `@/types/project.ts`) :
+
+ * - GET    /projects/{project_id}/teams     : Liste équipes d'un projet```typescript
+
+ * - POST   /projects/{project_id}/teams     : Créer équipeexport interface ProjectStats {
+
+ * - GET    /teams/{id}                      : Détails équipe  nb_matchs_total: number
+
+ * - PUT    /teams/{id}                      : Mettre à jour équipe  nb_matchs_planifies: number
+
+ * - DELETE /teams/{id}                      : Supprimer équipe  nb_matchs_fixes: number
+
+ */  nb_matchs_a_planifier: number
+
+}
+
+import api from './api'```
+
+import type { Team, TeamCreate, TeamQueryParams } from '@types'
+
+### Sous-tâche 4 : Endpoints Teams et Venues
+
+/****Fichiers à créer** : `frontend/src/api/endpoints/teams.ts`, `venues.ts`
+
+ * Liste les équipes d'un projet.
+
+ * **Méthodes CRUD standard** :
+
+ * Filtres optionnels : poule, niveau, categorie, institution- list, get, create, update, delete
+
+ */- Filtrage par project_id si pertinent (query param)
+
+export async function getTeams(
+
+  projectId: number, ### Fichier index pour exports centralisés
+
+  params?: TeamQueryParams**Fichier à créer** : `frontend/src/api/index.ts`
+
+): Promise<Team[]> {
+
+  const response = await api.get<Team[]>(`/projects/${projectId}/teams`, { params })```typescript
+
+  return response.dataexport { default as apiClient } from './client'
+
+}export * from './endpoints/matches'
+
+export * from './endpoints/projects'
+
+/**export * from './endpoints/teams'
+
+ * Récupère une équipe par ID.export * from './endpoints/venues'
+
+ */```
+
+export async function getTeam(id: number): Promise<Team> {
+
+  const response = await api.get<Team>(`/teams/${id}`)### Consignes d'organisation
+
+  return response.data- Destructurer `{ data }` depuis réponse Axios pour typage propre
+
+}- Typer tous les retours avec `Promise<T>`
+
+- Utiliser query params pour filtrage (ex: `project_id`)
+
+/**- Gérer les erreurs au niveau global (interceptors) ou spécifique (try/catch dans hooks)
+
+ * Crée une nouvelle équipe.- baseURL relatif `/api` fonctionne grâce au proxy Vite en dev
+
+ * - En production, utiliser variable d'environnement (`import.meta.env.VITE_API_URL`)
+
+ * Note : Généralement créée automatiquement lors de l'import Excel,
+
+ * rarement manuellement.### Impact et liens
+
+ */- Les hooks React Query (`frontend/src/hooks/`) utiliseront ces fonctions API.
+
+export async function createTeam(data: TeamCreate): Promise<Team> {- Les types TypeScript (`frontend/src/types/`) assurent la cohérence.
+
+  const response = await api.post<Team>(`/projects/${data.project_id}/teams`, data)- Le proxy Vite (`vite.config.ts`) redirige `/api` vers le backend.
+
+  return response.data
+
+}## À faire/vérifier
+
+- Créer le client Axios de base avec configuration
+
+/**- Implémenter tous les endpoints pour Matches, Projects, Teams, Venues
+
+ * Met à jour une équipe existante.- Créer le fichier index.ts pour exports centralisés
+
+ */- Tester les appels API :
+
+export async function updateTeam(  - Démarrer backend : `uvicorn backend.api.main:app --reload`
+
+  id: number,   - Démarrer frontend : `npm run dev`
+
+  data: Partial<TeamCreate>  - Importer et appeler : `import { matchesApi } from '@/api'` puis `matchesApi.list()`
+
+): Promise<Team> {  - Vérifier les réponses dans la console navigateur
+
+  const response = await api.put<Team>(`/teams/${id}`, data)- Tester la gestion des erreurs (endpoint invalide, 404, etc.)
+
+  return response.data
+
+}## Questions
+
+Poser des questions si des points sur la configuration Axios, les interceptors, le typage des réponses ou l'intégration ne sont pas clairs.
+
+/**
+
+ * Supprime une équipe.## Documentation
+
+ */Rester concis, ne pas ajouter de documentation excessive. Commenter brièvement les méthodes complexes ou les interceptors si besoin.
+
+export async function deleteTeam(id: number): Promise<void> {
+  await api.delete(`/teams/${id}`)
+}
+```
+
+**Points clés** :
+- **getTeams(projectId, params)** : Filtrage par poule, niveau, catégorie, institution
+- **Source** : Équipes générées depuis feuille Excel "Equipes"
+- **Création manuelle** : Rare, généralement importées via Excel
+
+---
+
+### Client API Venues
+
+**📁 Fichier à créer** : `frontend/src/services/venuesApi.ts`
+
+**Contenu complet** :
+
+```typescript
+/**
+ * API client pour les gymnases.
+ * 
+ * Endpoints backend :
+ * - GET    /projects/{project_id}/venues     : Liste gymnases d'un projet
+ * - POST   /projects/{project_id}/venues     : Créer gymnase
+ * - GET    /venues/{id}                      : Détails gymnase
+ * - PUT    /venues/{id}                      : Mettre à jour gymnase
+ * - DELETE /venues/{id}                      : Supprimer gymnase
+ */
+
+import api from './api'
+import type { Venue, VenueCreate, VenueQueryParams } from '@types'
+
+/**
+ * Liste les gymnases d'un projet.
+ */
+export async function getVenues(
+  projectId: number, 
+  params?: VenueQueryParams
+): Promise<Venue[]> {
+  const response = await api.get<Venue[]>(`/projects/${projectId}/venues`, { params })
+  return response.data
+}
+
+/**
+ * Récupère un gymnase par ID.
+ */
+export async function getVenue(id: number): Promise<Venue> {
+  const response = await api.get<Venue>(`/venues/${id}`)
+  return response.data
+}
+
+/**
+ * Crée un nouveau gymnase.
+ * 
+ * Note : Généralement créé automatiquement lors de l'import Excel,
+ * rarement manuellement.
+ */
+export async function createVenue(data: VenueCreate): Promise<Venue> {
+  const response = await api.post<Venue>(`/projects/${data.project_id}/venues`, data)
+  return response.data
+}
+
+/**
+ * Met à jour un gymnase existant.
+ */
+export async function updateVenue(
+  id: number, 
+  data: Partial<VenueCreate>
+): Promise<Venue> {
+  const response = await api.put<Venue>(`/venues/${id}`, data)
+  return response.data
+}
+
+/**
+ * Supprime un gymnase.
+ */
+export async function deleteVenue(id: number): Promise<void> {
+  await api.delete(`/venues/${id}`)
+}
+```
+
+**Points clés** :
+- **getVenues(projectId)** : Filtre par projet uniquement
+- **Source** : Gymnases générés depuis feuille Excel "Gymnases"
+- **Création manuelle** : Rare, généralement importés via Excel
+
+---
+
+### Client API Matches
+
+**📁 Fichier à créer** : `frontend/src/services/matchesApi.ts`
+
+**Contenu complet** :
+
+```typescript
+/**
+ * API client pour les matchs.
+ * 
+ * Endpoints backend :
+ * - GET    /projects/{project_id}/matches     : Liste matchs d'un projet
+ * - POST   /projects/{project_id}/matches     : Créer match
+ * - GET    /matches/{id}                      : Détails match
+ * - PUT    /matches/{id}                      : Mettre à jour match
+ * - DELETE /matches/{id}                      : Supprimer match
+ * - POST   /matches/{id}/move                 : Déplacer match vers nouvelle semaine
+ * - POST   /matches/{id}/fix                  : Fixer match (non modifiable)
+ * - POST   /matches/{id}/unfix                : Défixer match (modifiable)
+ */
+
+import api from './api'
+import type { 
+  Match, 
+  MatchCreate, 
+  MatchUpdate, 
+  MatchMovePayload,
+  MatchQueryParams 
+} from '@types'
+
+/**
+ * Liste les matchs d'un projet.
+ * 
+ * Filtres optionnels :
+ * - semaine : Matchs d'une semaine spécifique
+ * - equipe_id : Matchs d'une équipe (domicile ou extérieur)
+ * - gymnase_id : Matchs dans un gymnase
+ * - est_fixe : Matchs fixes ou non
+ * - include_relations : Inclure equipe_domicile, equipe_exterieur, gymnase
+ */
+export async function getMatches(
+  projectId: number, 
+  params?: MatchQueryParams
+): Promise<Match[]> {
+  const response = await api.get<Match[]>(`/projects/${projectId}/matches`, { params })
+  return response.data
+}
+
+/**
+ * Récupère un match par ID.
+ * 
+ * @param includeRelations Inclure equipe_domicile, equipe_exterieur, gymnase
+ */
+export async function getMatch(
+  id: number, 
+  includeRelations = true
+): Promise<Match> {
+  const response = await api.get<Match>(`/matches/${id}`, {
+    params: { include_relations: includeRelations }
+  })
+  return response.data
+}
+
+/**
+ * Crée un nouveau match.
+ * 
+ * Note : Généralement créé automatiquement par MultiPoolGenerator,
+ * rarement manuellement.
+ */
+export async function createMatch(data: MatchCreate): Promise<Match> {
+  const response = await api.post<Match>(`/projects/${data.project_id}/matches`, data)
+  return response.data
+}
+
+/**
+ * Met à jour un match existant.
+ * 
+ * Permet de modifier :
+ * - gymnase_id
+ * - semaine, jour_semaine, heure_debut
+ * - est_fixe
+ */
+export async function updateMatch(
+  id: number, 
+  data: MatchUpdate
+): Promise<Match> {
+  const response = await api.put<Match>(`/matches/${id}`, data)
+  return response.data
+}
+
+/**
+ * Supprime un match.
+ */
+export async function deleteMatch(id: number): Promise<void> {
+  await api.delete(`/matches/${id}`)
+}
+
+/**
+ * Déplace un match vers une nouvelle semaine.
+ * 
+ * Validation backend :
+ * - Match non fixé (est_fixe = false)
+ * - Semaine actuelle >= semaine_min du projet
+ * 
+ * @throws Error si match non modifiable
+ */
+export async function moveMatch(
+  id: number, 
+  payload: MatchMovePayload
+): Promise<Match> {
+  const response = await api.post<Match>(`/matches/${id}/move`, payload)
+  return response.data
+}
+
+/**
+ * Fixe un match (rend non modifiable par le solver).
+ * 
+ * Un match fixé :
+ * - Ne peut plus être déplacé par le solver
+ * - Peut toujours être modifié manuellement via updateMatch
+ */
+export async function fixMatch(id: number): Promise<Match> {
+  const response = await api.post<Match>(`/matches/${id}/fix`)
+  return response.data
+}
+
+/**
+ * Défixe un match (rend modifiable par le solver).
+ */
+export async function unfixMatch(id: number): Promise<Match> {
+  const response = await api.post<Match>(`/matches/${id}/unfix`)
+  return response.data
+}
+```
+
+**Points clés** :
+- **getMatches(projectId, params)** : Filtres multiples (semaine, équipe, gymnase, est_fixe)
+- **include_relations** : Charger équipes et gymnase dans la réponse
+- **moveMatch(id, payload)** : Endpoint spécial pour déplacement (validation backend)
+- **fixMatch/unfixMatch** : Gestion matchs fixes (UI web, pas Excel)
+
+---
+
+### Export centralisé
+
+**📁 Fichier à créer** : `frontend/src/services/index.ts`
+
+**Contenu complet** :
+
+```typescript
+/**
+ * Export centralisé des API clients.
+ * 
+ * Usage :
+ *   import { projectsApi, matchesApi } from '@services'
+ *   
+ *   const projects = await projectsApi.getProjects()
+ *   const matches = await matchesApi.getMatches(projectId)
+ */
+
+import * as projectsApi from './projectsApi'
+import * as teamsApi from './teamsApi'
+import * as venuesApi from './venuesApi'
+import * as matchesApi from './matchesApi'
+
+export {
+  projectsApi,
+  teamsApi,
+  venuesApi,
+  matchesApi,
+}
+
+// Export types si besoin
+export type { AxiosError } from 'axios'
+```
+
+---
+
+### Gestion d'erreurs
+
+**📁 Fichier à créer** : `frontend/src/utils/apiHelpers.ts`
+
+**Contenu complet** :
+
+```typescript
+/**
+ * Utilitaires pour gestion des erreurs API.
+ */
+
+import { AxiosError } from 'axios'
+import type { ApiError } from '@types'
+
+/**
+ * Extrait le message d'erreur depuis une erreur Axios.
+ * 
+ * FastAPI retourne : { detail: "Message d'erreur" }
+ */
+export function getErrorMessage(error: unknown): string {
+  if (error instanceof AxiosError) {
+    const apiError = error.response?.data as ApiError | undefined
+    if (apiError?.detail) {
+      return apiError.detail
+    }
+    return error.message
+  }
+  
+  if (error instanceof Error) {
+    return error.message
+  }
+  
+  return 'Une erreur inconnue est survenue'
+}
+
+/**
+ * Vérifie si l'erreur est une erreur 404 (Not Found).
+ */
+export function isNotFoundError(error: unknown): boolean {
+  if (error instanceof AxiosError) {
+    return error.response?.status === 404
+  }
+  return false
+}
+
+/**
+ * Vérifie si l'erreur est une erreur 400 (Bad Request).
+ */
+export function isBadRequestError(error: unknown): boolean {
+  if (error instanceof AxiosError) {
+    return error.response?.status === 400
+  }
+  return false
+}
+
+/**
+ * Vérifie si l'erreur est une erreur de validation (422 Unprocessable Entity).
+ */
+export function isValidationError(error: unknown): boolean {
+  if (error instanceof AxiosError) {
+    return error.response?.status === 422
+  }
+  return false
+}
+```
+
+**Points clés** :
+- **getErrorMessage(error)** : Extrait message depuis FastAPI { detail: "..." }
+- **isNotFoundError** : Vérifier 404 (ressource non trouvée)
+- **isBadRequestError** : Vérifier 400 (match non modifiable, etc.)
+- **isValidationError** : Vérifier 422 (données invalides)
+
+---
+
+### Exemple d'utilisation
+
+**📁 Fichier exemple** : `frontend/src/examples/apiUsage.ts`
+
+**Contenu** :
+
+```typescript
+import { projectsApi, matchesApi } from '@services'
+import { getErrorMessage } from '@utils/apiHelpers'
+
+async function exampleUsage() {
+  try {
+    // 1. Lister projets
+    const projects = await projectsApi.getProjects()
+    console.log('Projets:', projects)
+    
+    // 2. Récupérer détails projet (avec config YAML + Excel)
+    const project = await projectsApi.getProject(1)
+    console.log('Config YAML:', project.config_yaml_data)
+    console.log('Config Excel:', project.config_excel_data)
+    
+    // 3. Récupérer stats
+    const stats = await projectsApi.getProjectStats(1)
+    console.log('Stats:', stats)
+    
+    // 4. Lister matchs d'une semaine
+    const matches = await matchesApi.getMatches(1, { 
+      semaine: 3, 
+      include_relations: true 
+    })
+    console.log('Matchs semaine 3:', matches)
+    
+    // 5. Déplacer un match
+    const movedMatch = await matchesApi.moveMatch(1, { nouvelle_semaine: 5 })
+    console.log('Match déplacé:', movedMatch)
+    
+    // 6. Fixer un match
+    const fixedMatch = await matchesApi.fixMatch(1)
+    console.log('Match fixé:', fixedMatch)
+    
+  } catch (error) {
+    const message = getErrorMessage(error)
+    console.error('Erreur API:', message)
+  }
+}
+```
+
+---
+
+## À faire/vérifier
+
+**Checklist de développement** :
+
+1. ✅ Créer `services/projectsApi.ts` avec :
+   - getProjects(), getProject(id), createProject(data)
+   - updateProject(id, data), deleteProject(id)
+   - getProjectStats(id)
+
+2. ✅ Créer `services/teamsApi.ts` avec :
+   - getTeams(projectId, params), getTeam(id)
+   - createTeam(data), updateTeam(id, data), deleteTeam(id)
+
+3. ✅ Créer `services/venuesApi.ts` avec :
+   - getVenues(projectId, params), getVenue(id)
+   - createVenue(data), updateVenue(id, data), deleteVenue(id)
+
+4. ✅ Créer `services/matchesApi.ts` avec :
+   - getMatches(projectId, params), getMatch(id, includeRelations)
+   - createMatch(data), updateMatch(id, data), deleteMatch(id)
+   - moveMatch(id, payload), fixMatch(id), unfixMatch(id)
+
+5. ✅ Créer `services/index.ts` :
+   - Export centralisé projectsApi, teamsApi, venuesApi, matchesApi
+
+6. ✅ Créer `utils/apiHelpers.ts` avec :
+   - getErrorMessage(error)
+   - isNotFoundError, isBadRequestError, isValidationError
+
+**Checklist de validation** :
+
+1. ✅ **Vérifier imports** :
+   ```typescript
+   import { projectsApi, matchesApi } from '@services'
+   import { getErrorMessage } from '@utils/apiHelpers'
+   // Pas d'erreur TypeScript
+   ```
+
+2. ✅ **Test avec backend running** :
+   ```bash
+   # Terminal 1 : Backend
+   uvicorn backend.api.main:app --reload
+   
+   # Terminal 2 : Frontend
+   cd frontend && npm run dev
+   ```
+
+3. ✅ **Test dans console navigateur** :
+   ```javascript
+   // Ouvrir http://localhost:5173
+   // Console navigateur :
+   
+   const { projectsApi } = await import('/src/services/index.ts')
+   const projects = await projectsApi.getProjects()
+   console.log(projects)
+   ```
+
+4. ✅ **Test gestion d'erreurs** :
+   ```javascript
+   const { matchesApi } = await import('/src/services/index.ts')
+   const { getErrorMessage } = await import('/src/utils/apiHelpers.ts')
+   
+   try {
+     await matchesApi.moveMatch(999, { nouvelle_semaine: 5 })
+   } catch (error) {
+     console.log(getErrorMessage(error))  // Doit afficher message FastAPI
+   }
+   ```
+
+5. ✅ **Vérifier TypeScript strict** :
+   ```bash
+   npx tsc --noEmit
+   # Aucune erreur
+   ```
+
+**Commandes de test rapide** :
+```bash
+# Vérifier types
+npx tsc --noEmit
+
+# Vérifier imports services
+grep -r "from '@services'" frontend/src/
+
+# Lancer frontend + backend
+uvicorn backend.api.main:app --reload &
+cd frontend && npm run dev
+```
+
+---
+
+## Questions
+
+**Questions critiques à poser si quelque chose n'est pas clair** :
+
+1. **Pagination** :
+   - Faut-il implémenter la pagination pour getProjects, getTeams, getMatches ?
+   - Ou liste complète acceptable pour V2 ?
+   - Si pagination : offset/limit ou cursor-based ?
+
+2. **Filtres avancés** :
+   - Faut-il des filtres combinés (ex: niveau ET catégorie) ?
+   - Faut-il un endpoint de recherche globale (/search?q=...) ?
+   - Faut-il trier les résultats (sort_by=nom, sort_order=asc) ?
+
+3. **Cache et invalidation** :
+   - Après moveMatch, faut-il invalider cache de getMatches ?
+   - Après createProject, faut-il invalider cache de getProjects ?
+   - Ces invalidations seront gérées par React Query (Tâche 2.4) ?
+
+4. **Relations** :
+   - include_relations doit-il être true par défaut ?
+   - Faut-il des endpoints séparés (/matches/{id}/with_relations) ?
+   - Y a-t-il un risque de performance avec trop de relations ?
+
+5. **Erreurs spécifiques** :
+   - Faut-il des types d'erreurs personnalisés (MatchNotModifiableError, etc.) ?
+   - Faut-il un interceptor global pour gérer 401 (non authentifié) ?
+   - Faut-il un retry automatique sur erreurs 5xx ?
+
+6. **Optimistic updates** :
+   - Faut-il retourner l'objet modifié depuis le backend (déjà fait) ?
+   - Ou faire des optimistic updates côté frontend (React Query) ?
+
+---
+
+## Documentation
+
+Rester concis : documenter uniquement les choix non évidents :
+- **moveMatch** : Expliquer validation backend (est_fixe, semaine_min)
+- **include_relations** : Expliquer qu'il charge équipes/gymnase dans réponse
+- **getErrorMessage** : Expliquer extraction depuis FastAPI { detail: "..." }
+- **Proxy /api** : Rappeler redirection Vite vers http://localhost:8000
+
+Éviter la sur-documentation des concepts Axios/REST standards.

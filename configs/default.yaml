@@ -20,6 +20,8 @@ planification:
   taille_poule_max: 6
   strategie: "cpsat"  # "greedy" ou "cpsat"
   fallback_greedy: true
+  semaine_minimum: 1  # Semaine minimum pour la planification (utile pour replanification en cours de saison)
+  respecter_matchs_fixes: true  # Si True, les matchs marqués comme "fixés" ne seront pas replanifiés
 
 # Configuration Greedy
 greedy:
@@ -83,9 +85,9 @@ contraintes:
   # Espacement aller-retour (pour poules de type Aller-Retour uniquement)
   # Cette contrainte force un espacement minimum entre les matchs aller et retour
   aller_retour_espacement_actif: true  # Activer/désactiver la contrainte
-  aller_retour_min_semaines: 2  # Espacement minimum souhaité en semaines
-  aller_retour_penalite_meme_semaine: 5000.0  # Pénalité si aller et retour dans même semaine (très élevé)
-  aller_retour_penalite_consecutives: 2000.0  # Pénalité si aller et retour dans semaines consécutives
+  aller_retour_min_semaines: 3  # Espacement minimum souhaité en semaines
+  aller_retour_penalite_meme_semaine: 300.0  # Pénalité si aller et retour dans même semaine (très élevé)
+  aller_retour_penalite_consecutives: 100.0  # Pénalité si aller et retour dans semaines consécutives
 
 # Paramètres avancés
 extra:

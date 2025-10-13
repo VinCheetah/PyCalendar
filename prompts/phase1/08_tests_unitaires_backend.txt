@@ -1,0 +1,1243 @@
+# Prompt 1.8 : Tests Unitaires Backend# Prompt 1.8 : Tests unitaires – Backend
+
+
+
+## Contexte global## Contexte global
+
+PyCalendar V2 utilise pytest pour les tests unitaires du backend. Les tests doivent valider les modèles, services, routes API et la logique métier, en tenant compte de la double configuration (YAML + Excel).PyCalendar V2 doit garantir la fiabilité du backend par des tests unitaires couvrant les modèles de base de données, la logique métier et les endpoints API. Les tests doivent être clairs, organisés, facilement extensibles et maintenables.
+
+
+
+**RAPPEL - Double configuration** :## Contexte technique
+
+- **Fichier YAML** : Hyperparamètres + référence au fichier Excel (configs/default.yaml, configs/config_volley.yaml)Cette tâche concerne la définition et l'organisation des tests unitaires pour le backend, en cohérence avec les évolutions précédentes (modèles, API, service de synchronisation).
+
+- **Fichier Excel** : Données détaillées (7+ feuilles : Equipes, Gymnases, Indispos, Preferences, etc.)
+
+- **Validation** : `actualiser_config.py` valide la structure Excel AVANT import## Résumé du travail précédent
+
+- **Pas de défaut dans .py** : Tous les defaults dans configs/default.yaml- Les modèles SQLAlchemy sont en place (`backend/database/models.py`) avec propriétés calculées.
+
+- Les schémas Pydantic sont définis (`backend/schemas/`).
+
+## Contexte technique- Les routes API sont opérationnelles (`backend/api/routes/`).
+
+Cette tâche crée une suite de tests unitaires complète pour valider :- Les scripts CLI sont créés (`scripts/`).
+
+1. Modèles SQLAlchemy (Project, Team, Venue, Match)- Les besoins de validation et de robustesse sont identifiés.
+
+2. Service de synchronisation (SyncService) avec double config
+
+3. Routes API (projects, teams, venues, matches)## Objectifs
+
+4. Logique métier (matchs fixes, déplacement, contraintes)- Définir des tests unitaires couvrant les cas principaux et les cas limites.
+
+- S'assurer de la clarté, de l'organisation et de l'extensibilité des tests.
+
+## Résumé du travail précédent- Prévoir la maintenance et l'évolution des tests pour de nouvelles fonctionnalités.
+
+- Modèles DB créés avec config_yaml_path, config_excel_path (Tâche 1.3)
+
+- Schémas Pydantic créés avec config_yaml_data, config_excel_data (Tâche 1.4)## Détails techniques
+
+- Routes API complètes avec 8 endpoints matchs (Tâche 1.5)
+
+- SyncService avec validation Excel via actualiser_config.py (Tâche 1.6)### Structure des tests
+
+- Scripts CLI init_db.py et import_excel.py (Tâche 1.7)**Dossiers à créer** : `tests/`, `tests/unit/`
+
+
+
+## Objectifs### Fichier de configuration pytest
+
+1. Créer fixtures réutilisables (DB test, configs YAML/Excel)**Créer** : `tests/conftest.py`
+
+2. Tester modèles SQLAlchemy (relations, cascade delete)
+
+3. Tester SyncService (import, validation Excel, génération matchs)**Fixtures requises** :
+
+4. Tester routes API (CRUD, move, fix, unfix, stats)
+
+5. Assurer couverture > 80% du code backend1. **db_engine** :
+
+   - Créer engine SQLite en mémoire (`:memory:`)
+
+## Détails techniques   - `Base.metadata.create_all(engine)`
+
+   - Yield engine
+
+### Configuration pytest   - Cleanup : `Base.metadata.drop_all(engine)`
+
+
+
+**📁 Fichier à créer** : `backend/tests/conftest.py`2. **db_session** :
+
+   - Utiliser fixture `db_engine`
+
+**Contenu complet** :   - Créer `SessionLocal()` liée à l'engine
+
+   - Yield session
+
+```python   - Close session dans cleanup
+
+"""
+
+Configuration pytest pour PyCalendar backend.3. **sample_project** :
+
+   - Utiliser fixture `db_session`
+
+Définit les fixtures partagées entre tous les tests.   - Créer et commit `models.Project` de test
+
+"""   - Exemple : nom="Test", sport="volleyball", nb_semaines=20
+
+   - Refresh et yield project
+
+import pytest
+
+from pathlib import Path**Consignes** :
+
+from sqlalchemy import create_engine- SQLite in-memory pour rapidité des tests
+
+from sqlalchemy.orm import sessionmaker- Cleanup systématique via yield/teardown
+
+from fastapi.testclient import TestClient- Scope par défaut (function) pour isolation entre tests
+
+import tempfile
+
+import shutil### Tests des modèles
+
+**Fichier à créer** : `tests/unit/test_models.py`
+
+from backend.database.base import Base
+
+from backend.api.main import app**Tests requis** :
+
+from backend.database.engine import get_db
+
+1. **test_create_project** :
+
+# Création DB en mémoire pour tests   - Créer `models.Project` avec nom, sport
+
+SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"   - `db.add()`, `db.commit()`
+
+   - Assert `project.id is not None`
+
+@pytest.fixture(scope="function")   - Assert `project.nom == "Test"`
+
+def test_db():
+
+    """2. **test_create_match** :
+
+    Fixture pour créer DB de test en mémoire.   - Utiliser fixture `sample_project`
+
+       - Créer `models.Match` lié au projet
+
+    Yield:   - Champs : equipe1_nom, equipe2_nom, poule
+
+        Session: Session SQLAlchemy de test   - Pas de créneau (semaine=None)
+
+    """   - `db.add()`, `db.commit()`
+
+    # Créer engine + tables   - Assert `match.id is not None`
+
+    engine = create_engine(   - Assert `match.est_planifie == False`
+
+        SQLALCHEMY_DATABASE_URL,    - Assert `match.est_modifiable == True`
+
+        connect_args={"check_same_thread": False}
+
+    )3. **test_fix_match** :
+
+    Base.metadata.create_all(bind=engine)   - Créer Match avec créneau (semaine=1, horaire="09:00", gymnase="Gym A")
+
+       - Fixer : `match.est_fixe = True`, `match.statut = "fixe"`
+
+    # Créer session   - Commit
+
+    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)   - Assert `match.est_modifiable == False`
+
+    db = TestingSessionLocal()
+
+    4. **test_match_properties** :
+
+    yield db   - Match sans créneau → `est_planifie == False`
+
+       - Ajouter créneau → `est_planifie == True`
+
+    # Cleanup   - Match avec statut "termine" → `est_modifiable == False`
+
+    db.close()
+
+    Base.metadata.drop_all(bind=engine)5. **test_cascade_delete** :
+
+   - Créer Project avec Teams, Venues, Matches
+
+@pytest.fixture(scope="function")   - `db.delete(project)`, `db.commit()`
+
+def client(test_db):   - Vérifier que teams, venues, matches sont aussi supprimés
+
+    """
+
+    Fixture pour créer client FastAPI de test.**Consignes** :
+
+    - Tester les propriétés calculées (est_planifie, est_modifiable)
+
+    Override la dépendance get_db pour utiliser test_db.- Vérifier la logique métier (fixation, statut)
+
+    - Tester les relations et cascade delete
+
+    Yield:
+
+        TestClient: Client FastAPI de test### Tests API (optionnel mais recommandé)
+
+    """**Fichier à créer** : `tests/unit/test_api_matches.py`
+
+    def override_get_db():
+
+        yield test_db**Setup** :
+
+    - Utiliser `TestClient` de FastAPI
+
+    app.dependency_overrides[get_db] = override_get_db- Fixture `client` qui retourne `TestClient(app)`
+
+    - Override dependency `get_db` pour utiliser db_session de test
+
+    with TestClient(app) as c:
+
+        yield c**Tests basiques** :
+
+    
+
+    # Cleanup1. **test_health_endpoint** :
+
+    app.dependency_overrides.clear()   - GET /health
+
+   - Assert status 200
+
+@pytest.fixture(scope="function")   - Assert `{"status": "ok"}`
+
+def config_yaml_file():
+
+    """2. **test_get_matches_empty** :
+
+    Fixture pour créer fichier YAML de test.   - GET /matches/
+
+       - Assert status 200
+
+    Yield:   - Assert `[]`
+
+        Path: Chemin vers YAML temporaire
+
+    """3. **test_create_match** :
+
+    # Créer répertoire temporaire   - POST /matches/ avec MatchCreate
+
+    temp_dir = Path(tempfile.mkdtemp())   - Assert status 201
+
+    yaml_path = temp_dir / "config_test.yaml"   - Assert response contient id, champs corrects
+
+    
+
+    # Contenu YAML minimal (semaine_minimum DANS YAML, pas dans .py)4. **test_move_match** :
+
+    yaml_content = """   - Créer match non fixé
+
+sport: "Volleyball"   - POST /matches/{id}/move avec MatchMove
+
+   - Assert status 200
+
+semaines:   - Assert semaine/horaire/gymnase mis à jour
+
+  semaine_minimum: 2   - Assert statut == "planifie"
+
+  nb_semaines: 10
+
+5. **test_move_fixed_match_fails** :
+
+contraintes:   - Créer match fixé
+
+  poids:   - POST /matches/{id}/move
+
+    respect_repos: 10.0   - Assert status 400
+
+    equilibre_domicile_exterieur: 8.0   - Assert message d'erreur clair
+
+    respect_indisponibilites: 20.0
+
+    respect_preferences: 5.06. **test_fix_unfix_match** :
+
+   - POST /matches/{id}/fix → assert est_fixe=True
+
+solver:   - POST /matches/{id}/unfix → assert est_fixe=False
+
+  strategie: "optimal"
+
+  temps_max_secondes: 300**Consignes** :
+
+- Override dependency get_db pour isolation
+
+fichiers:- Tester les status codes HTTP
+
+  donnees: "test_data.xlsx"- Vérifier les réponses JSON
+
+"""- Tester les cas d'erreur (404, 400)
+
+    
+
+    yaml_path.write_text(yaml_content)### Configuration pytest
+
+    **Créer** : `pytest.ini` (optionnel)
+
+    yield yaml_path
+
+    ```ini
+
+    # Cleanup[pytest]
+
+    shutil.rmtree(temp_dir)testpaths = tests
+
+python_files = test_*.py
+
+@pytest.fixture(scope="function")python_classes = Test*
+
+def config_excel_file():python_functions = test_*
+
+    """```
+
+    Fixture pour créer fichier Excel de test.
+
+    ### Consignes d'organisation
+
+    Yield:- Isolation des tests (chaque test indépendant)
+
+        Path: Chemin vers Excel temporaire- Nommage clair et descriptif
+
+    """- Utiliser fixtures pour setup/teardown
+
+    import pandas as pd- Couvrir les cas principaux ET les cas limites
+
+    - Documenter les tests complexes si besoin
+
+    # Créer répertoire temporaire
+
+    temp_dir = Path(tempfile.mkdtemp())### Impact et liens
+
+    excel_path = temp_dir / "test_data.xlsx"- Les modèles SQLAlchemy (`backend/database/models.py`) sont testés.
+
+    - Les routes API (`backend/api/routes/`) sont testées.
+
+    # Feuille Equipes- Le service de synchronisation (`backend/services/sync_service.py`) peut être testé séparément.
+
+    df_equipes = pd.DataFrame({
+
+        "Institution": ["Lycée A", "Lycée A", "Lycée B"],## À faire/vérifier
+
+        "Numéro équipe": [1, 2, 1],- Créer la structure tests/ avec conftest.py
+
+        "Niveau": ["Minimes", "Minimes", "Minimes"],- Implémenter les fixtures (db_engine, db_session, sample_project)
+
+        "Catégorie": ["Garçons", "Garçons", "Filles"],- Créer test_models.py avec tests des modèles
+
+        "Poule": ["P1", "P1", "P1"],- (Optionnel) Créer test_api_matches.py avec tests API
+
+        "Gymnase préféré": ["Gymnase 1", "Gymnase 1", "Gymnase 2"]- Exécuter les tests : `pytest tests/ -v`
+
+    })- Vérifier la couverture : `pytest tests/ --cov=backend --cov-report=term-missing`
+
+    - Objectif : couverture >80% sur les modules critiques
+
+    # Feuille Gymnases
+
+    df_gymnases = pd.DataFrame({## Questions
+
+        "Nom": ["Gymnase 1", "Gymnase 2"],Poser des questions si des points sur la structure des tests, les fixtures, la couverture ou l'intégration ne sont pas clairs.
+
+        "Capacité": [100, 80],
+
+        "Adresse": ["Rue A", "Rue B"]## Documentation
+
+    })Rester concis, ne pas ajouter de documentation excessive. Commenter brièvement les tests complexes ou les cas limites si besoin.
+
+    
+    # Feuille Indispos_Gymnases
+    df_indispo_gym = pd.DataFrame({
+        "Gymnase": ["Gymnase 1"],
+        "Date début": ["2025-01-15"],
+        "Date fin": ["2025-01-20"],
+        "Raison": ["Travaux"]
+    })
+    
+    # Feuille Indispos_Equipes
+    df_indispo_equipes = pd.DataFrame({
+        "Institution": ["Lycée A"],
+        "Numéro équipe": [1],
+        "Niveau": ["Minimes"],
+        "Catégorie": ["Garçons"],
+        "Date début": ["2025-02-10"],
+        "Date fin": ["2025-02-15"],
+        "Raison": ["Stage"]
+    })
+    
+    # Feuille Indispos_Institutions
+    df_indispo_inst = pd.DataFrame({
+        "Institution": ["Lycée B"],
+        "Date début": ["2025-03-01"],
+        "Date fin": ["2025-03-05"],
+        "Raison": ["Vacances"]
+    })
+    
+    # Feuille Preferences_Gymnases
+    df_prefs = pd.DataFrame({
+        "Institution": ["Lycée A"],
+        "Gymnase préféré": ["Gymnase 1"],
+        "Priorité": [1]
+    })
+    
+    # Feuille Obligation_Presence
+    df_oblig = pd.DataFrame({
+        "Institution": ["Lycée A"],
+        "Semaine": [3],
+        "Raison": ["Événement local"]
+    })
+    
+    # Écrire Excel
+    with pd.ExcelWriter(excel_path, engine='openpyxl') as writer:
+        df_equipes.to_excel(writer, sheet_name='Equipes', index=False)
+        df_gymnases.to_excel(writer, sheet_name='Gymnases', index=False)
+        df_indispo_gym.to_excel(writer, sheet_name='Indispos_Gymnases', index=False)
+        df_indispo_equipes.to_excel(writer, sheet_name='Indispos_Equipes', index=False)
+        df_indispo_inst.to_excel(writer, sheet_name='Indispos_Institutions', index=False)
+        df_prefs.to_excel(writer, sheet_name='Preferences_Gymnases', index=False)
+        df_oblig.to_excel(writer, sheet_name='Obligation_Presence', index=False)
+    
+    yield excel_path
+    
+    # Cleanup
+    shutil.rmtree(temp_dir)
+```
+
+**Points clés** :
+- **DB en mémoire** : sqlite:///:memory: pour rapidité
+- **Scope function** : Nouvelle DB/session pour chaque test (isolation)
+- **Override get_db** : FastAPI utilise test_db au lieu de DB réelle
+- **Fixtures YAML/Excel** : Fichiers temporaires avec structure complète (7 feuilles)
+- **Cleanup automatique** : tempfile + shutil.rmtree
+
+---
+
+### Tests des modèles
+
+**📁 Fichier à créer** : `backend/tests/test_models.py`
+
+**Contenu complet** :
+
+```python
+"""
+Tests des modèles SQLAlchemy.
+"""
+
+import pytest
+from backend.database.models import Project, Team, Venue, Match
+
+def test_create_project(test_db):
+    """Test création Project avec configs YAML+Excel."""
+    project = Project(
+        nom="Test Project",
+        sport="Volleyball",
+        nb_semaines=10,
+        semaine_min=2,
+        config_yaml_path="/path/to/config.yaml",
+        config_excel_path="/path/to/data.xlsx",
+        config_yaml_data={"sport": "Volleyball", "nb_semaines": 10},
+        config_excel_data={"equipes": 3, "gymnases": 2}
+    )
+    test_db.add(project)
+    test_db.commit()
+    
+    assert project.id is not None
+    assert project.nom == "Test Project"
+    assert project.config_yaml_path == "/path/to/config.yaml"
+    assert project.config_excel_path == "/path/to/data.xlsx"
+    assert project.config_yaml_data["sport"] == "Volleyball"
+    assert project.config_excel_data["gymnases"] == 2
+
+def test_create_team(test_db):
+    """Test création Team avec source Excel."""
+    project = Project(nom="Test", sport="Volley", nb_semaines=5, semaine_min=1)
+    test_db.add(project)
+    test_db.commit()
+    
+    team = Team(
+        project_id=project.id,
+        nom="Lycée A - 1",
+        institution="Lycée A",
+        numero=1,
+        niveau="Minimes",
+        categorie="Garçons",
+        poule="P1"
+    )
+    test_db.add(team)
+    test_db.commit()
+    
+    assert team.id is not None
+    assert team.project_id == project.id
+    assert team.nom == "Lycée A - 1"
+
+def test_cascade_delete_project(test_db):
+    """Test cascade delete : supprimer project supprime teams/venues/matches."""
+    # Créer project
+    project = Project(nom="Test", sport="Volley", nb_semaines=5, semaine_min=1)
+    test_db.add(project)
+    test_db.commit()
+    project_id = project.id
+    
+    # Créer équipes
+    team1 = Team(project_id=project_id, nom="Team 1", institution="A", numero=1, niveau="M", categorie="G", poule="P1")
+    team2 = Team(project_id=project_id, nom="Team 2", institution="B", numero=1, niveau="M", categorie="G", poule="P1")
+    test_db.add_all([team1, team2])
+    test_db.commit()
+    
+    # Créer gymnase
+    venue = Venue(project_id=project_id, nom="Gym 1")
+    test_db.add(venue)
+    test_db.commit()
+    
+    # Créer match
+    match = Match(
+        project_id=project_id,
+        equipe_domicile_id=team1.id,
+        equipe_exterieur_id=team2.id,
+        gymnase_id=venue.id,
+        semaine=3
+    )
+    test_db.add(match)
+    test_db.commit()
+    
+    # Vérifier existence
+    assert test_db.query(Team).filter_by(project_id=project_id).count() == 2
+    assert test_db.query(Venue).filter_by(project_id=project_id).count() == 1
+    assert test_db.query(Match).filter_by(project_id=project_id).count() == 1
+    
+    # Supprimer project
+    test_db.delete(project)
+    test_db.commit()
+    
+    # Vérifier cascade delete
+    assert test_db.query(Team).filter_by(project_id=project_id).count() == 0
+    assert test_db.query(Venue).filter_by(project_id=project_id).count() == 0
+    assert test_db.query(Match).filter_by(project_id=project_id).count() == 0
+
+def test_match_modifiable_logic(test_db):
+    """Test logique est_modifiable (False si est_fixe ou avant semaine_min)."""
+    project = Project(nom="Test", sport="Volley", nb_semaines=10, semaine_min=2)
+    test_db.add(project)
+    test_db.commit()
+    
+    team1 = Team(project_id=project.id, nom="T1", institution="A", numero=1, niveau="M", categorie="G", poule="P1")
+    team2 = Team(project_id=project.id, nom="T2", institution="B", numero=1, niveau="M", categorie="G", poule="P1")
+    venue = Venue(project_id=project.id, nom="Gym")
+    test_db.add_all([team1, team2, venue])
+    test_db.commit()
+    
+    # Match normal semaine 3 (>= semaine_min) : modifiable
+    match1 = Match(
+        project_id=project.id,
+        equipe_domicile_id=team1.id,
+        equipe_exterieur_id=team2.id,
+        gymnase_id=venue.id,
+        semaine=3,
+        est_fixe=False
+    )
+    test_db.add(match1)
+    test_db.commit()
+    assert match1.est_modifiable(project.semaine_min) == True
+    
+    # Match fixé : non modifiable
+    match2 = Match(
+        project_id=project.id,
+        equipe_domicile_id=team1.id,
+        equipe_exterieur_id=team2.id,
+        gymnase_id=venue.id,
+        semaine=4,
+        est_fixe=True
+    )
+    test_db.add(match2)
+    test_db.commit()
+    assert match2.est_modifiable(project.semaine_min) == False
+    
+    # Match avant semaine_min : non modifiable
+    match3 = Match(
+        project_id=project.id,
+        equipe_domicile_id=team1.id,
+        equipe_exterieur_id=team2.id,
+        gymnase_id=venue.id,
+        semaine=1,  # < semaine_min (2)
+        est_fixe=False
+    )
+    test_db.add(match3)
+    test_db.commit()
+    assert match3.est_modifiable(project.semaine_min) == False
+```
+
+**Points clés** :
+- **Test création** : Valider stockage config_yaml_data, config_excel_data
+- **Test cascade** : Vérifier que supprimer Project supprime enfants (teams, venues, matches)
+- **Test est_modifiable** : Logique False si est_fixe ou semaine < semaine_min
+
+---
+
+### Tests du service de synchronisation
+
+**📁 Fichier à créer** : `backend/tests/test_sync_service.py`
+
+**Contenu complet** :
+
+```python
+"""
+Tests du service de synchronisation.
+"""
+
+import pytest
+from backend.services.sync_service import SyncService
+from backend.database.models import Project, Team, Venue, Match
+
+def test_import_from_excel(test_db, config_yaml_file, config_excel_file):
+    """Test import complet depuis YAML+Excel."""
+    service = SyncService(test_db)
+    
+    # Modifier YAML pour référencer Excel
+    yaml_content = config_yaml_file.read_text()
+    yaml_content = yaml_content.replace(
+        'donnees: "test_data.xlsx"',
+        f'donnees: "{config_excel_file}"'
+    )
+    config_yaml_file.write_text(yaml_content)
+    
+    # Import
+    project = service.import_from_excel(
+        yaml_path=str(config_yaml_file),
+        project_name="Test Import",
+        validate_excel=False  # Pas de validation pour test (actualiser_config.py)
+    )
+    
+    # Vérifier project
+    assert project.id is not None
+    assert project.nom == "Test Import"
+    assert project.sport == "Volleyball"
+    assert project.nb_semaines == 10
+    assert project.semaine_min == 2  # Depuis YAML (pas de défaut dans .py)
+    assert project.config_yaml_path == str(config_yaml_file)
+    assert project.config_excel_path == str(config_excel_file)
+    
+    # Vérifier équipes (3 dans Excel fixture)
+    teams = test_db.query(Team).filter_by(project_id=project.id).all()
+    assert len(teams) == 3
+    assert teams[0].institution in ["Lycée A", "Lycée B"]
+    
+    # Vérifier gymnases (2 dans Excel fixture)
+    venues = test_db.query(Venue).filter_by(project_id=project.id).all()
+    assert len(venues) == 2
+    assert venues[0].nom in ["Gymnase 1", "Gymnase 2"]
+    
+    # Vérifier matchs générés
+    matches = test_db.query(Match).filter_by(project_id=project.id).all()
+    assert len(matches) > 0  # Au moins 1 match généré (P1 : 3 équipes)
+
+def test_import_validation_excel(test_db, config_yaml_file, config_excel_file):
+    """Test validation Excel via actualiser_config.py (si disponible)."""
+    service = SyncService(test_db)
+    
+    # Modifier YAML
+    yaml_content = config_yaml_file.read_text()
+    yaml_content = yaml_content.replace(
+        'donnees: "test_data.xlsx"',
+        f'donnees: "{config_excel_file}"'
+    )
+    config_yaml_file.write_text(yaml_content)
+    
+    # Test avec validate_excel=True
+    # Note: actualiser_config.py doit exister et retourner 0 si Excel OK
+    try:
+        project = service.import_from_excel(
+            yaml_path=str(config_yaml_file),
+            project_name="Test Validation",
+            validate_excel=True
+        )
+        # Si actualiser_config.py disponible et Excel OK
+        assert project is not None
+    except Exception as e:
+        # Si actualiser_config.py indisponible ou Excel invalide
+        assert "validation" in str(e).lower() or "actualiser_config" in str(e).lower()
+
+def test_import_yaml_not_found(test_db):
+    """Test erreur si fichier YAML introuvable."""
+    service = SyncService(test_db)
+    
+    with pytest.raises(FileNotFoundError):
+        service.import_from_excel(
+            yaml_path="/inexistant/config.yaml",
+            project_name="Test"
+        )
+
+def test_import_excel_not_found(test_db, config_yaml_file):
+    """Test erreur si fichier Excel introuvable."""
+    # YAML référence Excel inexistant
+    yaml_content = config_yaml_file.read_text()
+    yaml_content = yaml_content.replace(
+        'donnees: "test_data.xlsx"',
+        'donnees: "/inexistant/data.xlsx"'
+    )
+    config_yaml_file.write_text(yaml_content)
+    
+    service = SyncService(test_db)
+    
+    with pytest.raises(FileNotFoundError):
+        service.import_from_excel(
+            yaml_path=str(config_yaml_file),
+            project_name="Test"
+        )
+```
+
+**Points clés** :
+- **Test import complet** : Vérifier création project + teams + venues + matches
+- **Test validation Excel** : Tester validate_excel=True (actualiser_config.py)
+- **Test erreurs** : FileNotFoundError si YAML ou Excel manquant
+- **Vérification semaine_min** : Confirmer valeur depuis YAML (pas de défaut .py)
+
+---
+
+### Tests des routes API
+
+**📁 Fichier à créer** : `backend/tests/test_api_matches.py`
+
+**Contenu complet** :
+
+```python
+"""
+Tests des routes API pour les matchs.
+"""
+
+import pytest
+from backend.database.models import Project, Team, Venue, Match
+
+@pytest.fixture
+def setup_data(test_db):
+    """Fixture pour créer données de test."""
+    # Project
+    project = Project(nom="Test", sport="Volley", nb_semaines=10, semaine_min=2)
+    test_db.add(project)
+    test_db.commit()
+    
+    # Teams
+    team1 = Team(project_id=project.id, nom="Team 1", institution="A", numero=1, niveau="M", categorie="G", poule="P1")
+    team2 = Team(project_id=project.id, nom="Team 2", institution="B", numero=1, niveau="M", categorie="G", poule="P1")
+    test_db.add_all([team1, team2])
+    test_db.commit()
+    
+    # Venue
+    venue = Venue(project_id=project.id, nom="Gym 1")
+    test_db.add(venue)
+    test_db.commit()
+    
+    # Match
+    match = Match(
+        project_id=project.id,
+        equipe_domicile_id=team1.id,
+        equipe_exterieur_id=team2.id,
+        gymnase_id=venue.id,
+        semaine=3,
+        est_fixe=False
+    )
+    test_db.add(match)
+    test_db.commit()
+    
+    return {
+        "project": project,
+        "team1": team1,
+        "team2": team2,
+        "venue": venue,
+        "match": match
+    }
+
+def test_get_matches(client, setup_data):
+    """Test GET /projects/{id}/matches."""
+    project_id = setup_data["project"].id
+    
+    response = client.get(f"/projects/{project_id}/matches")
+    assert response.status_code == 200
+    
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["semaine"] == 3
+    assert data[0]["est_fixe"] == False
+
+def test_move_match(client, setup_data):
+    """Test POST /matches/{id}/move."""
+    match_id = setup_data["match"].id
+    
+    # Déplacer vers semaine 5
+    response = client.post(
+        f"/matches/{match_id}/move",
+        json={"nouvelle_semaine": 5}
+    )
+    assert response.status_code == 200
+    
+    data = response.json()
+    assert data["semaine"] == 5
+
+def test_move_match_non_modifiable(client, setup_data):
+    """Test déplacement impossible si match fixé ou avant semaine_min."""
+    match = setup_data["match"]
+    match.est_fixe = True
+    client.app.dependency_overrides[lambda: None]  # Forcer commit (hack test)
+    
+    # Tenter déplacement
+    response = client.post(
+        f"/matches/{match.id}/move",
+        json={"nouvelle_semaine": 6}
+    )
+    assert response.status_code == 400  # Bad Request
+    assert "non modifiable" in response.json()["detail"].lower()
+
+def test_fix_match(client, setup_data):
+    """Test POST /matches/{id}/fix."""
+    match_id = setup_data["match"].id
+    
+    response = client.post(f"/matches/{match_id}/fix")
+    assert response.status_code == 200
+    
+    data = response.json()
+    assert data["est_fixe"] == True
+
+def test_unfix_match(client, setup_data):
+    """Test POST /matches/{id}/unfix."""
+    match = setup_data["match"]
+    match.est_fixe = True
+    
+    response = client.post(f"/matches/{match.id}/unfix")
+    assert response.status_code == 200
+    
+    data = response.json()
+    assert data["est_fixe"] == False
+
+def test_delete_match(client, setup_data):
+    """Test DELETE /matches/{id}."""
+    match_id = setup_data["match"].id
+    
+    response = client.delete(f"/matches/{match_id}")
+    assert response.status_code == 204
+    
+    # Vérifier suppression
+    response = client.get(f"/matches/{match_id}")
+    assert response.status_code == 404
+```
+
+**Points clés** :
+- **Fixture setup_data** : Créer project + teams + venue + match
+- **Test GET** : Lister matchs d'un projet
+- **Test move** : Déplacer match vers nouvelle semaine
+- **Test validation** : Erreur 400 si match non modifiable (fixé ou semaine < semaine_min)
+- **Test fix/unfix** : Fixer/défixer match
+- **Test delete** : Supprimer match (204 No Content)
+
+---
+
+### Tests des routes Projects
+
+**📁 Fichier à créer** : `backend/tests/test_api_projects.py`
+
+**Contenu complet** :
+
+```python
+"""
+Tests des routes API pour les projets.
+"""
+
+import pytest
+
+def test_create_project(client):
+    """Test POST /projects."""
+    payload = {
+        "nom": "Nouveau Projet",
+        "sport": "Handball",
+        "nb_semaines": 12,
+        "semaine_min": 3,
+        "config_yaml_path": "/configs/handball.yaml",
+        "config_excel_path": "/data/handball.xlsx",
+        "config_yaml_data": {"sport": "Handball"},
+        "config_excel_data": {"equipes": 10}
+    }
+    
+    response = client.post("/projects", json=payload)
+    assert response.status_code == 201
+    
+    data = response.json()
+    assert data["nom"] == "Nouveau Projet"
+    assert data["sport"] == "Handball"
+    assert data["config_yaml_path"] == "/configs/handball.yaml"
+    assert data["config_excel_data"]["equipes"] == 10
+
+def test_get_projects(client, test_db):
+    """Test GET /projects."""
+    from backend.database.models import Project
+    
+    # Créer 2 projects
+    p1 = Project(nom="P1", sport="Volley", nb_semaines=5, semaine_min=1)
+    p2 = Project(nom="P2", sport="Handball", nb_semaines=8, semaine_min=2)
+    test_db.add_all([p1, p2])
+    test_db.commit()
+    
+    response = client.get("/projects")
+    assert response.status_code == 200
+    
+    data = response.json()
+    assert len(data) == 2
+    assert data[0]["nom"] in ["P1", "P2"]
+
+def test_get_project_stats(client, test_db):
+    """Test GET /projects/{id}/stats."""
+    from backend.database.models import Project, Team, Match
+    
+    # Créer project
+    project = Project(nom="Test", sport="Volley", nb_semaines=10, semaine_min=2)
+    test_db.add(project)
+    test_db.commit()
+    
+    # Créer équipes
+    t1 = Team(project_id=project.id, nom="T1", institution="A", numero=1, niveau="M", categorie="G", poule="P1")
+    t2 = Team(project_id=project.id, nom="T2", institution="B", numero=1, niveau="M", categorie="G", poule="P1")
+    test_db.add_all([t1, t2])
+    test_db.commit()
+    
+    # Créer matchs
+    m1 = Match(project_id=project.id, equipe_domicile_id=t1.id, equipe_exterieur_id=t2.id, semaine=3, est_fixe=True)
+    m2 = Match(project_id=project.id, equipe_domicile_id=t1.id, equipe_exterieur_id=t2.id, semaine=None)  # Non planifié
+    test_db.add_all([m1, m2])
+    test_db.commit()
+    
+    # Requête stats
+    response = client.get(f"/projects/{project.id}/stats")
+    assert response.status_code == 200
+    
+    data = response.json()
+    assert data["nb_equipes"] == 2
+    assert data["nb_matchs"] == 2
+    assert data["nb_matchs_planifies"] == 1
+    assert data["nb_matchs_fixes"] == 1
+
+def test_delete_project_cascade(client, test_db):
+    """Test DELETE /projects/{id} avec cascade."""
+    from backend.database.models import Project, Team, Match
+    
+    # Créer project + team + match
+    project = Project(nom="Delete Test", sport="Volley", nb_semaines=5, semaine_min=1)
+    test_db.add(project)
+    test_db.commit()
+    
+    team = Team(project_id=project.id, nom="T1", institution="A", numero=1, niveau="M", categorie="G", poule="P1")
+    test_db.add(team)
+    test_db.commit()
+    
+    match = Match(project_id=project.id, equipe_domicile_id=team.id, equipe_exterieur_id=team.id, semaine=2)
+    test_db.add(match)
+    test_db.commit()
+    
+    project_id = project.id
+    
+    # Supprimer project
+    response = client.delete(f"/projects/{project_id}")
+    assert response.status_code == 204
+    
+    # Vérifier cascade
+    assert test_db.query(Team).filter_by(project_id=project_id).count() == 0
+    assert test_db.query(Match).filter_by(project_id=project_id).count() == 0
+```
+
+**Points clés** :
+- **Test création** : Valider stockage config_yaml_data, config_excel_data
+- **Test liste** : GET /projects retourne tous les projets
+- **Test stats** : Vérifier calculs nb_equipes, nb_matchs, nb_matchs_planifies, nb_matchs_fixes
+- **Test cascade delete** : Supprimer project supprime teams et matches
+
+---
+
+### Configuration coverage
+
+**📁 Fichier à créer** : `backend/tests/.coveragerc`
+
+**Contenu** :
+
+```ini
+[run]
+source = backend
+omit =
+    */tests/*
+    */venv/*
+    */__pycache__/*
+    */migrations/*
+
+[report]
+precision = 2
+show_missing = True
+skip_covered = False
+
+[html]
+directory = htmlcov
+```
+
+**📁 Fichier à créer** : `backend/pytest.ini`
+
+**Contenu** :
+
+```ini
+[pytest]
+testpaths = backend/tests
+python_files = test_*.py
+python_classes = Test*
+python_functions = test_*
+addopts = 
+    --verbose
+    --cov=backend
+    --cov-report=term-missing
+    --cov-report=html
+```
+
+---
+
+### Script d'exécution des tests
+
+**📁 Fichier à créer** : `scripts/run_tests.sh`
+
+**Contenu** :
+
+```bash
+#!/bin/bash
+
+# Script pour exécuter les tests backend avec coverage
+
+echo "========================================="
+echo "PyCalendar - Tests Unitaires Backend"
+echo "========================================="
+
+# Activer environnement virtuel si disponible
+if [ -d "venv" ]; then
+    source venv/bin/activate
+fi
+
+# Installer dépendances de test si nécessaire
+echo ""
+echo "📦 Vérification des dépendances..."
+pip install -q pytest pytest-cov pandas openpyxl fastapi httpx
+
+# Exécuter tests
+echo ""
+echo "🧪 Exécution des tests..."
+pytest backend/tests/ \
+    --verbose \
+    --cov=backend \
+    --cov-report=term-missing \
+    --cov-report=html \
+    --tb=short
+
+# Afficher résumé coverage
+echo ""
+echo "========================================="
+echo "📊 Rapport de couverture généré : htmlcov/index.html"
+echo "========================================="
+
+# Ouvrir rapport HTML si possible (Linux)
+if command -v xdg-open &> /dev/null; then
+    xdg-open htmlcov/index.html
+fi
+```
+
+**Rendre exécutable** :
+```bash
+chmod +x scripts/run_tests.sh
+```
+
+**Usage** :
+```bash
+./scripts/run_tests.sh
+```
+
+---
+
+### Consignes d'organisation
+
+**Structure des tests** :
+```
+backend/tests/
+├── conftest.py                # Fixtures partagées (test_db, client, configs)
+├── test_models.py             # Tests modèles SQLAlchemy
+├── test_sync_service.py       # Tests SyncService (import YAML+Excel)
+├── test_api_projects.py       # Tests routes /projects
+├── test_api_matches.py        # Tests routes /matches
+├── test_api_teams.py          # Tests routes /teams (à créer)
+├── test_api_venues.py         # Tests routes /venues (à créer)
+├── .coveragerc                # Config coverage
+└── pytest.ini                 # Config pytest
+```
+
+**Bonnes pratiques** :
+1. **Fixtures scope="function"** : Isolation totale entre tests
+2. **DB en mémoire** : Rapidité (sqlite:///:memory:)
+3. **Nommage clair** : test_<action>_<scenario> (ex: test_move_match_non_modifiable)
+4. **Assertions explicites** : assert data["nb_equipes"] == 2 (pas juste assert data)
+5. **Cleanup automatique** : yield dans fixtures + tempfile pour fichiers temporaires
+
+**Couverture cible** :
+- **Modèles** : 100% (simples, pas de logique complexe)
+- **Services** : > 80% (import, validation, génération)
+- **Routes API** : > 90% (CRUD complet, erreurs)
+- **Total** : > 80%
+
+---
+
+## À faire/vérifier
+
+**Checklist de développement** :
+
+1. ✅ Créer `backend/tests/conftest.py` avec :
+   - Fixture test_db (DB en mémoire)
+   - Fixture client (TestClient FastAPI)
+   - Fixtures config_yaml_file et config_excel_file (7 feuilles)
+
+2. ✅ Créer `backend/tests/test_models.py` avec :
+   - test_create_project (config_yaml_data, config_excel_data)
+   - test_create_team
+   - test_cascade_delete_project
+   - test_match_modifiable_logic
+
+3. ✅ Créer `backend/tests/test_sync_service.py` avec :
+   - test_import_from_excel (complet, vérifier teams/venues/matches)
+   - test_import_validation_excel (actualiser_config.py)
+   - test_import_yaml_not_found
+   - test_import_excel_not_found
+
+4. ✅ Créer `backend/tests/test_api_matches.py` avec :
+   - test_get_matches
+   - test_move_match
+   - test_move_match_non_modifiable
+   - test_fix_match, test_unfix_match
+   - test_delete_match
+
+5. ✅ Créer `backend/tests/test_api_projects.py` avec :
+   - test_create_project
+   - test_get_projects
+   - test_get_project_stats
+   - test_delete_project_cascade
+
+6. ✅ Créer configs pytest :
+   - `backend/tests/.coveragerc`
+   - `backend/pytest.ini`
+   - `scripts/run_tests.sh`
+
+**Checklist de validation** :
+
+1. ✅ **Exécuter tests** :
+   ```bash
+   # Installer dépendances
+   pip install pytest pytest-cov pandas openpyxl httpx
+   
+   # Exécuter tous les tests
+   pytest backend/tests/ -v
+   
+   # Avec coverage
+   pytest backend/tests/ --cov=backend --cov-report=term-missing
+   ```
+
+2. ✅ **Vérifier couverture** :
+   ```bash
+   # Générer rapport HTML
+   pytest backend/tests/ --cov=backend --cov-report=html
+   
+   # Ouvrir htmlcov/index.html
+   xdg-open htmlcov/index.html
+   ```
+
+3. ✅ **Tests spécifiques** :
+   ```bash
+   # Tests modèles uniquement
+   pytest backend/tests/test_models.py -v
+   
+   # Tests API uniquement
+   pytest backend/tests/test_api_*.py -v
+   
+   # Test spécifique
+   pytest backend/tests/test_sync_service.py::test_import_from_excel -v
+   ```
+
+4. ✅ **Vérifier fixtures** :
+   ```bash
+   # Lister fixtures disponibles
+   pytest backend/tests/ --fixtures
+   ```
+
+5. ✅ **Tests avec script** :
+   ```bash
+   ./scripts/run_tests.sh
+   ```
+
+**Commandes de test rapide** :
+```bash
+# Test rapide (sans coverage)
+pytest backend/tests/ -v
+
+# Test avec coverage minimal
+pytest backend/tests/ --cov=backend --cov-report=term
+
+# Test un fichier
+pytest backend/tests/test_models.py -v
+
+# Test une fonction
+pytest backend/tests/test_sync_service.py::test_import_from_excel -vv
+```
+
+---
+
+## Questions
+
+**Questions critiques à poser si quelque chose n'est pas clair** :
+
+1. **Validation Excel dans tests** :
+   - Faut-il mocker `actualiser_config.py` dans les tests (subprocess.run) ?
+   - Ou créer un Excel fixture toujours valide et tester validate_excel=False ?
+   - Faut-il tester les erreurs d'`actualiser_config.py` (retour != 0) ?
+
+2. **Fixtures YAML/Excel** :
+   - Les 7 feuilles Excel dans la fixture sont-elles suffisantes ?
+   - Faut-il ajouter des colonnes spécifiques (Horaires_Matchs, Créneaux_Disponibles) ?
+   - Les données de test (3 équipes, 2 gymnases) sont-elles représentatives ?
+
+3. **Tests SyncService** :
+   - Faut-il tester la génération de matchs en détail (poules, aller-retour) ?
+   - Ou simplement vérifier que len(matches) > 0 ?
+   - Faut-il tester les contraintes appliquées (indispos, préférences) ?
+
+4. **Tests API** :
+   - Faut-il tester tous les codes d'erreur (400, 404, 422) ?
+   - Faut-il tester la validation Pydantic (types, champs requis) ?
+   - Faut-il tester les routes /teams et /venues en détail ?
+
+5. **Couverture** :
+   - Objectif de couverture : 80%, 90%, 100% ?
+   - Faut-il exclure certains fichiers (scripts/, actualiser_config.py) ?
+   - Faut-il un rapport coverage dans CI/CD (GitHub Actions) ?
+
+6. **Performance** :
+   - Les tests sont-ils assez rapides (< 10s total) ?
+   - Faut-il optimiser les fixtures (scope="session" pour configs) ?
+   - Faut-il paralléliser les tests (pytest-xdist) ?
+
+---
+
+## Documentation
+
+Rester concis : documenter uniquement les choix non évidents :
+- **DB en mémoire** : Expliquer pourquoi sqlite:///:memory: (isolation, rapidité)
+- **Override get_db** : Expliquer injection dépendance FastAPI dans tests
+- **Fixtures temporaires** : Expliquer tempfile + cleanup automatique
+- **Test est_modifiable** : Expliquer logique métier (fixé ou semaine < semaine_min)
+
+Éviter la sur-documentation des concepts pytest/coverage standards.

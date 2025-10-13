@@ -1,0 +1,11 @@
+# Configuration de test pour semaine_minimum
+# ==========================================
+
+fichiers:
+  donnees: "data_volley/config_volley.xlsx"
+  sortie: "data_volley/calendrier_test.xlsx"
+
+planification:
+  nb_semaines: 10
+  strategie: "greedy"
+  semaine_minimum: 5  # Ne pas planifier avant la semaine 5

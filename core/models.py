@@ -124,17 +124,33 @@ class Match:
     poule: str
     creneau: Optional[Creneau] = None
     priorite: int = 0
+    est_fixe: bool = False  # Si True, le match ne peut pas être replanifié par le solver
+    statut: str = "a_planifier"  # "a_planifier", "planifie", "fixe", "termine", "annule"
+    score_equipe1: Optional[int] = None  # Score de l'équipe 1 (si match terminé)
+    score_equipe2: Optional[int] = None  # Score de l'équipe 2 (si match terminé)
+    notes: str = ""  # Notes libres sur le match
     
     def get_equipes_tuple(self) -> Tuple[str, str]:
         equipes = sorted([self.equipe1.nom_complet, self.equipe2.nom_complet])
         return (equipes[0], equipes[1])
     
+    @property
     def est_planifie(self) -> bool:
-        return self.creneau is not None
+        """Retourne True si le match a un créneau assigné."""
+        return self.creneau is not None and self.creneau.semaine is not None
+    
+    def est_modifiable(self) -> bool:
+        """Retourne True si le match peut être replanifié (pas fixe, pas terminé/annulé)."""
+        if self.est_fixe:
+            return False
+        if self.statut in ["fixe", "termine", "annule"]:
+            return False
+        return True
     
     def __repr__(self):
         creneau_str = str(self.creneau) if self.creneau else "Non planifié"
-        return f"{self.equipe1.nom_complet} vs {self.equipe2.nom_complet} [{creneau_str}]"
+        fixe_str = " [FIXÉ]" if self.est_fixe else ""
+        return f"{self.equipe1.nom_complet} vs {self.equipe2.nom_complet} [{creneau_str}]{fixe_str}"
 
 
 @dataclass
@@ -172,7 +188,7 @@ class ContrainteTemporelle:
     """
     type_contrainte: str  # "Avant" ou "Apres"
     semaine_limite: int  # Semaine limite (1-52)
-    horaires_possibles: Optional[List[str]] = None  # Horaires préférés (optionnel)
+    horaires_possibles: Optional[List[str]] = None
     
     def est_respectee(self, semaine_match: int) -> bool:
         """Check if constraint is respected for given match week.

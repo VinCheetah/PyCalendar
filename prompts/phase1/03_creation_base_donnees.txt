@@ -1,0 +1,1011 @@
+# Prompt 1.3 : Création de la base de données# Prompt 1.3 : Création de la base de données
+
+
+
+## Contexte global## Contexte global
+
+PyCalendar V2 transforme une application CLI/Excel d'optimisation de calendriers sportifs en application web full-stack. L'architecture préserve totalement le code existant (solvers/, constraints/, generators/, validation/) et ajoute une couche backend (FastAPI, SQLAlchemy, SQLite) + frontend (React, TypeScript, FullCalendar).PyCalendar V2 transforme une application CLI/Excel d'optimisation de calendriers sportifs en application web full-stack. L'architecture préserve totalement le code existant (solvers/, constraints/, generators/, validation/) et ajoute une couche backend (FastAPI, SQLAlchemy, SQLite) + frontend (React, TypeScript, FullCalendar). La base de données SQLite persiste les projets, équipes, gymnases et matchs avec gestion des relations, foreign keys et indexes pour optimiser les requêtes API.
+
+
+
+**IMPORTANT - Double configuration du système actuel** :## Contexte technique
+
+1. **Fichier YAML** (ex: `configs/default.yaml`, `configs/config_volley.yaml`)Cette tâche crée l'infrastructure de persistance avec SQLAlchemy : l'engine SQLite, la session factory, et les 4 modèles principaux (Project, Team, Venue, Match) avec leurs relations (ForeignKey, cascade delete) et propriétés calculées. Les modèles DB reproduisent la logique métier des dataclasses `core/models.py` enrichies précédemment.
+
+   - Hyperparamètres : poids contraintes, stratégie solver, temps max, nb_semaines
+
+   - Référence le fichier Excel via `fichiers.donnees`## Résumé du travail précédent
+
+   - Chargé par `core/config.py` (class `Config`)- Le modèle métier `core/models.py` contient les dataclasses avec les nouveaux champs (`Match.est_fixe`, `Match.statut`, scores) - Tâche 1.1
+
+- La dataclass `Config` contient `semaine_min` pour contrainte de planification - Tâche 1.2
+
+2. **Fichier Excel** (ex: `config_exemple.xlsx`, `config_volley.xlsx`)- Le CLI et les générateurs fonctionnent avec ces modèles enrichis
+
+   - Données détaillées avec **7+ feuilles** :- Les besoins de persistance et d'API REST sont identifiés
+
+     - `Equipes` : Liste des équipes avec poule, horaire préféré
+
+     - `Gymnases` : Gymnases avec créneaux disponibles et capacité## Objectifs
+
+     - `Indispos_Gymnases` : Indisponibilités des gymnases1. Créer l'engine SQLAlchemy avec SQLite et support des foreign keys
+
+     - `Indispos_Equipes` : Indisponibilités par équipe2. Définir les 4 modèles SQLAlchemy (Project, Team, Venue, Match) mappant les entités du projet
+
+     - `Indispos_Institutions` : Indisponibilités par institution (appliquées à toutes les équipes)3. Mettre en place les relations (ForeignKey, cascade delete) et les indexes pour optimisation
+
+     - `Preferences_Gymnases` : Classement des gymnases préférés par institution4. Reproduire la logique métier (propriétés `est_planifie`, `est_modifiable`) dans les modèles DB
+
+     - `Obligation_Presence` : Gymnases nécessitant la présence d'une institution5. Créer les fonctions utilitaires (`get_db()`, `init_db()`) pour l'API FastAPI
+
+     - (+ autres feuilles optionnelles : Ententes, Contraintes_Temporelles, Groupes_Non_Simultaneite, etc.)
+
+   - Chargé par `core/config_manager.py` (class `ConfigManager`)## Détails techniques
+
+   - **Script crucial** : `actualiser_config.py` valide et corrige la structure Excel
+
+### Sous-tâche 1.3.1 : Engine et Session Factory
+
+La base de données SQLite persiste les projets, équipes, gymnases et matchs avec gestion des relations, foreign keys et indexes pour optimiser les requêtes API.
+
+**📁 Fichier à créer** : `backend/database/engine.py`
+
+## Contexte technique
+
+Cette tâche crée l'infrastructure de persistance avec SQLAlchemy : l'engine SQLite, la session factory, et les 4 modèles principaux (Project, Team, Venue, Match) avec leurs relations (ForeignKey, cascade delete) et propriétés calculées. Les modèles DB reproduisent la logique métier des dataclasses `core/models.py` enrichies précédemment.**Imports requis** :
+
+```python
+
+**Point crucial** : La base de données web dupliquera les données du fichier Excel (import initial), puis évoluera de manière indépendante (modifications via UI, matchs fixes, scores, etc.). Le fichier Excel reste la source initiale de vérité.from sqlalchemy import create_engine, event
+
+from sqlalchemy.orm import sessionmaker
+
+## Résumé du travail précédentfrom pathlib import Path
+
+- Le modèle métier `core/models.py` contient les dataclasses avec les nouveaux champs (`Match.est_fixe`, `Match.statut`, scores) - Tâche 1.1```
+
+- La dataclass `Config` (YAML) contient `semaine_minimum` pour contrainte de planification - Tâche 1.2
+
+- Le `ConfigManager` (Excel) charge les données détaillées (équipes, gymnases, indispos, préférences)**Contenu détaillé** :
+
+- Le CLI et les générateurs fonctionnent avec ces modèles enrichis
+
+- `actualiser_config.py` valide la structure des fichiers Excel```python
+
+from sqlalchemy import create_engine, event
+
+## Objectifsfrom sqlalchemy.orm import sessionmaker
+
+1. Créer l'engine SQLAlchemy avec SQLite et support des foreign keysfrom pathlib import Path
+
+2. Définir les 4 modèles SQLAlchemy (Project, Team, Venue, Match) mappant les entités du projet
+
+3. Mettre en place les relations (ForeignKey, cascade delete) et les indexes pour optimisation# Chemin vers la base de données SQLite
+
+4. Reproduire la logique métier (propriétés `est_planifie`, `est_modifiable`) dans les modèles DBBASE_DIR = Path(__file__).resolve().parent.parent.parent  # Racine du projet
+
+5. Créer les fonctions utilitaires (`get_db()`, `init_db()`) pour l'API FastAPIDATABASE_PATH = BASE_DIR / "database" / "pycalendar.db"
+
+6. **Prévoir le stockage des données Excel ET des configurations YAML** dans la DBDATABASE_PATH.parent.mkdir(parents=True, exist_ok=True)  # Créer dossier si inexistant
+
+
+
+## Détails techniques# URL de connexion SQLite
+
+DATABASE_URL = f"sqlite:///{DATABASE_PATH}"
+
+### Sous-tâche 1.3.1 : Engine et Session Factory
+
+# Créer l'engine SQLAlchemy
+
+**📁 Fichier à créer** : `backend/database/engine.py`engine = create_engine(
+
+    DATABASE_URL,
+
+**Imports requis** :    connect_args={"check_same_thread": False},  # Nécessaire pour FastAPI avec SQLite
+
+```python    echo=False  # Mettre True pour debug SQL
+
+from sqlalchemy import create_engine, event)
+
+from sqlalchemy.orm import sessionmaker
+
+from pathlib import Path# Activer les foreign keys SQLite (CRUCIAL - désactivées par défaut)
+
+```@event.listens_for(engine, "connect")
+
+def set_sqlite_pragma(dbapi_conn, connection_record):
+
+**Contenu détaillé** :    cursor = dbapi_conn.cursor()
+
+    cursor.execute("PRAGMA foreign_keys=ON")
+
+```python    cursor.close()
+
+from sqlalchemy import create_engine, event
+
+from sqlalchemy.orm import sessionmaker# Session factory
+
+from pathlib import PathSessionLocal = sessionmaker(
+
+    autocommit=False,
+
+# Chemin vers la base de données SQLite    autoflush=False,
+
+BASE_DIR = Path(__file__).resolve().parent.parent.parent  # Racine du projet    bind=engine
+
+DATABASE_PATH = BASE_DIR / "database" / "pycalendar.db")
+
+DATABASE_PATH.parent.mkdir(parents=True, exist_ok=True)  # Créer dossier si inexistant
+
+# Dependency injection pour FastAPI
+
+# URL de connexion SQLitedef get_db():
+
+DATABASE_URL = f"sqlite:///{DATABASE_PATH}"    """Generator pour créer une session DB, l'utiliser, puis la fermer"""
+
+    db = SessionLocal()
+
+# Créer l'engine SQLAlchemy    try:
+
+engine = create_engine(        yield db
+
+    DATABASE_URL,    finally:
+
+    connect_args={"check_same_thread": False},  # Nécessaire pour FastAPI avec SQLite        db.close()
+
+    echo=False  # Mettre True pour debug SQL
+
+)# Fonction d'initialisation de la DB
+
+def init_db():
+
+# Activer les foreign keys SQLite (CRUCIAL - désactivées par défaut)    """Créer toutes les tables définies dans models.py"""
+
+@event.listens_for(engine, "connect")    from backend.database.models import Base  # Import ici pour éviter circular import
+
+def set_sqlite_pragma(dbapi_conn, connection_record):    Base.metadata.create_all(bind=engine)
+
+    cursor = dbapi_conn.cursor()    print(f"✅ Base de données créée : {DATABASE_PATH}")
+
+    cursor.execute("PRAGMA foreign_keys=ON")```
+
+    cursor.close()
+
+**Points clés** :
+
+# Session factory- **Chemin DB** : `database/pycalendar.db` à la racine du projet (créé automatiquement)
+
+SessionLocal = sessionmaker(- **PRAGMA foreign_keys** : MUST être activé à chaque connexion (désactivé par défaut dans SQLite)
+
+    autocommit=False,- **check_same_thread=False** : Nécessaire pour FastAPI (multi-threading)
+
+    autoflush=False,- **get_db()** : Generator pour dependency injection FastAPI (`Depends(get_db)`)
+
+    bind=engine- **init_db()** : Créer toutes les tables (appeler depuis script d'initialisation)
+
+)
+
+---
+
+# Dependency injection pour FastAPI
+
+def get_db():### Sous-tâche 1.3.2 : Modèles SQLAlchemy
+
+    """Generator pour créer une session DB, l'utiliser, puis la fermer"""
+
+    db = SessionLocal()**📁 Fichier à créer** : `backend/database/models.py`
+
+    try:
+
+        yield db**Imports requis** :
+
+    finally:```python
+
+        db.close()from sqlalchemy import Column, Integer, String, Boolean, Text, JSON, DateTime, ForeignKey, Index
+
+from sqlalchemy.ext.declarative import declarative_base
+
+# Fonction d'initialisation de la DBfrom sqlalchemy.orm import relationship
+
+def init_db():from datetime import datetime
+
+    """Créer toutes les tables définies dans models.py"""```
+
+    from backend.database.models import Base  # Import ici pour éviter circular import
+
+    Base.metadata.create_all(bind=engine)**Base declarative** :
+
+    print(f"✅ Base de données créée : {DATABASE_PATH}")```python
+
+```Base = declarative_base()
+
+```
+
+**Points clés** :
+
+- **Chemin DB** : `database/pycalendar.db` à la racine du projet (créé automatiquement)---
+
+- **PRAGMA foreign_keys** : MUST être activé à chaque connexion (désactivé par défaut dans SQLite)
+
+- **check_same_thread=False** : Nécessaire pour FastAPI (multi-threading)#### Model 1 : Project
+
+- **get_db()** : Generator pour dependency injection FastAPI (`Depends(get_db)`)
+
+- **init_db()** : Créer toutes les tables (appeler depuis script d'initialisation)```python
+
+class Project(Base):
+
+---    __tablename__ = "projects"
+
+    
+
+### Sous-tâche 1.3.2 : Modèles SQLAlchemy    # Clé primaire
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+
+**📁 Fichier à créer** : `backend/database/models.py`    
+
+    # Informations projet
+
+**Imports requis** :    nom = Column(String(200), nullable=False)
+
+```python    sport = Column(String(50), nullable=False)
+
+from sqlalchemy import Column, Integer, String, Boolean, Text, JSON, DateTime, ForeignKey, Index    
+
+from sqlalchemy.ext.declarative import declarative_base    # Configuration
+
+from sqlalchemy.orm import relationship    config_yaml_path = Column(String(500), nullable=True)
+
+from datetime import datetime    config_data = Column(JSON, nullable=True)  # Stockage config complète en JSON
+
+```    
+
+    # Paramètres planification
+
+**Base declarative** :    nb_semaines = Column(Integer, default=26, nullable=False)
+
+```python    semaine_min = Column(Integer, default=1, nullable=False)  # NOUVEAU (Tâche 1.2)
+
+Base = declarative_base()    
+
+```    # Timestamps
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+---    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    
+
+#### Model 1 : Project    # Relations (cascade delete pour supprimer matchs/équipes/gymnases si projet supprimé)
+
+    matches = relationship("Match", back_populates="project", cascade="all, delete-orphan")
+
+```python    teams = relationship("Team", back_populates="project", cascade="all, delete-orphan")
+
+class Project(Base):    venues = relationship("Venue", back_populates="project", cascade="all, delete-orphan")
+
+    __tablename__ = "projects"```
+
+    
+
+    # Clé primaire**Points clés** :
+
+    id = Column(Integer, primary_key=True, autoincrement=True)- `config_data` : JSON pour stocker toute la config (équipes, gymnases, créneaux)
+
+    - `semaine_min` : Reproduit le champ ajouté dans `core.Config` (Tâche 1.2)
+
+    # Informations projet- **Cascade delete** : Supprimer un projet supprime tous ses matchs/équipes/gymnases
+
+    nom = Column(String(200), nullable=False)
+
+    sport = Column(String(50), nullable=False)---
+
+    
+
+    # Chemins des fichiers de configuration (optionnels)#### Model 2 : Team
+
+    config_yaml_path = Column(String(500), nullable=True)  # Chemin du fichier YAML (ex: configs/config_volley.yaml)
+
+    config_excel_path = Column(String(500), nullable=True)  # Chemin du fichier Excel (ex: donnees/config_volley.xlsx)```python
+
+    class Team(Base):
+
+    # Stockage des configurations complètes (JSON)    __tablename__ = "teams"
+
+    config_yaml_data = Column(JSON, nullable=True)  # Contenu complet du YAML (hyperparamètres)    
+
+    config_excel_data = Column(JSON, nullable=True)  # Résumé ou métadonnées Excel (nom feuilles, stats, etc.)    # Clé primaire
+
+        id = Column(Integer, primary_key=True, autoincrement=True)
+
+    # Paramètres planification (dupliqués depuis YAML pour accès rapide)    
+
+    nb_semaines = Column(Integer, default=26, nullable=False)    # Foreign key
+
+    semaine_min = Column(Integer, default=1, nullable=False)  # De "semaine_minimum" dans YAML    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+
+        
+
+    # Timestamps    # Informations équipe
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)    nom = Column(String(200), nullable=False)
+
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)    institution = Column(String(200), nullable=True)
+
+        numero_equipe = Column(String(50), nullable=True)
+
+    # Relations (cascade delete pour supprimer matchs/équipes/gymnases si projet supprimé)    genre = Column(String(20), nullable=True)
+
+    matches = relationship("Match", back_populates="project", cascade="all, delete-orphan")    poule = Column(String(100), nullable=True)
+
+    teams = relationship("Team", back_populates="project", cascade="all, delete-orphan")    
+
+    venues = relationship("Venue", back_populates="project", cascade="all, delete-orphan")    # Préférences (JSON arrays)
+
+```    horaires_preferes = Column(JSON, nullable=True)  # ["Mercredi 14h", "Vendredi 18h"]
+
+    lieux_preferes = Column(JSON, nullable=True)     # ["Gymnase A", "Gymnase B"]
+
+**Points clés** :    
+
+- **Stockage double config** :    # Timestamp
+
+  - `config_yaml_path` + `config_yaml_data` : Référence et contenu du YAML    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+  - `config_excel_path` + `config_excel_data` : Référence et métadonnées Excel    
+
+- `semaine_min` : Reproduit `semaine_minimum` du YAML (Tâche 1.2)    # Relation
+
+- **Cascade delete** : Supprimer un projet supprime tous ses matchs/équipes/gymnases    project = relationship("Project", back_populates="teams")
+
+```
+
+---
+
+**Points clés** :
+
+#### Model 2 : Team- **ForeignKey avec CASCADE** : Supprimer projet → supprimer équipes
+
+- **Index sur project_id** : Optimiser requêtes `GET /teams/?project_id=X`
+
+```python- **JSON pour listes** : horaires_preferes, lieux_preferes
+
+class Team(Base):
+
+    __tablename__ = "teams"---
+
+    
+
+    # Clé primaire#### Model 3 : Venue
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+
+    ```python
+
+    # Foreign keyclass Venue(Base):
+
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)    __tablename__ = "venues"
+
+        
+
+    # Informations équipe (depuis feuille Excel "Equipes")    # Clé primaire
+
+    nom = Column(String(200), nullable=False)  # Colonne "Equipe"    id = Column(Integer, primary_key=True, autoincrement=True)
+
+    institution = Column(String(200), nullable=True)  # Extraite du nom (ex: "CENTRALE" de "CENTRALE 1 (1)")    
+
+    numero_equipe = Column(String(50), nullable=True)  # Numéro après institution (ex: "1" de "CENTRALE 1")    # Foreign key
+
+    genre = Column(String(20), nullable=True)  # Extrait de la poule (ex: "M" de "HBFA1PK")    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    poule = Column(String(100), nullable=True)  # Colonne "Poule" du Excel    
+
+        # Informations gymnase
+
+    # Préférences (JSON arrays - depuis Excel ou calculées)    nom = Column(String(200), nullable=False)
+
+    horaires_preferes = Column(JSON, nullable=True)  # ["Mercredi 14h", "Vendredi 18h"] - depuis "Horaire_Prefere"    capacite = Column(Integer, default=1, nullable=False)  # Nombre de terrains simultanés
+
+    lieux_preferes = Column(JSON, nullable=True)     # ["Gymnase A", "Gymnase B"] - depuis feuille "Preferences_Gymnases"    
+
+        # Disponibilités (JSON array)
+
+    # Timestamp    horaires_disponibles = Column(JSON, nullable=True)  # ["Mercredi 14h", "Mercredi 16h", ...]
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)    
+
+        # Timestamp
+
+    # Relation    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    project = relationship("Project", back_populates="teams")    
+
+```    # Relation
+
+    project = relationship("Project", back_populates="venues")
+
+**Points clés** :```
+
+- **Source Excel** : Feuille `Equipes` (colonnes: Equipe, Poule, Horaire_Prefere)
+
+- **Institution/numéro** : Extraits du nom (ex: "CENTRALE 1 (1)" → institution="CENTRALE", numero="1")**Points clés** :
+
+- **Préférences** : `lieux_preferes` vient de la feuille `Preferences_Gymnases` (par institution)- `capacite` : Nombre de matchs simultanés possibles dans le gymnase
+
+- **Index sur project_id** : Optimiser requêtes `GET /teams/?project_id=X`- **JSON pour disponibilités** : horaires_disponibles
+
+- **JSON pour listes** : horaires_preferes, lieux_preferes
+
+---
+
+---
+
+#### Model 4 : Match
+
+#### Model 3 : Venue
+
+```python
+
+```pythonclass Match(Base):
+
+class Venue(Base):    __tablename__ = "matches"
+
+    __tablename__ = "venues"    
+
+        # Clé primaire
+
+    # Clé primaire    id = Column(Integer, primary_key=True, autoincrement=True)
+
+    id = Column(Integer, primary_key=True, autoincrement=True)    
+
+        # Foreign key
+
+    # Foreign key    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)    
+
+        # Équipes (dénormalisé pour simplifier les requêtes)
+
+    # Informations gymnase (depuis feuille Excel "Gymnases")    equipe1_nom = Column(String(200), nullable=False)
+
+    nom = Column(String(200), nullable=False)  # Colonne "Gymnase"    equipe1_institution = Column(String(200), nullable=True)
+
+    capacite = Column(Integer, default=1, nullable=False)  # Colonne "Capacite" (nombre de terrains simultanés)    equipe1_genre = Column(String(20), nullable=True)
+
+        
+
+    # Disponibilités (JSON array - depuis colonnes horaires du Excel)    equipe2_nom = Column(String(200), nullable=False)
+
+    horaires_disponibles = Column(JSON, nullable=True)  # ["Mercredi 14h", "Mercredi 16h", ...] - colonnes "Mercredi 14:00", etc.    equipe2_institution = Column(String(200), nullable=True)
+
+        equipe2_genre = Column(String(20), nullable=True)
+
+    # Timestamp    
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)    # Poule
+
+        poule = Column(String(100), nullable=True, index=True)  # Index pour filtrage
+
+    # Relation    
+
+    project = relationship("Project", back_populates="venues")    # Créneau (nullable si non planifié)
+
+```    semaine = Column(Integer, nullable=True, index=True)  # Index pour filtrage par semaine
+
+    horaire = Column(String(20), nullable=True)  # "Mercredi 14h"
+
+**Points clés** :    gymnase = Column(String(200), nullable=True)
+
+- **Source Excel** : Feuille `Gymnases` (colonnes: Gymnase, Capacite, + horaires en colonnes dynamiques)    
+
+- `capacite` : Nombre de matchs simultanés possibles    # État (NOUVEAUX CHAMPS - Tâche 1.1)
+
+- **horaires_disponibles** : Créneaux extraits des colonnes Excel (ex: si "Mercredi 14:00" = 1, ajouter à la liste)    est_fixe = Column(Boolean, default=False, nullable=False, index=True)  # Index pour filtrage
+
+- **JSON pour disponibilités**    statut = Column(String(50), default="a_planifier", nullable=False, index=True)  # Index pour filtrage
+
+    priorite = Column(Integer, default=0, nullable=False)
+
+---    
+
+    # Scores (NOUVEAUX CHAMPS - Tâche 1.1)
+
+#### Model 4 : Match    score_equipe1 = Column(Integer, nullable=True)
+
+    score_equipe2 = Column(Integer, nullable=True)
+
+```python    
+
+class Match(Base):    # Notes (NOUVEAU CHAMP - Tâche 1.1)
+
+    __tablename__ = "matches"    notes = Column(Text, nullable=True)
+
+        
+
+    # Clé primaire    # Timestamps
+
+    id = Column(Integer, primary_key=True, autoincrement=True)    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+        updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    # Foreign key    
+
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)    # Relation
+
+        project = relationship("Project", back_populates="matches")
+
+    # Équipes (dénormalisé pour simplifier les requêtes)    
+
+    equipe1_nom = Column(String(200), nullable=False)    # Properties calculées (reproduire logique core.Match - Tâche 1.1)
+
+    equipe1_institution = Column(String(200), nullable=True)    @property
+
+    equipe1_genre = Column(String(20), nullable=True)    def est_planifie(self) -> bool:
+
+            """Retourne True si le match a un créneau assigné"""
+
+    equipe2_nom = Column(String(200), nullable=False)        return self.semaine is not None
+
+    equipe2_institution = Column(String(200), nullable=True)    
+
+    equipe2_genre = Column(String(20), nullable=True)    @property
+
+        def est_modifiable(self) -> bool:
+
+    # Poule        """Retourne True si le match peut être replanifié"""
+
+    poule = Column(String(100), nullable=True, index=True)  # Index pour filtrage        if self.est_fixe:
+
+                return False
+
+    # Créneau (nullable si non planifié)        if self.statut in ["fixe", "termine", "annule"]:
+
+    semaine = Column(Integer, nullable=True, index=True)  # Index pour filtrage par semaine            return False
+
+    horaire = Column(String(20), nullable=True)  # "Mercredi 14h"        return True
+
+    gymnase = Column(String(200), nullable=True)```
+
+    
+
+    # État (NOUVEAUX CHAMPS - Tâche 1.1)**Points clés** :
+
+    est_fixe = Column(Boolean, default=False, nullable=False, index=True)  # Verrouillé (non replanifiable)- **Dénormalisation équipes** : Stocker nom/institution/genre directement (pas de FK vers Team)
+
+    statut = Column(String(50), default="a_planifier", nullable=False, index=True)  # a_planifier, planifie, fixe, termine, annule- **Indexes multiples** : project_id, poule, semaine, est_fixe, statut pour optimiser requêtes API
+
+    priorite = Column(Integer, default=0, nullable=False)- **Properties** : Reproduisent exactement la logique de `core.Match` (Tâche 1.1)
+
+    - **Nouveaux champs** : est_fixe, statut, scores, notes (ajoutés Tâche 1.1)
+
+    # Scores (NOUVEAUX CHAMPS - Tâche 1.1)
+
+    score_equipe1 = Column(Integer, nullable=True)---
+
+    score_equipe2 = Column(Integer, nullable=True)
+
+    #### Indexes Composites (Ajouter en fin de fichier)
+
+    # Notes (NOUVEAU CHAMP - Tâche 1.1)
+
+    notes = Column(Text, nullable=True)```python
+
+    # Indexes composites pour optimiser les requêtes fréquentes
+
+    # TimestampsIndex('idx_match_project_semaine', Match.project_id, Match.semaine)
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)Index('idx_match_project_poule', Match.project_id, Match.poule)
+
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)```
+
+    
+
+    # Relation**Usage** :
+
+    project = relationship("Project", back_populates="matches")- `idx_match_project_semaine` : Optimiser `GET /matches/?project_id=1&semaine=5`
+
+    - `idx_match_project_poule` : Optimiser `GET /matches/?project_id=1&poule=A`
+
+    # Properties calculées (reproduire logique core.Match - Tâche 1.1)
+
+    @property---
+
+    def est_planifie(self) -> bool:
+
+        """Retourne True si le match a un créneau assigné"""### Structure complète attendue du fichier models.py
+
+        return self.semaine is not None
+
+    ```python
+
+    @propertyfrom sqlalchemy import Column, Integer, String, Boolean, Text, JSON, DateTime, ForeignKey, Index
+
+    def est_modifiable(self) -> bool:from sqlalchemy.ext.declarative import declarative_base
+
+        """Retourne True si le match peut être replanifié"""from sqlalchemy.orm import relationship
+
+        if self.est_fixe:from datetime import datetime
+
+            return False
+
+        if self.statut in ["fixe", "termine", "annule"]:Base = declarative_base()
+
+            return False
+
+        return Trueclass Project(Base):
+
+```    # ... (voir ci-dessus)
+
+
+
+**Points clés** :class Team(Base):
+
+- **Source initiale** : Matchs générés par `generators/match_generator.py` (round-robin depuis feuille Equipes)    # ... (voir ci-dessus)
+
+- **Dénormalisation équipes** : Stocker nom/institution/genre directement (pas de FK vers Team)
+
+- **Indexes multiples** : project_id, poule, semaine, est_fixe, statut pour optimiser requêtes APIclass Venue(Base):
+
+- **Properties** : Reproduisent exactement la logique de `core.Match` (Tâche 1.1)    # ... (voir ci-dessus)
+
+- **Nouveaux champs** : est_fixe, statut, scores, notes (ajoutés Tâche 1.1)
+
+class Match(Base):
+
+---    # ... (voir ci-dessus)
+
+
+
+#### Indexes Composites (Ajouter en fin de fichier)# Indexes composites
+
+Index('idx_match_project_semaine', Match.project_id, Match.semaine)
+
+```pythonIndex('idx_match_project_poule', Match.project_id, Match.poule)
+
+# Indexes composites pour optimiser les requêtes fréquentes```
+
+Index('idx_match_project_semaine', Match.project_id, Match.semaine)
+
+Index('idx_match_project_poule', Match.project_id, Match.poule)---
+
+```
+
+### Impact et liens avec autres modules
+
+**Usage** :
+
+- `idx_match_project_semaine` : Optimiser `GET /matches/?project_id=1&semaine=5`**Intégration avec engine.py** :
+
+- `idx_match_project_poule` : Optimiser `GET /matches/?project_id=1&poule=A`- `init_db()` dans `engine.py` importe `Base` et appelle `Base.metadata.create_all()`
+
+- `get_db()` fournit les sessions pour les routes API (Tâche 1.5)
+
+---
+
+**Intégration future avec schemas Pydantic** :
+
+### Impact et liens avec autres modules- `backend/schemas/match.py` (Tâche 1.4) : Schemas Pydantic miroirs pour sérialisation API
+
+- Config `from_attributes=True` dans schemas pour conversion ORM → Pydantic
+
+**Intégration avec engine.py** :
+
+- `init_db()` dans `engine.py` importe `Base` et appelle `Base.metadata.create_all()`**Intégration future avec API Routes** :
+
+- `get_db()` fournit les sessions pour les routes API (Tâche 1.5)- `backend/api/routes/matches.py` (Tâche 1.5) : Utilise ces modèles pour CRUD
+
+- Exemple : `db.query(Match).filter(Match.project_id == project_id).all()`
+
+**Intégration future avec schemas Pydantic** :
+
+- `backend/schemas/match.py` (Tâche 1.4) : Schemas Pydantic miroirs pour sérialisation API**Intégration future avec Service de Sync** :
+
+- Config `from_attributes=True` dans schemas pour conversion ORM → Pydantic- `backend/services/sync_service.py` (Tâche 1.6) : Convertit Excel → instances de ces modèles
+
+- Exemple : `Project(nom=..., sport=...)`, `Match(equipe1_nom=..., ...)`
+
+**Intégration future avec Service de Sync** :
+
+- `backend/services/sync_service.py` (Tâche 1.6) : **Convertit YAML + Excel → instances de ces modèles**### Consignes d'organisation
+
+  - Charge YAML via `Config.from_yaml()`- **Ordre des modèles** : Project d'abord, puis Team/Venue, puis Match (dépendances FK)
+
+  - Charge Excel via `ConfigManager(fichier_excel)`- **Indexes** : Ajouter sur colonnes utilisées dans filtres API (project_id, semaine, poule, statut, est_fixe)
+
+  - Crée `Project` avec chemins YAML/Excel et données JSON- **Cascade delete** : TOUJOURS sur relations parent→enfant pour éviter orphelins
+
+  - Crée `Team` depuis feuille Equipes- **Properties vs méthodes** : Utiliser `@property` pour calculs simples sans arguments
+
+  - Crée `Venue` depuis feuille Gymnases
+
+  - Crée `Match` via générateurs (round-robin)## À faire/vérifier
+
+
+
+**Intégration future avec actualiser_config.py** :**Checklist de développement** :
+
+- `actualiser_config.py` valide la structure Excel AVANT import
+
+- Pourrait être appelé automatiquement par le service de sync**engine.py** :
+
+- Détecte colonnes manquantes, renomme colonnes mal nommées, valide le contenu1. ✅ Créer fichier `backend/database/engine.py`
+
+2. ✅ Définir `DATABASE_PATH = BASE_DIR / "database" / "pycalendar.db"`
+
+### Consignes d'organisation3. ✅ Créer engine avec `check_same_thread=False`
+
+- **Ordre des modèles** : Project d'abord, puis Team/Venue, puis Match (dépendances FK)4. ✅ Activer foreign keys via `@event.listens_for(engine, "connect")`
+
+- **Indexes** : Ajouter sur colonnes utilisées dans filtres API (project_id, semaine, poule, statut, est_fixe)5. ✅ Créer `SessionLocal` avec `autocommit=False, autoflush=False`
+
+- **Cascade delete** : TOUJOURS sur relations parent→enfant pour éviter orphelins6. ✅ Implémenter `get_db()` generator avec try/finally
+
+- **Properties vs méthodes** : Utiliser `@property` pour calculs simples sans arguments7. ✅ Implémenter `init_db()` avec import `Base` et `create_all()`
+
+- **Stockage config** : Prévoir chemins + données JSON pour YAML et Excel
+
+**models.py** :
+
+## À faire/vérifier1. ✅ Créer fichier `backend/database/models.py`
+
+2. ✅ Définir `Base = declarative_base()`
+
+**Checklist de développement** :3. ✅ Créer modèle `Project` avec tous les champs + relations cascade
+
+4. ✅ Créer modèle `Team` avec FK + index + relation
+
+**engine.py** :5. ✅ Créer modèle `Venue` avec FK + index + relation
+
+1. ✅ Créer fichier `backend/database/engine.py`6. ✅ Créer modèle `Match` avec tous les champs + properties
+
+2. ✅ Définir `DATABASE_PATH = BASE_DIR / "database" / "pycalendar.db"`7. ✅ Ajouter indexes composites en fin de fichier
+
+3. ✅ Créer engine avec `check_same_thread=False`
+
+4. ✅ Activer foreign keys via `@event.listens_for(engine, "connect")`**Checklist de validation** :
+
+5. ✅ Créer `SessionLocal` avec `autocommit=False, autoflush=False`
+
+6. ✅ Implémenter `get_db()` generator avec try/finally1. ✅ Importer les modèles sans erreur :
+
+7. ✅ Implémenter `init_db()` avec import `Base` et `create_all()`   ```python
+
+   from backend.database.models import Base, Project, Team, Venue, Match
+
+**models.py** :   print(Base.metadata.tables.keys())  # Doit afficher: dict_keys(['projects', 'teams', 'venues', 'matches'])
+
+1. ✅ Créer fichier `backend/database/models.py`   ```
+
+2. ✅ Définir `Base = declarative_base()`
+
+3. ✅ Créer modèle `Project` avec chemins config + données JSON + relations cascade2. ✅ Créer la base de données :
+
+4. ✅ Créer modèle `Team` avec source Excel documentée + FK + index + relation   ```python
+
+5. ✅ Créer modèle `Venue` avec source Excel documentée + FK + index + relation   from backend.database.engine import init_db
+
+6. ✅ Créer modèle `Match` avec tous les champs + properties   init_db()  # Doit créer database/pycalendar.db
+
+7. ✅ Ajouter indexes composites en fin de fichier   ```
+
+
+
+**Checklist de validation** :3. ✅ Vérifier les tables créées :
+
+   ```bash
+
+1. ✅ Importer les modèles sans erreur :   sqlite3 database/pycalendar.db ".tables"
+
+   ```python   # Doit afficher: matches  projects  teams  venues
+
+   from backend.database.models import Base, Project, Team, Venue, Match   ```
+
+   print(Base.metadata.tables.keys())  # Doit afficher: dict_keys(['projects', 'teams', 'venues', 'matches'])
+
+   ```4. ✅ Vérifier le schéma d'une table :
+
+   ```bash
+
+2. ✅ Créer la base de données :   sqlite3 database/pycalendar.db ".schema matches"
+
+   ```python   # Doit afficher les colonnes, FK, indexes
+
+   from backend.database.engine import init_db   ```
+
+   init_db()  # Doit créer database/pycalendar.db
+
+   ```5. ✅ Tester les foreign keys :
+
+   ```python
+
+3. ✅ Vérifier les tables créées :   from backend.database.engine import SessionLocal, init_db
+
+   ```bash   from backend.database.models import Project, Match
+
+   sqlite3 database/pycalendar.db ".tables"   
+
+   # Doit afficher: matches  projects  teams  venues   init_db()
+
+   ```   db = SessionLocal()
+
+   
+
+4. ✅ Vérifier le schéma d'une table :   # Créer projet
+
+   ```bash   p = Project(nom="Test", sport="Volley")
+
+   sqlite3 database/pycalendar.db ".schema projects"   db.add(p)
+
+   # Doit afficher config_yaml_path, config_excel_path, config_yaml_data, config_excel_data, semaine_min, etc.   db.commit()
+
+   ```   db.refresh(p)
+
+   
+
+5. ✅ Tester les foreign keys :   # Créer match
+
+   ```python   m = Match(project_id=p.id, equipe1_nom="A", equipe2_nom="B", poule="Poule 1")
+
+   from backend.database.engine import SessionLocal, init_db   db.add(m)
+
+   from backend.database.models import Project, Match   db.commit()
+
+      
+
+   init_db()   # Vérifier relation
+
+   db = SessionLocal()   assert len(p.matches) == 1
+
+      assert m.project.nom == "Test"
+
+   # Créer projet   
+
+   p = Project(nom="Test Volley", sport="Volley", config_yaml_path="configs/test.yaml")   # Tester cascade delete
+
+   db.add(p)   db.delete(p)
+
+   db.commit()   db.commit()
+
+   db.refresh(p)   assert db.query(Match).count() == 0  # Match supprimé aussi
+
+      
+
+   # Créer match   db.close()
+
+   m = Match(project_id=p.id, equipe1_nom="A", equipe2_nom="B", poule="Poule 1")   ```
+
+   db.add(m)
+
+   db.commit()6. ✅ Tester les properties :
+
+      ```python
+
+   # Vérifier relation   from backend.database.models import Match
+
+   assert len(p.matches) == 1   
+
+   assert m.project.nom == "Test Volley"   # Match non planifié
+
+      m1 = Match(equipe1_nom="A", equipe2_nom="B", poule="P1")
+
+   # Tester cascade delete   assert m1.est_planifie == False
+
+   db.delete(p)   assert m1.est_modifiable == True
+
+   db.commit()   
+
+   assert db.query(Match).count() == 0  # Match supprimé aussi   # Match planifié
+
+      m2 = Match(equipe1_nom="A", equipe2_nom="B", poule="P1", semaine=5)
+
+   db.close()   assert m2.est_planifie == True
+
+   ```   
+
+   # Match fixe
+
+6. ✅ Tester les properties :   m3 = Match(equipe1_nom="A", equipe2_nom="B", poule="P1", est_fixe=True)
+
+   ```python   assert m3.est_modifiable == False
+
+   from backend.database.models import Match   ```
+
+   
+
+   # Match non planifié**Commandes de test** :
+
+   m1 = Match(equipe1_nom="A", equipe2_nom="B", poule="P1")```bash
+
+   assert m1.est_planifie == False# Créer DB
+
+   assert m1.est_modifiable == Truepython -c "from backend.database.engine import init_db; init_db()"
+
+   
+
+   # Match planifié# Vérifier tables
+
+   m2 = Match(equipe1_nom="A", equipe2_nom="B", poule="P1", semaine=5)sqlite3 database/pycalendar.db ".tables"
+
+   assert m2.est_planifie == True
+
+   # Vérifier schéma
+
+   # Match fixesqlite3 database/pycalendar.db ".schema matches"
+
+   m3 = Match(equipe1_nom="A", equipe2_nom="B", poule="P1", est_fixe=True)
+
+   assert m3.est_modifiable == False# Tester foreign keys
+
+   ```sqlite3 database/pycalendar.db "PRAGMA foreign_keys; INSERT INTO matches (project_id, equipe1_nom, equipe2_nom, poule) VALUES (999, 'A', 'B', 'P1');"
+
+# Doit échouer avec "FOREIGN KEY constraint failed"
+
+**Commandes de test** :```
+
+```bash
+
+# Créer DB## Questions
+
+python -c "from backend.database.engine import init_db; init_db()"- Faut-il ajouter une contrainte CHECK sur `semaine_min <= nb_semaines` dans le modèle Project ?
+
+- Faut-il valider les valeurs de `statut` avec un ENUM SQLite ou laisser libre ?
+
+# Vérifier tables- Faut-il ajouter un index sur `Match.gymnase` pour optimiser les requêtes par lieu ?
+
+sqlite3 database/pycalendar.db ".tables"- Faut-il stocker les équipes normalisées (FK vers Team) ou garder dénormalisé (plus simple pour l'affichage) ?
+
+
+
+# Vérifier schéma Project (doit avoir config_yaml_path, config_excel_path, etc.)## Documentation
+
+sqlite3 database/pycalendar.db ".schema projects"Rester concis : documenter uniquement les choix techniques non évidents (ex: dénormalisation équipes, pourquoi cascade delete, pourquoi indexes composites). Éviter la sur-documentation des concepts SQLAlchemy standards.
+
+
+# Tester foreign keys
+sqlite3 database/pycalendar.db "PRAGMA foreign_keys; INSERT INTO matches (project_id, equipe1_nom, equipe2_nom, poule) VALUES (999, 'A', 'B', 'P1');"
+# Doit échouer avec "FOREIGN KEY constraint failed"
+```
+
+## Questions
+
+**Questions critiques à poser si quelque chose n'est pas clair** :
+
+1. **Structure des feuilles Excel** :
+   - Quelles sont les colonnes exactes de chaque feuille (Equipes, Gymnases, etc.) ?
+   - Comment extraire institution/numéro depuis le nom d'équipe ? (ex: regex, split, etc.)
+   - Faut-il stocker TOUTES les feuilles Excel en JSON ou seulement un résumé ?
+
+2. **Gestion de la configuration** :
+   - Faut-il dupliquer `nb_semaines` dans Project (depuis YAML) ou le recalculer à chaque fois ?
+   - Le champ s'appelle `semaine_minimum` dans YAML et `semaine_min` dans DB : est-ce OK ?
+
+3. **Import Excel → DB** :
+   - Faut-il valider avec `actualiser_config.py` AVANT d'importer dans la DB ?
+   - Que faire si le fichier Excel est invalide (colonnes manquantes, etc.) ?
+
+4. **Évolution des données** :
+   - Une fois importé, le fichier Excel peut-il être re-synchronisé (écrasement DB) ?
+   - Ou la DB devient-elle la source de vérité (Excel seulement pour import initial) ?
+
+5. **Matchs fixes** :
+   - Les matchs fixes sont-ils définis dans une feuille Excel ou uniquement via l'UI web ?
+   - Si Excel : quelle feuille ? Quelles colonnes ?
+
+6. **Validation** :
+   - Faut-il ajouter des contraintes CHECK SQL (ex: `semaine_min <= nb_semaines`) ?
+   - Faut-il valider les valeurs de `statut` avec un ENUM ou laisser libre ?
+
+---
+
+## Documentation
+
+Rester concis : documenter uniquement les choix techniques non évidents :
+- **Pourquoi dénormalisation équipes** : Simplifier affichage et requêtes (pas de JOIN)
+- **Pourquoi cascade delete** : Éviter orphelins (supprimer projet = supprimer tout)
+- **Pourquoi indexes composites** : Optimiser filtres API fréquents (project+semaine, project+poule)
+- **Pourquoi stocker config YAML/Excel** : Traçabilité et possibilité de ré-export
+- **Lien avec actualiser_config.py** : Valider Excel avant import pour éviter erreurs
+
+Éviter la sur-documentation des concepts SQLAlchemy standards.

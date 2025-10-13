@@ -1,0 +1,653 @@
+# Prompt 1.7 : Scripts CLI – Initialisation et Import# Prompt 1.7 : Scripts CLI – Initialisation et Import
+
+
+
+## Contexte global## Contexte global
+
+PyCalendar V2 doit proposer des scripts CLI pour initialiser la base de données et importer des projets depuis les fichiers de configuration (YAML + Excel). Ces scripts facilitent l'automatisation, la maintenance et le déploiement de l'application.PyCalendar V2 doit proposer des scripts CLI pour initialiser la base de données et importer des projets depuis des fichiers Excel/YAML. Ces scripts facilitent l'automatisation, la maintenance et le déploiement de l'application.
+
+
+
+**RAPPEL - Double configuration** :## Contexte technique
+
+- **Fichier YAML** : Hyperparamètres + référence au fichier ExcelCette tâche concerne la création de scripts CLI robustes et bien organisés pour l'initialisation de la base de données et l'import des données via le service de synchronisation.
+
+- **Fichier Excel** : Données détaillées (équipes, gymnases, contraintes)
+
+- **Validation** : `actualiser_config.py` valide/corrige la structure Excel AVANT import## Résumé du travail précédent
+
+- La base de données, les modèles et l'engine sont en place (`backend/database/`).
+
+## Contexte technique- Le service de synchronisation est opérationnel (`backend/services/sync_service.py`).
+
+Cette tâche crée des scripts CLI robustes pour :- Les besoins d'automatisation et de facilité d'utilisation sont identifiés.
+
+1. Initialiser la base de données (créer tables)
+
+2. Importer un projet depuis YAML+Excel (via SyncService)## Objectifs
+
+3. Afficher des statistiques d'import- Définir des scripts CLI clairs, testables et extensibles.
+
+- S'assurer de la robustesse, de la gestion des erreurs et de la clarté des scripts.
+
+## Résumé du travail précédent- Prévoir l'ajout facile de nouvelles commandes ou options.
+
+- La base de données, modèles et engine sont en place (`backend/database/`) - Tâche 1.3
+
+- Le service de synchronisation est opérationnel (`backend/services/sync_service.py`) - Tâche 1.6## Détails techniques
+
+- Le service utilise `Config`, `ConfigManager`, `DataSource`, générateurs existants
+
+- La validation Excel via `actualiser_config.py` est disponible### Script 1 : Initialisation de la base de données
+
+**Fichier à créer** : `scripts/init_db.py`
+
+## Objectifs
+
+1. Créer script `init_db.py` pour initialiser la base de données**Contenu requis** :
+
+2. Créer script `import_excel.py` pour importer un projet (YAML+Excel → DB)
+
+3. Assurer robustesse, gestion d'erreurs et messages clairs```python
+
+4. Prévoir extensibilité (nouvelles commandes, options)import sys
+
+from pathlib import Path
+
+## Détails techniques
+
+# Ajouter répertoire parent au sys.path pour imports PyCalendar
+
+### Script 1 : Initialisation de la base de donnéesproject_root = Path(__file__).parent.parent
+
+sys.path.insert(0, str(project_root))
+
+**📁 Fichier à créer** : `scripts/init_db.py`
+
+from backend.database.engine import init_db
+
+**Contenu complet** :
+
+if __name__ == "__main__":
+
+```python    print("Initialisation de la base de données...")
+
+#!/usr/bin/env python3    init_db()
+
+"""    print("✓ Base de données initialisée avec succès")
+
+Script d'initialisation de la base de données PyCalendar.    print("Fichier : database/pycalendar.db")
+
+```
+
+Crée toutes les tables nécessaires dans database/pycalendar.db.
+
+"""**Consignes** :
+
+- Import du module `init_db` depuis `backend.database.engine`
+
+import sys- Ajout du projet au sys.path pour résoudre les imports
+
+from pathlib import Path- Messages clairs pour l'utilisateur
+
+- Gestion simple (pas d'arguments)
+
+# Ajouter répertoire racine au sys.path pour imports
+
+project_root = Path(__file__).parent.parent**Usage** : `python scripts/init_db.py`
+
+sys.path.insert(0, str(project_root))
+
+### Script 2 : Import depuis Excel
+
+from backend.database.engine import init_db, DATABASE_PATH**Fichier à créer** : `scripts/import_excel.py`
+
+
+
+def main():**Contenu requis** :
+
+    print("=" * 60)
+
+    print("Initialisation de la base de données PyCalendar")```python
+
+    print("=" * 60)import sys
+
+    from pathlib import Path
+
+    # Afficher chemin DBimport argparse
+
+    print(f"\n📂 Chemin de la base de données :")
+
+    print(f"   {DATABASE_PATH}")# Ajouter répertoire parent au sys.path
+
+    project_root = Path(__file__).parent.parent
+
+    # Vérifier si DB existe déjàsys.path.insert(0, str(project_root))
+
+    if DATABASE_PATH.exists():
+
+        print(f"\n⚠️  Base de données existante détectée")from backend.database.engine import SessionLocal
+
+        response = input("   Voulez-vous la recréer ? (oui/non) : ").strip().lower()from backend.services.sync_service import SyncService
+
+        if response not in ['oui', 'o', 'yes', 'y']:
+
+            print("\n❌ Initialisation annulée")def main():
+
+            return    parser = argparse.ArgumentParser(
+
+                description="Importer un projet depuis Excel/YAML vers la base de données"
+
+        # Sauvegarder ancien fichier    )
+
+        backup_path = DATABASE_PATH.with_suffix('.db.bak')    parser.add_argument(
+
+        DATABASE_PATH.rename(backup_path)        "config_path",
+
+        print(f"   ✓ Sauvegarde créée : {backup_path}")        help="Chemin vers le fichier YAML de configuration"
+
+        )
+
+    # Créer DB    parser.add_argument(
+
+    print(f"\n🔧 Création des tables...")        "project_name",
+
+    try:        nargs="?",
+
+        init_db()        default=None,
+
+        print(f"   ✓ Tables créées avec succès")        help="Nom du projet (optionnel, utilise le nom du fichier config si absent)"
+
+    except Exception as e:    )
+
+        print(f"\n❌ Erreur lors de la création : {e}")    
+
+        sys.exit(1)    args = parser.parse_args()
+
+        
+
+    # Vérifier tables créées    # Nom projet par défaut
+
+    import sqlite3    if not args.project_name:
+
+    conn = sqlite3.connect(DATABASE_PATH)        args.project_name = Path(args.config_path).stem
+
+    cursor = conn.cursor()    
+
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")    # Vérifier existence fichier
+
+    tables = [row[0] for row in cursor.fetchall()]    if not Path(args.config_path).exists():
+
+    conn.close()        print(f"❌ Erreur : Fichier non trouvé : {args.config_path}")
+
+            sys.exit(1)
+
+    print(f"\n📊 Tables créées ({len(tables)}) :")    
+
+    for table in tables:    # Import
+
+        print(f"   - {table}")    db = SessionLocal()
+
+        try:
+
+    print(f"\n✅ Initialisation terminée avec succès!")        print(f"Import du projet '{args.project_name}' depuis {args.config_path}...")
+
+    print(f"   Base de données prête à l'emploi : {DATABASE_PATH}")        service = SyncService(db)
+
+        project = service.import_from_excel(args.config_path, args.project_name)
+
+if __name__ == "__main__":        
+
+    main()        # Stats
+
+```        nb_teams = len(project.teams)
+
+        nb_venues = len(project.venues)
+
+**Points clés** :        nb_matches = len(project.matches)
+
+- **sys.path manipulation** : Permet imports depuis `backend/`        
+
+- **Vérification DB existante** : Demande confirmation avant écrasement        print(f"✓ Projet importé avec succès (ID: {project.id})")
+
+- **Sauvegarde** : Renomme ancien fichier en `.db.bak`        print(f"  - {nb_teams} équipes")
+
+- **Vérification post-création** : Liste les tables créées        print(f"  - {nb_venues} gymnases")
+
+        print(f"  - {nb_matches} matchs")
+
+**Usage** :        
+
+```bash    except Exception as e:
+
+python scripts/init_db.py        print(f"❌ Erreur lors de l'import : {e}")
+
+```        sys.exit(1)
+
+    finally:
+
+---        db.close()
+
+
+
+### Script 2 : Import depuis YAML+Excelif __name__ == "__main__":
+
+    main()
+
+**📁 Fichier à créer** : `scripts/import_excel.py````
+
+
+
+**Contenu complet** :**Consignes** :
+
+- Utiliser `argparse` pour parsing arguments
+
+```python- Argument `config_path` obligatoire
+
+#!/usr/bin/env python3- Argument `project_name` optionnel (utilise nom fichier si absent)
+
+"""- Vérifier existence du fichier config
+
+Script d'import d'un projet depuis config YAML + Excel.- Créer session DB via `SessionLocal()`
+
+- Instancier `SyncService(db)` et appeler `import_from_excel()`
+
+Charge les données depuis les fichiers de configuration et les importe dans la DB.- Afficher stats après import (nb équipes, gymnases, matchs)
+
+Utilise le service de synchronisation (SyncService) créé en Tâche 1.6.- Fermer session dans `finally`
+
+"""- Gérer exceptions avec messages clairs
+
+- Exit code 1 en cas d'erreur
+
+import sys
+
+from pathlib import Path**Usage** : 
+
+import argparse- `python scripts/import_excel.py configs/config_volley.yaml`
+
+- `python scripts/import_excel.py configs/config_volley.yaml "Volley 2025"`
+
+# Ajouter répertoire racine au sys.path
+
+project_root = Path(__file__).parent.parent### Consignes d'organisation
+
+sys.path.insert(0, str(project_root))- Scripts autonomes avec imports relatifs au projet
+
+- Messages clairs et informatifs pour l'utilisateur
+
+from backend.database.engine import SessionLocal, DATABASE_PATH- Gestion des erreurs avec exit codes appropriés
+
+from backend.services.sync_service import SyncService- Documentation inline si besoin (docstrings)
+
+
+
+def main():### Impact et liens
+
+    # Parser arguments- Le script `init_db.py` utilise `backend/database/engine.py`
+
+    parser = argparse.ArgumentParser(- Le script `import_excel.py` utilise `backend/services/sync_service.py`
+
+        description="Importer un projet depuis config YAML + Excel",- Les scripts sont appelés manuellement ou via automatisation (CI/CD, cron)
+
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+
+        epilog="""## À faire/vérifier
+
+Exemples:- Créer les deux scripts avec parsing d'arguments
+
+  # Import avec nom auto- Vérifier le bon fonctionnement :
+
+  python scripts/import_excel.py configs/config_volley.yaml  - `python scripts/init_db.py` → crée database/pycalendar.db
+
+    - `python scripts/import_excel.py configs/config_test.yaml "Test"` → importe projet
+
+  # Import avec nom personnalisé- Tester la gestion des erreurs :
+
+  python scripts/import_excel.py configs/config_volley.yaml "Championnat Volley 2025"  - Fichier config manquant → message d'erreur clair, exit 1
+
+    - Excel invalide → message d'erreur clair, exit 1
+
+  # Import sans validation Excel (déconseillé)- Vérifier que les stats affichées sont correctes
+
+  python scripts/import_excel.py configs/config_volley.yaml --no-validate
+
+        """## Questions
+
+    )Poser des questions si des points sur le parsing d'arguments, la gestion des erreurs ou l'intégration ne sont pas clairs.
+
+    
+
+    parser.add_argument(## Documentation
+
+        "config_path",Rester concis, ne pas ajouter de documentation excessive. Utiliser des docstrings brèves et des messages utilisateur clairs.
+
+        help="Chemin vers le fichier YAML de configuration"
+    )
+    parser.add_argument(
+        "project_name",
+        nargs="?",
+        default=None,
+        help="Nom du projet (optionnel, généré automatiquement si absent)"
+    )
+    parser.add_argument(
+        "--no-validate",
+        action="store_true",
+        help="Désactiver la validation Excel (actualiser_config.py)"
+    )
+    parser.add_argument(
+        "--verbose",
+        "-v",
+        action="store_true",
+        help="Afficher plus de détails"
+    )
+    
+    args = parser.parse_args()
+    
+    # Vérifier que DB existe
+    if not DATABASE_PATH.exists():
+        print("❌ Base de données non trouvée!")
+        print(f"   Exécutez d'abord : python scripts/init_db.py")
+        sys.exit(1)
+    
+    # Vérifier que fichier YAML existe
+    yaml_path = Path(args.config_path)
+    if not yaml_path.exists():
+        print(f"❌ Fichier YAML non trouvé : {yaml_path}")
+        sys.exit(1)
+    
+    # Afficher header
+    print("=" * 70)
+    print("Import d'un projet dans PyCalendar")
+    print("=" * 70)
+    print(f"\n📄 Configuration YAML : {yaml_path}")
+    
+    # Import
+    db = SessionLocal()
+    service = SyncService(db)
+    
+    try:
+        # Importer via service (Tâche 1.6)
+        validate_excel = not args.no_validate
+        
+        if args.verbose:
+            print(f"🔍 Validation Excel : {'Activée' if validate_excel else 'Désactivée'}")
+        
+        print(f"\n🚀 Démarrage de l'import...\n")
+        
+        project = service.import_from_excel(
+            yaml_path=str(yaml_path),
+            project_name=args.project_name,
+            validate_excel=validate_excel
+        )
+        
+        # Afficher statistiques
+        print(f"\n{'=' * 70}")
+        print(f"✅ Import terminé avec succès!")
+        print(f"{'=' * 70}")
+        print(f"\n📊 Statistiques du projet :")
+        print(f"   ID         : {project.id}")
+        print(f"   Nom        : {project.nom}")
+        print(f"   Sport      : {project.sport}")
+        print(f"   Semaines   : {project.nb_semaines}")
+        print(f"   Semaine min: {project.semaine_min}")
+        print(f"\n📈 Données importées :")
+        print(f"   Équipes    : {len(project.teams)}")
+        print(f"   Gymnases   : {len(project.venues)}")
+        print(f"   Matchs     : {len(project.matches)}")
+        
+        # Détails matchs
+        nb_planifies = sum(1 for m in project.matches if m.semaine is not None)
+        nb_fixes = sum(1 for m in project.matches if m.est_fixe)
+        print(f"\n🎯 État des matchs :")
+        print(f"   Planifiés  : {nb_planifies}")
+        print(f"   Fixés      : {nb_fixes}")
+        print(f"   À planifier: {len(project.matches) - nb_planifies}")
+        
+        # Fichiers config
+        print(f"\n📁 Fichiers de configuration :")
+        print(f"   YAML  : {project.config_yaml_path}")
+        print(f"   Excel : {project.config_excel_path}")
+        
+        print(f"\n💡 Prochaines étapes :")
+        print(f"   1. Démarrer l'API : uvicorn backend.api.main:app --reload")
+        print(f"   2. Démarrer le frontend : cd frontend && npm run dev")
+        print(f"   3. Accéder à l'interface : http://localhost:5173")
+        
+    except FileNotFoundError as e:
+        print(f"\n❌ Fichier non trouvé : {e}")
+        sys.exit(1)
+    except ValueError as e:
+        print(f"\n❌ Erreur de validation : {e}")
+        print(f"\n💡 Suggestions :")
+        print(f"   1. Exécutez : python actualiser_config.py <fichier_excel>")
+        print(f"   2. Corrigez les erreurs détectées")
+        print(f"   3. Relancez cet import")
+        print(f"   OU")
+        print(f"   4. Ajoutez --no-validate pour ignorer la validation (déconseillé)")
+        sys.exit(1)
+    except Exception as e:
+        print(f"\n❌ Erreur lors de l'import : {e}")
+        if args.verbose:
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
+    finally:
+        db.close()
+
+if __name__ == "__main__":
+    main()
+```
+
+**Points clés** :
+- **Arguments flexibles** : config_path obligatoire, project_name optionnel
+- **Option --no-validate** : Désactiver validation Excel (déconseillé)
+- **Option --verbose** : Afficher traceback complet en cas d'erreur
+- **Vérifications** : DB existe, YAML existe
+- **Statistiques détaillées** : Afficher nb équipes, gymnases, matchs, état matchs
+- **Gestion d'erreurs** : FileNotFoundError, ValueError (Excel invalide), Exception générale
+- **Messages clairs** : Suggestions en cas d'erreur (actualiser_config.py)
+
+**Usage** :
+```bash
+# Import basique
+python scripts/import_excel.py configs/config_volley.yaml
+
+# Import avec nom personnalisé
+python scripts/import_excel.py configs/config_volley.yaml "Championnat 2025"
+
+# Import sans validation (déconseillé)
+python scripts/import_excel.py configs/config_volley.yaml --no-validate
+
+# Mode verbose (debug)
+python scripts/import_excel.py configs/config_volley.yaml -v
+```
+
+---
+
+### Consignes d'organisation
+
+**Structure des scripts** :
+1. **Shebang** : `#!/usr/bin/env python3` pour exécution directe
+2. **Docstring** : Expliquer l'objectif du script
+3. **Imports** : sys, pathlib, argparse
+4. **sys.path manipulation** : Permettre imports depuis `backend/`
+5. **Fonction main()** : Logique principale
+6. **if __name__ == "__main__"** : Point d'entrée
+
+**Gestion d'erreurs** :
+- Vérifier fichiers/DB existent avant de continuer
+- Try/except autour des opérations critiques (import, DB)
+- Messages d'erreur clairs avec suggestions de résolution
+- sys.exit(1) en cas d'erreur fatale
+
+**Messages utilisateur** :
+- En-têtes clairs avec séparateurs (`=` * 60)
+- Emojis pour visibilité (📊, ✅, ❌, 💡)
+- Statistiques détaillées après import réussi
+- Prochaines étapes suggérées (démarrer API, frontend)
+
+---
+
+### Impact et liens avec autres modules
+
+**Utilisation par les développeurs** :
+```bash
+# Workflow complet
+python scripts/init_db.py                           # 1. Créer DB
+python actualiser_config.py donnees/config.xlsx    # 2. Valider Excel
+python scripts/import_excel.py configs/config.yaml # 3. Importer projet
+uvicorn backend.api.main:app --reload               # 4. Démarrer API
+```
+
+**Intégration avec SyncService** (Tâche 1.6) :
+- Scripts appellent `SyncService.import_from_excel()`
+- Passent paramètre `validate_excel` (True par défaut)
+- Affichent statistiques retournées par le service
+
+**Intégration avec actualiser_config.py** :
+- Scripts suggèrent d'exécuter actualiser_config.py en cas d'erreur validation
+- Option --no-validate pour contourner (déconseillé)
+
+---
+
+## À faire/vérifier
+
+**Checklist de développement** :
+
+1. ✅ Créer `scripts/init_db.py` avec :
+   - sys.path manipulation
+   - Vérification DB existante avec confirmation
+   - Sauvegarde ancien fichier (.db.bak)
+   - Liste des tables créées
+   - Messages clairs
+
+2. ✅ Créer `scripts/import_excel.py` avec :
+   - argparse (config_path, project_name optionnel, --no-validate, --verbose)
+   - Vérifications (DB existe, YAML existe)
+   - Appel SyncService.import_from_excel()
+   - Statistiques détaillées (équipes, gymnases, matchs, état)
+   - Gestion d'erreurs (FileNotFoundError, ValueError, Exception)
+   - Suggestions en cas d'erreur
+
+3. ✅ Rendre scripts exécutables :
+   ```bash
+   chmod +x scripts/init_db.py
+   chmod +x scripts/import_excel.py
+   ```
+
+**Checklist de validation** :
+
+1. ✅ **Test init_db.py** :
+   ```bash
+   # Suppression DB si existe
+   rm -f database/pycalendar.db
+   
+   # Initialisation
+   python scripts/init_db.py
+   # Doit créer database/pycalendar.db et afficher tables
+   
+   # Vérifier tables
+   sqlite3 database/pycalendar.db ".tables"
+   # Doit afficher: matches  projects  teams  venues
+   ```
+
+2. ✅ **Test import_excel.py (succès)** :
+   ```bash
+   # Valider Excel d'abord
+   python actualiser_config.py donnees/config_volley.xlsx
+   
+   # Import
+   python scripts/import_excel.py configs/config_volley.yaml "Test Import"
+   # Doit afficher statistiques complètes
+   
+   # Vérifier en DB
+   sqlite3 database/pycalendar.db "SELECT id, nom, sport FROM projects;"
+   ```
+
+3. ✅ **Test import_excel.py (erreurs)** :
+   ```bash
+   # Fichier YAML inexistant
+   python scripts/import_excel.py configs/inexistant.yaml
+   # Doit afficher erreur claire
+   
+   # DB non initialisée
+   rm database/pycalendar.db
+   python scripts/import_excel.py configs/config_volley.yaml
+   # Doit suggérer d'exécuter init_db.py
+   ```
+
+4. ✅ **Test options --no-validate et --verbose** :
+   ```bash
+   # Sans validation (déconseillé)
+   python scripts/import_excel.py configs/config.yaml --no-validate
+   
+   # Mode verbose
+   python scripts/import_excel.py configs/config.yaml -v
+   ```
+
+5. ✅ **Test workflow complet** :
+   ```bash
+   # Workflow complet depuis zéro
+   rm -f database/pycalendar.db
+   python scripts/init_db.py
+   python actualiser_config.py donnees/config_volley.xlsx
+   python scripts/import_excel.py configs/config_volley.yaml "Volley 2025"
+   
+   # Vérifier résultat
+   sqlite3 database/pycalendar.db "SELECT COUNT(*) FROM matches;"
+   ```
+
+**Commandes de test** :
+```bash
+# Test rapide init
+python scripts/init_db.py
+
+# Test rapide import
+python scripts/import_excel.py configs/config_volley.yaml
+
+# Test avec options
+python scripts/import_excel.py configs/config_volley.yaml "Test" --no-validate -v
+
+# Vérification DB
+sqlite3 database/pycalendar.db ".schema"
+```
+
+---
+
+## Questions
+
+**Questions critiques à poser si quelque chose n'est pas clair** :
+
+1. **Workflow d'initialisation** :
+   - Faut-il combiner init_db + import en un seul script ? Ou garder séparés ?
+   - Faut-il ajouter une commande `scripts/reset_db.py` (supprime et recrée) ?
+
+2. **Validation Excel** :
+   - `actualiser_config.py` a-t-il bien un mode validation (code retour 0/1) ?
+   - Faut-il intégrer la validation directement dans import_excel.py ou garder script séparé ?
+
+3. **Gestion des conflits** :
+   - Que faire si un projet avec le même nom existe déjà ?
+   - Faut-il ajouter option `--force` pour écraser ?
+   - Faut-il ajouter option `--update` pour mettre à jour projet existant ?
+
+4. **Statistiques** :
+   - Quelles autres stats afficher ? (nombre de poules, créneaux disponibles, etc.) ?
+   - Faut-il un script séparé `scripts/stats.py` pour afficher stats d'un projet ?
+
+5. **Automatisation** :
+   - Faut-il un script `scripts/setup.py` qui combine init + import ?
+   - Faut-il un Makefile avec commandes `make init`, `make import`, etc. ?
+
+---
+
+## Documentation
+
+Rester concis : documenter uniquement les choix non évidents :
+- **sys.path manipulation** : Expliquer pourquoi nécessaire (imports backend/)
+- **Sauvegarde DB** : Expliquer pourquoi .db.bak (éviter perte données)
+- **Validation Excel** : Expliquer pourquoi actualiser_config.py est recommandé
+- **Workflow complet** : Documenter les étapes 1-2-3-4 (init, validate, import, run)
+
+Éviter la sur-documentation des concepts Python/argparse standards.

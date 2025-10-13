@@ -5,7 +5,7 @@
 # Fichiers
 fichiers:
   donnees: "data_volley/config_volley.xlsx"
-  sortie: "data_volley/calendrier_volley.xlsx"
+  sortie: "data_volley/calendrier_volley_fast.xlsx"
 
 # Paramètres de planification (seulement valeurs différentes des défauts)
 planification:
@@ -18,7 +18,7 @@ greedy:
 
 # Configuration CP-SAT (OR-Tools)
 cpsat:
-  temps_max_secondes: 60    # Défaut: 300 - Limite temps pour tests rapides
+  temps_max_secondes: 10    # Défaut: 300 - Limite temps pour tests rapides
   warm_start: true
   warm_start_file: "volley"  # Solutions spécifiques au volley
 

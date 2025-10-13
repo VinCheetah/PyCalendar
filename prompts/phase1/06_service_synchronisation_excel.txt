@@ -1,0 +1,720 @@
+# Prompt 1.6 : Service de synchronisation Excel → Base# Prompt 1.6 : Service de synchronisation Excel → Base
+
+
+
+## Contexte global## Contexte global
+
+PyCalendar V2 doit permettre d'importer des données depuis les fichiers de configuration (YAML + Excel) pour initialiser la base de données web. La synchronisation utilise les systèmes existants et doit être fiable, robuste et facilement extensible.PyCalendar V2 doit permettre d'importer des données depuis des fichiers Excel/YAML pour initialiser ou mettre à jour la base de données. La synchronisation doit être fiable, robuste et facilement extensible pour supporter différents formats ou règles métier.
+
+
+
+**CRUCIAL - Double configuration et validation** :## Contexte technique
+
+1. **Fichier YAML** (ex: `configs/config_volley.yaml`) :Cette tâche concerne la création d'un service de synchronisation capable de lire les fichiers Excel/YAML existants et d'alimenter la base de données avec les entités du projet (Project, Team, Venue, Match).
+
+   - Hyperparamètres : poids contraintes, stratégie, nb_semaines, semaine_minimum
+
+   - Référence le fichier Excel via `fichiers.donnees`## Résumé du travail précédent
+
+   - Chargé par `core/config.py` → classe `Config`- Les modèles SQLAlchemy sont en place (`backend/database/models.py`) avec toutes les relations.
+
+- Les schémas Pydantic sont définis (`backend/schemas/`).
+
+2. **Fichier Excel** (ex: `donnees/config_volley.xlsx`) :- Les routes API sont opérationnelles (`backend/api/routes/`).
+
+   - **7+ feuilles** : Equipes, Gymnases, Indispos_Gymnases, Indispos_Equipes, Indispos_Institutions, Preferences_Gymnases, Obligation_Presence- Les besoins d'import de données depuis Excel/YAML sont identifiés.
+
+   - Chargé par `core/config_manager.py` → classe `ConfigManager`
+
+   - **Validation OBLIGATOIRE** : `actualiser_config.py` doit être exécuté AVANT import pour valider/corriger structure## Objectifs
+
+- Définir un service de synchronisation modulaire et testable.
+
+3. **Générateurs existants** :- S'assurer de la robustesse, de la gestion des erreurs et de la clarté du code.
+
+   - `generators/data_sources.py` : Classe `DataSource` charge équipes/gymnases depuis Excel- Prévoir l'extensibilité pour d'autres formats ou règles métier.
+
+   - `generators/multi_pool_generator.py` : Génère les matchs (round-robin)
+
+   - **Préservation totale** : Code existant ne doit PAS être modifié## Détails techniques
+
+
+
+## Contexte technique### Fichier à créer
+
+Cette tâche crée un service de synchronisation qui charge YAML + Excel (validé) → crée Project, Teams, Venues, Matches dans la DB. Le service réutilise les classes existantes (`Config`, `ConfigManager`, `DataSource`, générateurs) sans les modifier.`backend/services/sync_service.py`
+
+
+
+## Résumé du travail précédent### Classe principale
+
+- Les modèles SQLAlchemy stockent config YAML+Excel (`backend/database/models.py`) - Tâche 1.3**SyncService**
+
+- Les schémas Pydantic sont définis (`backend/schemas/`) - Tâche 1.4
+
+- Les routes API sont opérationnelles (`backend/api/routes/`) - Tâche 1.5**Constructeur** : 
+
+- `actualiser_config.py` valide la structure Excel- Accepter `db: Session`
+
+- `ConfigManager` et `DataSource` chargent les données Excel- Stocker la session pour opérations DB
+
+- Générateurs produisent les matchs
+
+### Méthode principale
+
+## Objectifs**`import_from_excel(config_path: str, project_name: str) -> models.Project`**
+
+1. Créer un service `SyncService` qui importe YAML + Excel → DB
+
+2. **Intégrer la validation Excel** via `actualiser_config.py` (optionnel ou obligatoire)**Algorithme détaillé** :
+
+3. Réutiliser `Config`, `ConfigManager`, `DataSource`, générateurs existants
+
+4. Préserver totalement le code existant (aucune modification de generators/, core/)1. **Charger config** :
+
+5. Gérer erreurs et afficher statistiques d'import   - Utiliser `Config.from_yaml(config_path)` de `core/config.py`
+
+   - Récupérer nb_semaines, semaine_min (via getattr pour compatibilité)
+
+## Détails techniques
+
+2. **Charger données Excel** :
+
+### Fichier à créer   - Utiliser `DataSource(config.fichier_donnees)` de `generators/data_sources.py`
+
+**📁** `backend/services/sync_service.py`   - `equipes = source.charger_equipes()`
+
+   - `gymnases = source.charger_gymnases()`
+
+**Imports requis** :
+
+```python3. **Créer Project en DB** :
+
+import json   - `project = models.Project(`
+
+from pathlib import Path   - `nom=project_name,`
+
+from sqlalchemy.orm import Session   - `sport=self._detect_sport(config),`
+
+from typing import Optional, Dict, Any   - `config_yaml_path=config_path,`
+
+   - `nb_semaines=config.nb_semaines,`
+
+from core.config import Config   - `semaine_min=getattr(config, 'semaine_min', 1),`
+
+from core.config_manager import ConfigManager   - `config_data=None  # optionnel: sérialiser config complète en JSON`
+
+from generators.data_sources import DataSource   - `)`
+
+from generators.multi_pool_generator import MultiPoolGenerator   - `db.add(project)`
+
+from backend.database import models   - `db.flush()` → obtenir project.id pour FK
+
+```
+
+4. **Importer Teams** :
+
+---   - Itérer sur `equipes` (liste d'objets Equipe)
+
+   - Pour chaque équipe :
+
+### Classe SyncService     - `team = models.Team(`
+
+     - `project_id=project.id,`
+
+**Structure de la classe** :     - `nom=equipe.nom,`
+
+```python     - `institution=equipe.institution,`
+
+class SyncService:     - `numero_equipe=getattr(equipe, 'numero_equipe', None),`
+
+    """Service de synchronisation YAML + Excel → Base de données"""     - `genre=equipe.genre,`
+
+         - `poule=equipe.poule,`
+
+    def __init__(self, db: Session):     - `horaires_preferes=json.dumps(equipe.horaires_preferes),`
+
+        self.db = db     - `lieux_preferes=json.dumps(equipe.lieux_preferes)`
+
+         - `)`
+
+    def import_from_excel(     - `db.add(team)`
+
+        self, 
+
+        yaml_path: str, 5. **Importer Venues** :
+
+        project_name: Optional[str] = None,   - Itérer sur `gymnases` (liste d'objets Gymnase)
+
+        validate_excel: bool = True   - Pour chaque gymnase :
+
+    ) -> models.Project:     - `venue = models.Venue(`
+
+        """     - `project_id=project.id,`
+
+        Importe un projet depuis config YAML + Excel.     - `nom=gymnase.nom,`
+
+             - `capacite=getattr(gymnase, 'capacite', 1),`
+
+        Args:     - `horaires_disponibles=json.dumps(gymnase.horaires_disponibles)`
+
+            yaml_path: Chemin du fichier YAML (ex: "configs/config_volley.yaml")     - `)`
+
+            project_name: Nom du projet (optionnel, sinon déduit du sport/Excel)     - `db.add(venue)`
+
+            validate_excel: Si True, valider Excel avec actualiser_config.py avant import
+
+        6. **Générer et importer Matches** :
+
+        Returns:   - `poules = source.get_poules_dict(equipes)` → dict {poule: [equipes]}
+
+            Project créé en DB avec Teams, Venues, Matches   - Instancier `MultiPoolGenerator()` de `generators/multi_pool_generator.py`
+
+           - `matchs = generator.generer_matchs(poules)` → liste de core.Match
+
+        Raises:   - Itérer sur matchs :
+
+            FileNotFoundError: Si YAML ou Excel introuvable     - `match_db = models.Match(`
+
+            ValueError: Si Excel invalide (structure incorrecte)     - `project_id=project.id,`
+
+        """     - `equipe1_nom=match.equipe1.nom,`
+
+        # ... (voir algorithme ci-dessous)     - `equipe1_institution=match.equipe1.institution,`
+
+         - `equipe1_genre=match.equipe1.genre,`
+
+    def _detect_sport(self, config: Config) -> str:     - `equipe2_nom=match.equipe2.nom,`
+
+        """Détecte le sport depuis le chemin Excel ou config"""     - `equipe2_institution=match.equipe2.institution,`
+
+        # ... (voir algorithme ci-dessous)     - `equipe2_genre=match.equipe2.genre,`
+
+         - `poule=match.poule,`
+
+    def _validate_excel_structure(self, excel_path: str) -> bool:     - `semaine=None,  # non planifiés initialement`
+
+        """Valide la structure Excel avec actualiser_config.py (optionnel)"""     - `horaire=None,`
+
+        # ... (voir algorithme ci-dessous)     - `gymnase=None,`
+
+```     - `est_fixe=getattr(match, 'est_fixe', False),`
+
+     - `statut=getattr(match, 'statut', 'a_planifier'),`
+
+---     - `priorite=match.priorite`
+
+     - `)`
+
+### Méthode principale : import_from_excel()     - `db.add(match_db)`
+
+
+
+**Algorithme détaillé** :7. **Commit final** :
+
+   - `db.commit()`
+
+**Étape 1 : Charger config YAML** :   - `db.refresh(project)` → recharger avec relations
+
+```python
+
+# 1. Charger config YAML8. **Retourner** :
+
+print(f"📄 Chargement config YAML : {yaml_path}")   - `return project`
+
+config = Config.from_yaml(yaml_path)
+
+excel_path = config.fichier_donnees### Méthode auxiliaire
+
+**`_detect_sport(config: Config) -> str`**
+
+# Vérifier que le fichier Excel existe
+
+if not Path(excel_path).exists():**Algorithme** :
+
+    raise FileNotFoundError(f"Fichier Excel introuvable : {excel_path}")- Récupérer chemin Excel : `config.fichier_donnees`
+
+- Si "volley" dans chemin.lower() → return "volleyball"
+
+print(f"📊 Fichier Excel détecté : {excel_path}")- Si "hand" dans chemin.lower() → return "handball"
+
+```- Sinon → return "autre"
+
+
+
+**Étape 2 : Validation Excel (optionnel mais recommandé)** :### Consignes d'organisation
+
+```python- Utiliser `db.flush()` après Project pour obtenir ID avant FK
+
+# 2. Valider structure Excel avec actualiser_config.py- Sérialiser listes Python en JSON via `json.dumps()` pour colonnes JSON
+
+if validate_excel:- `getattr(obj, 'attr', default)` pour compatibilité avec anciens configs/modèles
+
+    print(f"🔍 Validation structure Excel...")- Ne pas oublier commit final
+
+    is_valid = self._validate_excel_structure(excel_path)- Gérer exceptions si Excel/YAML invalides (try/except avec messages clairs)
+
+    if not is_valid:
+
+        raise ValueError(### Impact et liens
+
+            f"Structure Excel invalide : {excel_path}\n"- Les scripts CLI (`scripts/import_excel.py`) utiliseront ce service.
+
+            f"Exécutez 'python actualiser_config.py {excel_path}' pour corriger"- Les modèles SQLAlchemy (`backend/database/models.py`) sont créés.
+
+        )- Le modèle métier (`core/models.py`) est utilisé pour générer les matchs.
+
+    print(f"✅ Structure Excel validée")- Les générateurs existants (`generators/`) sont réutilisés sans modification.
+
+```
+
+## À faire/vérifier
+
+**Étape 3 : Charger données Excel via ConfigManager** :- Créer la classe SyncService avec méthode import_from_excel
+
+```python- Implémenter la méthode _detect_sport
+
+# 3. Charger données Excel via ConfigManager- Gérer les erreurs (fichier manquant, format invalide)
+
+print(f"📋 Chargement données Excel via ConfigManager...")- Tester l'import :
+
+config_manager = ConfigManager(excel_path)  - Créer session DB
+
+  - Appeler `SyncService(db).import_from_excel(config_path, "Test")`
+
+# Charger équipes depuis feuille "Equipes"  - Vérifier en DB : 1 project, N teams, M venues, X matches non planifiés
+
+# ConfigManager retourne un DataFrame, besoin de convertir en objets Equipe  - Vérifier que les JSON sont bien sérialisés
+
+# OPTION A : Utiliser DataSource (existant, préféré)
+
+# OPTION B : Parser directement depuis ConfigManager## Questions
+
+# → Utiliser DataSource car déjà testé et fonctionnelPoser des questions si des points sur le format Excel/YAML, la logique d'import, la gestion des erreurs ou l'intégration ne sont pas clairs.
+
+```
+
+## Documentation
+
+**Étape 4 : Charger équipes/gymnases via DataSource** :Rester concis, ne pas ajouter de documentation excessive. Commenter brièvement les étapes critiques si besoin (flush, sérialisation JSON).
+
+```python
+# 4. Charger équipes et gymnases via DataSource (existant, testé)
+print(f"🏐 Chargement équipes et gymnases...")
+data_source = DataSource(excel_path)
+equipes = data_source.charger_equipes()  # Liste[core.models.Equipe]
+gymnases = data_source.charger_gymnases()  # Liste[core.models.Gymnase]
+
+print(f"  → {len(equipes)} équipes chargées")
+print(f"  → {len(gymnases)} gymnases chargés")
+```
+
+**Étape 5 : Créer Project en DB** :
+```python
+# 5. Créer Project en DB
+sport = self._detect_sport(config)
+if not project_name:
+    project_name = f"{sport.capitalize()} {config.nb_semaines} semaines"
+
+print(f"🏗️ Création projet : {project_name}")
+
+# Charger config YAML complète en JSON (optionnel)
+with open(yaml_path, 'r') as f:
+    yaml_content = f.read()
+
+project = models.Project(
+    nom=project_name,
+    sport=sport,
+    config_yaml_path=str(Path(yaml_path).resolve()),
+    config_excel_path=str(Path(excel_path).resolve()),
+    config_yaml_data=yaml_content,  # Stocker YAML brut (ou None)
+    config_excel_data=None,  # Optionnel : métadonnées Excel (nombre feuilles, etc.)
+    nb_semaines=config.nb_semaines,
+    semaine_min=getattr(config, 'semaine_minimum', 1)  # YAML utilise "semaine_minimum"
+)
+self.db.add(project)
+self.db.flush()  # Obtenir project.id pour FK
+
+print(f"  → Project ID: {project.id}")
+```
+
+**Étape 6 : Importer Teams** :
+```python
+# 6. Importer Teams
+print(f"👥 Import des équipes...")
+teams_created = 0
+
+for equipe in equipes:
+    # Convertir horaires_preferes (liste Python) en JSON
+    horaires_json = json.dumps(equipe.horaires_preferes) if hasattr(equipe, 'horaires_preferes') else None
+    lieux_json = json.dumps(equipe.lieux_preferes) if hasattr(equipe, 'lieux_preferes') else None
+    
+    team = models.Team(
+        project_id=project.id,
+        nom=equipe.nom,
+        institution=getattr(equipe, 'institution', None),
+        numero_equipe=getattr(equipe, 'numero_equipe', None),
+        genre=getattr(equipe, 'genre', None),
+        poule=equipe.poule,
+        horaires_preferes=horaires_json,
+        lieux_preferes=lieux_json
+    )
+    self.db.add(team)
+    teams_created += 1
+
+print(f"  → {teams_created} équipes créées")
+```
+
+**Étape 7 : Importer Venues** :
+```python
+# 7. Importer Venues (gymnases)
+print(f"🏟️ Import des gymnases...")
+venues_created = 0
+
+for gymnase in gymnases:
+    # Convertir horaires_disponibles en JSON
+    horaires_json = json.dumps(gymnase.horaires_disponibles) if hasattr(gymnase, 'horaires_disponibles') else None
+    
+    venue = models.Venue(
+        project_id=project.id,
+        nom=gymnase.nom,
+        capacite=getattr(gymnase, 'capacite', 1),
+        horaires_disponibles=horaires_json
+    )
+    self.db.add(venue)
+    venues_created += 1
+
+print(f"  → {venues_created} gymnases créés")
+```
+
+**Étape 8 : Générer et importer Matches** :
+```python
+# 8. Générer matchs via générateur existant
+print(f"⚽ Génération des matchs...")
+
+# Grouper équipes par poule
+poules = data_source.get_poules_dict(equipes)  # Dict[str, List[Equipe]]
+
+# Générer matchs (round-robin)
+generator = MultiPoolGenerator()
+matchs_core = generator.generer_matchs(poules)  # Liste[core.models.Match]
+
+print(f"  → {len(matchs_core)} matchs générés")
+
+# Importer matchs en DB
+print(f"💾 Import des matchs...")
+matches_created = 0
+
+for match in matchs_core:
+    match_db = models.Match(
+        project_id=project.id,
+        equipe1_nom=match.equipe1.nom,
+        equipe1_institution=getattr(match.equipe1, 'institution', None),
+        equipe1_genre=getattr(match.equipe1, 'genre', None),
+        equipe2_nom=match.equipe2.nom,
+        equipe2_institution=getattr(match.equipe2, 'institution', None),
+        equipe2_genre=getattr(match.equipe2, 'genre', None),
+        poule=match.poule,
+        semaine=None,  # Non planifiés initialement
+        horaire=None,
+        gymnase=None,
+        est_fixe=getattr(match, 'est_fixe', False),  # Tâche 1.1
+        statut=getattr(match, 'statut', 'a_planifier'),  # Tâche 1.1
+        priorite=getattr(match, 'priorite', 0)
+    )
+    self.db.add(match_db)
+    matches_created += 1
+
+print(f"  → {matches_created} matchs créés")
+```
+
+**Étape 9 : Commit et retour** :
+```python
+# 9. Commit final
+self.db.commit()
+self.db.refresh(project)  # Recharger avec relations
+
+# Afficher résumé
+print(f"\n✅ Import terminé avec succès!")
+print(f"   📊 Projet : {project.nom} (ID: {project.id})")
+print(f"   👥 Équipes : {teams_created}")
+print(f"   🏟️ Gymnases : {venues_created}")
+print(f"   ⚽ Matchs : {matches_created}")
+
+return project
+```
+
+---
+
+### Méthode auxiliaire : _detect_sport()
+
+```python
+def _detect_sport(self, config: Config) -> str:
+    """Détecte le sport depuis le chemin Excel ou config YAML"""
+    excel_path = config.fichier_donnees.lower()
+    
+    if "volley" in excel_path or "volleyball" in excel_path:
+        return "Volleyball"
+    elif "hand" in excel_path or "handball" in excel_path:
+        return "Handball"
+    elif "basket" in excel_path:
+        return "Basketball"
+    elif "foot" in excel_path or "football" in excel_path:
+        return "Football"
+    else:
+        return "Autre"
+```
+
+---
+
+### Méthode auxiliaire : _validate_excel_structure()
+
+```python
+def _validate_excel_structure(self, excel_path: str) -> bool:
+    """
+    Valide la structure Excel avec actualiser_config.py.
+    
+    OPTION 1 (Recommandé) : Appeler le script via subprocess
+    OPTION 2 : Importer directement les fonctions de validation
+    
+    Retourne True si valide, False sinon.
+    """
+    try:
+        # OPTION 1 : Appel subprocess (isolation, sécurité)
+        import subprocess
+        result = subprocess.run(
+            ["python", "actualiser_config.py", excel_path, "--validate-only"],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        return result.returncode == 0
+        
+        # OPTION 2 : Import direct (plus rapide, moins isolé)
+        # from actualiser_config import valider_structure_excel
+        # rapport = valider_structure_excel(excel_path)
+        # return rapport.is_valid()
+        
+    except Exception as e:
+        print(f"⚠️ Validation Excel échouée : {e}")
+        return False  # En cas d'erreur, continuer (validation optionnelle)
+```
+
+**⚠️ IMPORTANT** : `actualiser_config.py` doit avoir un mode `--validate-only` qui retourne 0 si OK, 1 si erreurs. Si ce mode n'existe pas, il faut soit :
+- L'ajouter au script
+- Ou utiliser l'import direct (OPTION 2)
+- Ou demander à l'utilisateur d'exécuter manuellement le script avant import
+
+---
+
+### Consignes d'organisation
+
+**Ordre d'exécution** :
+1. Validation Excel (actualiser_config.py) → AVANT tout
+2. Chargement YAML (Config.from_yaml)
+3. Chargement Excel (DataSource)
+4. Création Project (DB flush pour ID)
+5. Création Teams, Venues (utiliser project.id)
+6. Génération Matches (générateur existant)
+7. Création Matches (DB)
+8. Commit final
+
+**Gestion des données** :
+- **JSON sérialisation** : `json.dumps()` pour listes Python → colonnes JSON DB
+- **getattr() pour compatibilité** : Anciens modèles n'ont pas tous les champs
+- **Path.resolve()** : Chemins absolus pour config_yaml_path, config_excel_path
+
+**Gestion d'erreurs** :
+- FileNotFoundError si YAML ou Excel introuvable
+- ValueError si Excel invalide (structure)
+- Try/except autour de la validation Excel (optionnelle)
+
+---
+
+### Impact et liens avec autres modules
+
+**Utilisation par les scripts CLI** (Tâche 1.7) :
+```python
+# scripts/import_excel.py
+from backend.database.engine import SessionLocal, init_db
+from backend.services.sync_service import SyncService
+
+init_db()
+db = SessionLocal()
+service = SyncService(db)
+
+try:
+    project = service.import_from_excel(
+        yaml_path="configs/config_volley.yaml",
+        project_name="Championnat Volley 2025",
+        validate_excel=True  # Valider avant import
+    )
+    print(f"✅ Projet {project.id} importé!")
+finally:
+    db.close()
+```
+
+**Réutilisation du code existant** :
+- ✅ `core/config.py` : Config.from_yaml() - PRÉSERVÉ
+- ✅ `core/config_manager.py` : ConfigManager - PRÉSERVÉ
+- ✅ `generators/data_sources.py` : DataSource - PRÉSERVÉ
+- ✅ `generators/multi_pool_generator.py` : Génération matchs - PRÉSERVÉ
+- ✅ `actualiser_config.py` : Validation Excel - RÉUTILISÉ
+
+**Évolution future** :
+- Ajouter méthode `update_from_excel()` pour re-synchroniser un projet existant
+- Ajouter méthode `export_to_excel()` pour exporter DB → Excel
+- Gérer les conflits (matchs modifiés dans DB vs Excel)
+
+---
+
+## À faire/vérifier
+
+**Checklist de développement** :
+
+1. ✅ Créer `backend/services/sync_service.py`
+2. ✅ Créer classe `SyncService` avec constructeur `__init__(db: Session)`
+3. ✅ Implémenter `import_from_excel()` avec les 9 étapes de l'algorithme
+4. ✅ Implémenter `_detect_sport()` avec détection depuis chemin Excel
+5. ✅ Implémenter `_validate_excel_structure()` (optionnel)
+6. ✅ Ajouter gestion d'erreurs (FileNotFoundError, ValueError)
+7. ✅ Ajouter logs/prints pour suivre progression
+
+**Checklist de validation** :
+
+1. ✅ **Préparer fichier Excel valide** :
+   ```bash
+   # Si actualiser_config.py a mode validation
+   python actualiser_config.py donnees/config_volley.xlsx --validate-only
+   # Doit retourner 0 (OK)
+   ```
+
+2. ✅ **Tester import complet** :
+   ```python
+   from backend.database.engine import SessionLocal, init_db
+   from backend.services.sync_service import SyncService
+   
+   # Initialiser DB
+   init_db()
+   
+   # Import
+   db = SessionLocal()
+   service = SyncService(db)
+   
+   project = service.import_from_excel(
+       yaml_path="configs/config_volley.yaml",
+       project_name="Test Import",
+       validate_excel=True
+   )
+   
+   print(f"Project ID: {project.id}")
+   print(f"Teams: {len(project.teams)}")
+   print(f"Venues: {len(project.venues)}")
+   print(f"Matches: {len(project.matches)}")
+   
+   db.close()
+   ```
+
+3. ✅ **Vérifier en DB** :
+   ```bash
+   sqlite3 database/pycalendar.db "SELECT * FROM projects;"
+   sqlite3 database/pycalendar.db "SELECT COUNT(*) FROM teams;"
+   sqlite3 database/pycalendar.db "SELECT COUNT(*) FROM venues;"
+   sqlite3 database/pycalendar.db "SELECT COUNT(*) FROM matches WHERE semaine IS NULL;"
+   # Tous les matchs doivent avoir semaine=NULL (non planifiés)
+   ```
+
+4. ✅ **Tester JSON sérialisation** :
+   ```python
+   db = SessionLocal()
+   team = db.query(models.Team).first()
+   
+   # Vérifier JSON
+   import json
+   horaires = json.loads(team.horaires_preferes) if team.horaires_preferes else []
+   print(f"Horaires préférés : {horaires}")
+   
+   db.close()
+   ```
+
+5. ✅ **Tester gestion d'erreurs** :
+   ```python
+   # Fichier inexistant
+   try:
+       service.import_from_excel("configs/inexistant.yaml")
+   except FileNotFoundError as e:
+       print(f"✅ Erreur capturée : {e}")
+   
+   # Excel invalide (si validation activée)
+   try:
+       service.import_from_excel("configs/test_invalide.yaml", validate_excel=True)
+   except ValueError as e:
+       print(f"✅ Erreur capturée : {e}")
+   ```
+
+**Commandes de test** :
+```bash
+# Créer DB
+python -c "from backend.database.engine import init_db; init_db()"
+
+# Valider Excel
+python actualiser_config.py donnees/config_volley.xlsx
+
+# Import via Python
+python -c "
+from backend.database.engine import SessionLocal
+from backend.services.sync_service import SyncService
+
+db = SessionLocal()
+service = SyncService(db)
+project = service.import_from_excel('configs/config_volley.yaml', 'Test')
+print(f'✅ Import OK: {len(project.matches)} matchs')
+db.close()
+"
+```
+
+---
+
+## Questions
+
+**Questions critiques à poser si quelque chose n'est pas clair** :
+
+1. **Validation Excel** :
+   - `actualiser_config.py` a-t-il un mode `--validate-only` retournant un code de sortie ?
+   - Faut-il l'ajouter ou utiliser import direct des fonctions de validation ?
+   - La validation doit-elle être obligatoire ou optionnelle (paramètre validate_excel) ?
+
+2. **Structure Excel** :
+   - Toutes les feuilles requises (Equipes, Gymnases, etc.) sont-elles bien présentes ?
+   - Quelles colonnes exactes dans chaque feuille ? (pour parser avec ConfigManager)
+   - Faut-il utiliser ConfigManager OU DataSource ? (DataSource semble plus simple)
+
+3. **Stockage config** :
+   - Faut-il stocker le contenu complet du YAML en JSON (config_yaml_data) ?
+   - Faut-il stocker des métadonnées Excel (nombre de feuilles, lignes, etc.) ?
+   - Ou laisser ces champs NULL et stocker seulement les chemins ?
+
+4. **Gestion des conflits** :
+   - Que faire si le projet existe déjà (même nom) ? Erreur ? Écrasement ? Versioning ?
+   - Faut-il une méthode `update_from_excel()` pour re-synchroniser ?
+
+5. **Performance** :
+   - Faut-il utiliser `bulk_insert_mappings()` pour insérer Teams/Venues/Matches plus rapidement ?
+   - Ou garder la boucle simple avec `db.add()` pour chaque entité ?
+
+6. **Préférences gymnases** :
+   - Comment extraire `lieux_preferes` par équipe ? Depuis feuille "Preferences_Gymnases" ?
+   - DataSource gère-t-il cela automatiquement ou faut-il parser manuellement ?
+
+---
+
+## Documentation
+
+Rester concis : documenter uniquement les choix non évidents :
+- **Validation Excel** : Expliquer pourquoi actualiser_config.py est appelé (structure correcte)
+- **Réutilisation code** : Documenter que DataSource, générateurs sont préservés
+- **JSON sérialisation** : Expliquer conversion listes Python → JSON pour DB
+- **Ordre flush/commit** : Expliquer pourquoi flush après Project (obtenir ID pour FK)
+- **semaine_minimum vs semaine_min** : Documenter différence nom YAML/DB
+
+Éviter la sur-documentation des concepts SQLAlchemy/Python standards.
