@@ -232,3 +232,38 @@ def get_nom_genre_complet(genre_code: str) -> str:
         'F': 'Féminin'
     }
     return mapping.get(genre_code.upper(), '')
+
+
+def extraire_niveau_match(poule: str) -> Optional[int]:
+    """
+    Extrait le niveau du match depuis le nom de la poule.
+    
+    Format attendu: (sport)(genre)(niveau)(poule)
+    Exemples:
+    - VBFA1PA -> niveau 1 (A1 = niveau 1)
+    - HBMA2PB -> niveau 2 (A2 = niveau 2)
+    - VBFA3PC -> niveau 3 (A3 = niveau 3)
+    - VBMA4PA -> niveau 4 (A4 = niveau 4)
+    
+    Args:
+        poule: Le nom de la poule (ex: "VBFA1PA", "HBMA2PB")
+        
+    Returns:
+        Niveau du match (1, 2, 3, 4, etc.) ou None si non trouvé
+    """
+    if not poule:
+        return None
+    
+    poule = poule.strip().upper()
+    
+    # Pattern pour extraire le niveau: cherche A suivi d'un chiffre
+    match = re.search(r'A(\d+)', poule)
+    
+    if match:
+        try:
+            niveau = int(match.group(1))
+            return niveau
+        except ValueError:
+            return None
+    
+    return None

@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PyCalendar - Interface de Gestion</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- CSS_PLACEHOLDER -->
+</head>
+<body>
+    <div class="app-container">
+        <!-- ==================== HEADER ==================== -->
+        <header class="header">
+            <h1 class="header-title">📅 PyCalendar</h1>
+            <p class="header-subtitle">Interface de Gestion de Calendriers Sportifs</p>
+            
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-scheduled">-</div>
+                    <div class="stat-label">Matchs planifiés</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-unscheduled">-</div>
+                    <div class="stat-label">Non planifiés</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-weeks">-</div>
+                    <div class="stat-label">Semaines</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-pools">-</div>
+                    <div class="stat-label">Poules</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-venues">-</div>
+                    <div class="stat-label">Gymnases</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-modifications">0</div>
+                    <div class="stat-label">Modifications</div>
+                </div>
+            </div>
+        </header>
+        
+        <!-- ==================== CONTROLS ==================== -->
+        <section class="controls-section">
+            <!-- Filtres principaux -->
+            <div class="control-group">
+                <h3 class="control-group-title">
+                    <span>🔍 Filtres</span>
+                </h3>
+                <div class="filters-container">
+                    <div class="filter-group">
+                        <label class="filter-label">Genre</label>
+                        <select class="filter-select" id="filter-gender">
+                            <option value="">Tous</option>
+                            <option value="M">Masculin</option>
+                            <option value="F">Féminin</option>
+                        </select>
+                    </div>
+                    
+                    <div class="filter-group">
+                        <label class="filter-label">Institution</label>
+                        <select class="filter-select" id="filter-institution">
+                            <option value="">Toutes</option>
+                        </select>
+                    </div>
+                    
+                    <div class="filter-group">
+                        <label class="filter-label">Poule</label>
+                        <select class="filter-select" id="filter-pool">
+                            <option value="">Toutes</option>
+                        </select>
+                    </div>
+                    
+                    <div class="filter-group">
+                        <label class="filter-label">Gymnase</label>
+                        <select class="filter-select" id="filter-venue">
+                            <option value="">Tous</option>
+                        </select>
+                    </div>
+                    
+                    <div class="filter-group">
+                        <label class="filter-label">Semaine</label>
+                        <select class="filter-select" id="filter-week">
+                            <option value="">Toutes</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Actions -->
+            <div class="control-group">
+                <h3 class="control-group-title">
+                    <span>⚙️ Actions</span>
+                </h3>
+                <div class="flex gap-2">
+                    <button class="modal-btn modal-btn-primary" id="btn-export-modifications">
+                        💾 Exporter les modifications
+                    </button>
+                    <button class="modal-btn modal-btn-secondary" id="btn-reset-modifications">
+                        🔄 Réinitialiser
+                    </button>
+                </div>
+            </div>
+        </section>
+        
+        <!-- ==================== TABS NAVIGATION ==================== -->
+        <div class="tabs-container">
+            <nav class="tabs-nav">
+                <button class="tab-button active" data-tab="agenda">
+                    <span class="tab-icon">📋</span> Agenda
+                </button>
+                <button class="tab-button" data-tab="pools">
+                    <span class="tab-icon">🎯</span> Poules
+                </button>
+                <button class="tab-button" data-tab="cards">
+                    <span class="tab-icon">🃏</span> Cartes
+                </button>
+                <button class="tab-button" data-tab="unscheduled">
+                    <span class="tab-icon">⚠️</span> Non Planifiés
+                </button>
+                <button class="tab-button" data-tab="penalties">
+                    <span class="tab-icon">📊</span> Pénalités
+                </button>
+                <button class="tab-button" data-tab="stats">
+                    <span class="tab-icon">📈</span> Statistiques
+                </button>
+            </nav>
+            
+            <div class="tab-content">
+                <!-- Vue Agenda -->
+                <div class="tab-pane active" id="tab-agenda">
+                    <div id="agenda-view">
+                        <!-- Content will be generated by agenda-view.js -->
+                    </div>
+                </div>
+                
+                <!-- Vue Poules -->
+                <div class="tab-pane" id="tab-pools">
+                    <div id="pools-view">
+                        <!-- Content will be generated by pools-view.js -->
+                    </div>
+                </div>
+                
+                <!-- Vue Cartes -->
+                <div class="tab-pane" id="tab-cards">
+                    <div id="cards-view">
+                        <!-- Content will be generated by cards-view.js -->
+                    </div>
+                </div>
+                
+                <!-- Vue Non Planifiés -->
+                <div class="tab-pane" id="tab-unscheduled">
+                    <div id="unscheduled-view">
+                        <!-- Content will be generated by unscheduled-view.js (TODO) -->
+                        <div class="empty-state">
+                            <div class="empty-state-icon">⚠️</div>
+                            <h3 class="empty-state-title">Matchs Non Planifiés</h3>
+                            <p class="empty-state-message">Vue en développement</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Vue Pénalités -->
+                <div class="tab-pane" id="tab-penalties">
+                    <div id="penalties-view">
+                        <!-- Content will be generated by penalties-view.js (TODO) -->
+                        <div class="empty-state">
+                            <div class="empty-state-icon">📊</div>
+                            <h3 class="empty-state-title">Vue Pénalités</h3>
+                            <p class="empty-state-message">Vue en développement</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Vue Statistiques -->
+                <div class="tab-pane" id="tab-stats">
+                    <div id="stats-view">
+                        <!-- Content will be generated by stats-view.js (TODO) -->
+                        <div class="empty-state">
+                            <div class="empty-state-icon">📈</div>
+                            <h3 class="empty-state-title">Vue Statistiques</h3>
+                            <p class="empty-state-message">Vue en développement</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Modal d'export -->
+    <div class="modal-overlay hidden" id="modal-export">
+        <div class="modal modal-md">
+            <div class="modal-header">
+                <h2 class="modal-title">💾 Exporter les Modifications</h2>
+                <button class="modal-close" onclick="closeExportModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <p>Exporter <strong id="export-count">0</strong> modification(s) au format JSON.</p>
+                <div class="filter-group mt-3">
+                    <label class="filter-label">Nom du fichier</label>
+                    <input type="text" class="filter-input" id="export-filename" placeholder="modifications_2025-10-24.json">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="modal-btn modal-btn-secondary" onclick="closeExportModal()">Annuler</button>
+                <button class="modal-btn modal-btn-primary" onclick="exportModifications()">Télécharger</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- DATA_PLACEHOLDER -->
+    
+    <!-- JS_PLACEHOLDER -->
+    
+    <!-- Basic tab switching functionality -->
+    <script>
+        // Global variables for views
+        let agendaView = null;
+        let poolsView = null;
+        let cardsView = null;
+        let currentView = 'agenda';
+        
+        // Initialize views after data is loaded
+        function initializeViews() {
+            if (!window.dataManager) {
+                console.error('DataManager not initialized');
+                return;
+            }
+            
+            // Initialize each view
+            const agendaContainer = document.getElementById('agenda-view');
+            const poolsContainer = document.getElementById('pools-view');
+            const cardsContainer = document.getElementById('cards-view');
+            
+            if (window.AgendaView && agendaContainer) {
+                agendaView = new window.AgendaView(window.dataManager, agendaContainer);
+                agendaView.init();
+            }
+            
+            if (window.PoolsView && poolsContainer) {
+                poolsView = new window.PoolsView(window.dataManager, poolsContainer);
+                poolsView.init();
+            }
+            
+            if (window.CardsView && cardsContainer) {
+                cardsView = new window.CardsView(window.dataManager, cardsContainer);
+                cardsView.init();
+            }
+            
+            // Update stats display
+            updateStatsDisplay();
+        }
+        
+        // Update stats in header
+        function updateStatsDisplay() {
+            if (!window.dataManager) return;
+            
+            const data = window.dataManager.getData();
+            if (!data) return;
+            
+            const scheduled = data.matches?.scheduled?.length || 0;
+            const unscheduled = data.matches?.unscheduled?.length || 0;
+            const weeks = data.statistics?.by_week ? Object.keys(data.statistics.by_week).length : 0;
+            const pools = data.entities?.poules?.length || 0;
+            const venues = data.entities?.gymnases?.length || 0;
+            const modifications = window.modificationManager ? window.modificationManager.getModificationCount() : 0;
+            
+            document.getElementById('stat-scheduled').textContent = scheduled;
+            document.getElementById('stat-unscheduled').textContent = unscheduled;
+            document.getElementById('stat-weeks').textContent = weeks;
+            document.getElementById('stat-pools').textContent = pools;
+            document.getElementById('stat-venues').textContent = venues;
+            document.getElementById('stat-modifications').textContent = modifications;
+        }
+        
+        // Apply filters to all views
+        function applyFilters() {
+            const filters = {
+                gender: document.getElementById('filter-gender')?.value || '',
+                institution: document.getElementById('filter-institution')?.value || '',
+                pool: document.getElementById('filter-pool')?.value || '',
+                venue: document.getElementById('filter-venue')?.value || '',
+                week: document.getElementById('filter-week')?.value || ''
+            };
+            
+            // Remove empty filters
+            Object.keys(filters).forEach(key => {
+                if (!filters[key]) delete filters[key];
+            });
+            
+            // Apply to all views
+            if (agendaView) agendaView.setFilters(filters);
+            if (poolsView) poolsView.setFilters(filters);
+            if (cardsView) cardsView.setFilters(filters);
+        }
+        
+        // Populate filter options
+        function populateFilters() {
+            if (!window.dataManager) return;
+            
+            const data = window.dataManager.getData();
+            if (!data) return;
+            
+            // Institutions
+            const institutions = new Set();
+            data.entities?.equipes?.forEach(e => {
+                if (e.institution) institutions.add(e.institution);
+            });
+            
+            const institutionSelect = document.getElementById('filter-institution');
+            if (institutionSelect) {
+                institutions.forEach(inst => {
+                    const option = document.createElement('option');
+                    option.value = inst;
+                    option.textContent = inst;
+                    institutionSelect.appendChild(option);
+                });
+            }
+            
+            // Poules
+            const poolSelect = document.getElementById('filter-pool');
+            if (poolSelect && data.entities?.poules) {
+                data.entities.poules.forEach(pool => {
+                    const option = document.createElement('option');
+                    option.value = pool.id;
+                    option.textContent = pool.nom;
+                    poolSelect.appendChild(option);
+                });
+            }
+            
+            // Gymnases
+            const venueSelect = document.getElementById('filter-venue');
+            if (venueSelect && data.entities?.gymnases) {
+                data.entities.gymnases.forEach(gym => {
+                    const option = document.createElement('option');
+                    option.value = gym.id;
+                    option.textContent = gym.nom;
+                    venueSelect.appendChild(option);
+                });
+            }
+            
+            // Semaines
+            const weekSelect = document.getElementById('filter-week');
+            if (weekSelect && data.statistics?.by_week) {
+                Object.keys(data.statistics.by_week).sort((a, b) => a - b).forEach(week => {
+                    const option = document.createElement('option');
+                    option.value = week;
+                    option.textContent = `Semaine ${week}`;
+                    weekSelect.appendChild(option);
+                });
+            }
+        }
+        
+        // Tab switching
+        document.querySelectorAll('.tab-button').forEach(button => {
+            button.addEventListener('click', () => {
+                const tabName = button.dataset.tab;
+                currentView = tabName;
+                
+                // Update buttons
+                document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
+                button.classList.add('active');
+                
+                // Update panes
+                document.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('active'));
+                document.getElementById(`tab-${tabName}`).classList.add('active');
+            });
+        });
+        
+        // Filter change handlers
+        document.querySelectorAll('.filter-select').forEach(select => {
+            select.addEventListener('change', applyFilters);
+        });
+        
+        // Export modal
+        function openExportModal() {
+            const modal = document.getElementById('modal-export');
+            const count = window.modificationManager ? window.modificationManager.getModificationCount() : 0;
+            document.getElementById('export-count').textContent = count;
+            
+            // Generate default filename
+            const date = new Date().toISOString().split('T')[0];
+            document.getElementById('export-filename').value = `pycalendar_modifications_${date}.json`;
+            
+            modal.classList.remove('hidden');
+        }
+        
+        function closeExportModal() {
+            document.getElementById('modal-export').classList.add('hidden');
+        }
+        
+        function exportModifications() {
+            if (window.modificationManager) {
+                const filename = document.getElementById('export-filename').value || null;
+                window.modificationManager.exportAndDownload(filename);
+                closeExportModal();
+            }
+        }
+        
+        // Button handlers
+        document.getElementById('btn-export-modifications')?.addEventListener('click', openExportModal);
+        
+        document.getElementById('btn-reset-modifications')?.addEventListener('click', () => {
+            if (confirm('Réinitialiser toutes les modifications ?')) {
+                if (window.modificationManager) {
+                    window.modificationManager.clearAll();
+                }
+                if (window.dataManager) {
+                    window.dataManager.revertAllModifications();
+                }
+                updateStatsDisplay();
+                
+                // Re-render current view
+                if (currentView === 'agenda' && agendaView) agendaView.render();
+                if (currentView === 'pools' && poolsView) poolsView.render();
+                if (currentView === 'cards' && cardsView) cardsView.render();
+            }
+        });
+        
+        // Initialize after DOM is ready
+        document.addEventListener('DOMContentLoaded', () => {
+            // Views will be initialized after data is loaded by the main initialization script
+        });
+    </script>
+</body>
+</html>

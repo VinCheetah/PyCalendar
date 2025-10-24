@@ -18,10 +18,13 @@ class FilterManager {
             showPreferences: false,
             showInstitutions: true,
             showGenreBadges: true,
+            showWeekBadges: false, // Badge de semaine (par défaut désactivé)
+            showPoolBadges: false, // Badge de poule (par défaut désactivé)
             showAvailableSlots: true,
             columnsCount: 3, // Nombre de colonnes (2 à 8)
             timeSlotMinutes: 60, // 30, 60 ou 120 (pour la vue grille)
-            viewMode: 'total' // 'total', 'day', 'team', 'venue'
+            viewMode: 'total', // 'total', 'day', 'team', 'venue'
+            colorMode: 'genre' // 'genre', 'level', 'both', 'pool', 'institution'
         };
         
         this.callbacks = [];
@@ -92,10 +95,32 @@ class FilterManager {
             container.classList.add('hide-genre-badges');
         }
         
+        // Badges semaine
+        if (this.preferences.showWeekBadges) {
+            container.classList.remove('hide-week-badges');
+        } else {
+            container.classList.add('hide-week-badges');
+        }
+        
+        // Badges poule
+        if (this.preferences.showPoolBadges) {
+            container.classList.remove('hide-pool-badges');
+        } else {
+            container.classList.add('hide-pool-badges');
+        }
+        
+        // Mode de coloration des cartes
+        // Retirer toutes les classes de mode de couleur
+        container.classList.remove('color-genre', 'color-level', 'color-both', 'color-pool', 'color-institution');
+        // Ajouter la classe du mode actuel
+        container.classList.add(`color-${this.preferences.colorMode}`);
+        
         // Mise à jour des toggles UI
         this.updateToggleUI('togglePreferences', this.preferences.showPreferences);
         this.updateToggleUI('toggleInstitutions', this.preferences.showInstitutions);
         this.updateToggleUI('toggleGenreBadges', this.preferences.showGenreBadges);
+        this.updateToggleUI('toggleWeekBadges', this.preferences.showWeekBadges);
+        this.updateToggleUI('togglePoolBadges', this.preferences.showPoolBadges);
         this.updateToggleUI('toggleAvailableSlots', this.preferences.showAvailableSlots);
     }
 
@@ -183,10 +208,13 @@ class FilterManager {
             showPreferences: false,
             showInstitutions: true,
             showGenreBadges: true,
+            showWeekBadges: false,
+            showPoolBadges: false,
             showAvailableSlots: true,
             columnsCount: 3,
             timeSlotMinutes: 60,
-            viewMode: 'total'
+            viewMode: 'total',
+            colorMode: 'genre'
         };
         this.applyPreferences();
         this.saveToStorage();
@@ -383,6 +411,12 @@ class FilterManager {
                 
                 // Reset UI du zoom (non géré par applyPreferences)
                 this.updateZoomUI();
+                
+                // Reset UI du sélecteur de couleur
+                const colorModeSelect = document.getElementById('colorModeSelect');
+                if (colorModeSelect) {
+                    colorModeSelect.value = this.preferences.colorMode;
+                }
             });
         }
 
@@ -390,7 +424,20 @@ class FilterManager {
         this.setupToggle('togglePreferences', 'showPreferences');
         this.setupToggle('toggleInstitutions', 'showInstitutions');
         this.setupToggle('toggleGenreBadges', 'showGenreBadges');
+        this.setupToggle('toggleWeekBadges', 'showWeekBadges');
+        this.setupToggle('togglePoolBadges', 'showPoolBadges');
         this.setupToggle('toggleAvailableSlots', 'showAvailableSlots');
+        
+        // Sélecteur de mode de couleur
+        const colorModeSelect = document.getElementById('colorModeSelect');
+        if (colorModeSelect) {
+            // Définir la valeur initiale
+            colorModeSelect.value = this.preferences.colorMode;
+            
+            colorModeSelect.addEventListener('change', (e) => {
+                this.setPreference('colorMode', e.target.value);
+            });
+        }
         
         // Boutons de collapse
         this.setupCollapseButtons();
@@ -571,6 +618,51 @@ class FilterManager {
                 optionsContent.classList.add('collapsed');
             }
         }
+    }
+
+    /**
+     * Met à jour la visibilité des options d'affichage selon l'onglet actif
+     */
+    updateDisplayOptionsVisibility(currentTab) {
+        // Afficher/masquer les toggles selon l'onglet actif
+        document.querySelectorAll('.toggle-container').forEach(toggle => {
+            const visibleTabs = toggle.getAttribute('data-visible-tabs');
+            if (visibleTabs) {
+                const tabs = visibleTabs.split(',');
+                if (tabs.includes(currentTab)) {
+                    toggle.style.display = 'flex';
+                } else {
+                    toggle.style.display = 'none';
+                }
+            }
+        });
+        
+        // Afficher/masquer le sélecteur de mode de couleur selon l'onglet actif
+        const colorModeSelector = document.querySelector('.color-mode-selector');
+        if (colorModeSelector) {
+            const visibleTabs = colorModeSelector.getAttribute('data-visible-tabs');
+            if (visibleTabs) {
+                const tabs = visibleTabs.split(',');
+                if (tabs.includes(currentTab)) {
+                    colorModeSelector.style.display = 'block';
+                } else {
+                    colorModeSelector.style.display = 'none';
+                }
+            }
+        }
+        
+        // Afficher/masquer les contrôles compacts selon l'onglet actif
+        document.querySelectorAll('.compact-control').forEach(control => {
+            const visibleTabs = control.getAttribute('data-visible-tabs');
+            if (visibleTabs) {
+                const tabs = visibleTabs.split(',');
+                if (tabs.includes(currentTab)) {
+                    control.style.display = 'flex';
+                } else {
+                    control.style.display = 'none';
+                }
+            }
+        });
     }
 }
 

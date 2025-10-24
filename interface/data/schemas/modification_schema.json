@@ -1,0 +1,92 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PyCalendar Modifications Export",
+  "description": "Format for exporting calendar modifications",
+  "type": "object",
+  "required": ["export_version", "exported_at", "base_solution", "modifications"],
+  "properties": {
+    "export_version": {
+      "type": "string",
+      "description": "Export format version",
+      "const": "1.0"
+    },
+    "exported_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Export timestamp (ISO 8601)"
+    },
+    "base_solution": {
+      "type": "string",
+      "description": "Filename or identifier of the base solution"
+    },
+    "modifications": {
+      "type": "array",
+      "description": "List of all modifications made",
+      "items": {
+        "type": "object",
+        "required": ["match_id", "timestamp", "original", "new"],
+        "properties": {
+          "match_id": {
+            "type": "string",
+            "description": "Unique match identifier"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the modification was made"
+          },
+          "original": {
+            "type": "object",
+            "description": "Original slot assignment",
+            "required": ["semaine", "horaire", "gymnase"],
+            "properties": {
+              "semaine": {"type": "integer"},
+              "horaire": {"type": "string"},
+              "gymnase": {"type": "string"}
+            }
+          },
+          "new": {
+            "type": "object",
+            "description": "New slot assignment",
+            "required": ["semaine", "horaire", "gymnase"],
+            "properties": {
+              "semaine": {"type": "integer"},
+              "horaire": {"type": "string"},
+              "gymnase": {"type": "string"}
+            }
+          },
+          "reason": {
+            "type": "string",
+            "description": "Reason for the modification (optional)"
+          },
+          "author": {
+            "type": "string",
+            "description": "Who made the modification (user, auto-resolver, etc.)"
+          }
+        }
+      }
+    },
+    "statistics": {
+      "type": "object",
+      "description": "Summary statistics of modifications",
+      "properties": {
+        "total_modifications": {
+          "type": "integer",
+          "description": "Total number of modifications"
+        },
+        "matches_modified": {
+          "type": "integer",
+          "description": "Number of unique matches modified"
+        },
+        "conflicts_resolved": {
+          "type": "integer",
+          "description": "Number of conflicts resolved"
+        },
+        "penalty_delta": {
+          "type": "number",
+          "description": "Change in total penalty score (negative = improvement)"
+        }
+      }
+    }
+  }
+}

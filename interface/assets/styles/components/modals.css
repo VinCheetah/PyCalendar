@@ -1,0 +1,189 @@
+/**
+ * PyCalendar Interface - Modal Component
+ * Styles for modal dialogs
+ */
+
+/* ==================== MODAL OVERLAY ==================== */
+
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: var(--z-modal-backdrop);
+    animation: fadeIn var(--transition-base);
+}
+
+.modal-overlay.hidden {
+    display: none;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+/* ==================== MODAL CONTAINER ==================== */
+
+.modal {
+    background: var(--white);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-xl);
+    max-width: 90vw;
+    max-height: 90vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    z-index: var(--z-modal);
+    animation: slideUp var(--transition-base);
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.modal-sm {
+    width: 400px;
+}
+
+.modal-md {
+    width: 600px;
+}
+
+.modal-lg {
+    width: 800px;
+}
+
+.modal-xl {
+    width: 1000px;
+}
+
+/* ==================== MODAL HEADER ==================== */
+
+.modal-header {
+    padding: var(--spacing-xl);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.modal-title {
+    font-size: var(--text-2xl);
+    font-weight: 700;
+    color: var(--dark);
+}
+
+.modal-close {
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-full);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: var(--text-2xl);
+    color: var(--gray);
+    cursor: pointer;
+    transition: var(--transition-base);
+}
+
+.modal-close:hover {
+    background: var(--danger-light);
+    color: var(--danger);
+}
+
+/* ==================== MODAL BODY ==================== */
+
+.modal-body {
+    padding: var(--spacing-xl);
+    overflow-y: auto;
+    flex: 1;
+}
+
+/* ==================== MODAL FOOTER ==================== */
+
+.modal-footer {
+    padding: var(--spacing-lg) var(--spacing-xl);
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: var(--spacing-sm);
+    justify-content: flex-end;
+}
+
+.modal-btn {
+    padding: var(--spacing-sm) var(--spacing-xl);
+    border-radius: var(--radius-md);
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--transition-base);
+}
+
+.modal-btn-primary {
+    background: var(--primary);
+    color: var(--white);
+}
+
+.modal-btn-primary:hover {
+    background: var(--primary-hover);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow);
+}
+
+.modal-btn-secondary {
+    background: var(--light);
+    color: var(--gray);
+}
+
+.modal-btn-secondary:hover {
+    background: var(--border);
+    color: var(--dark);
+}
+
+.modal-btn-danger {
+    background: var(--danger);
+    color: var(--white);
+}
+
+.modal-btn-danger:hover {
+    background: var(--danger-dark);
+}
+
+/* ==================== MODAL RESPONSIVE ==================== */
+
+@media (max-width: 768px) {
+    .modal {
+        max-width: 95vw;
+        max-height: 95vh;
+        border-radius: var(--radius-lg);
+    }
+    
+    .modal-sm,
+    .modal-md,
+    .modal-lg,
+    .modal-xl {
+        width: 95vw;
+    }
+    
+    .modal-header,
+    .modal-body,
+    .modal-footer {
+        padding: var(--spacing-md);
+    }
+}

@@ -16,13 +16,45 @@ class CPSATSolver(BaseSolver):
     """Optimal solver using CP-SAT (OR-Tools)."""
     
     def __init__(self, config: Config, groupes_non_simultaneite: Optional[Dict[str, Set[str]]] = None,
-                 ententes: Optional[Dict] = None, contraintes_temporelles: Optional[Dict] = None):
+                 ententes: Optional[Dict] = None, contraintes_temporelles: Optional[Dict] = None,
+                 niveaux_gymnases: Optional[Dict[str, str]] = None):
         if not ORTOOLS_AVAILABLE:
             raise ImportError("OR-Tools not installed. Install with: pip install ortools")
         super().__init__(config)
         self.groupes_non_simultaneite = groupes_non_simultaneite or {}
         self.ententes = ententes or {}  # Dict avec paires d'institutions et leurs pénalités
         self.contraintes_temporelles = contraintes_temporelles or {}  # Dict avec paires d'équipes et leurs contraintes temporelles
+        self.niveaux_gymnases = niveaux_gymnases or {}  # Dict avec niveaux des gymnases
+    
+    def _get_niveau_match(self, match: Match) -> Optional[int]:
+        """
+        Détermine le niveau d'un match basé sur sa poule.
+        
+        Args:
+            match: Le match dont on veut connaître le niveau
+            
+        Returns:
+            Le niveau (0=A1, 1=A2, 2=A3, 3=A4, etc.) ou None si indéterminé
+        """
+        poule = match.poule.upper()
+        
+        # Chercher un pattern comme A1, A2, A3, A4 ou similaire
+        import re
+        match_niveau = re.search(r'A(\d+)', poule)
+        if match_niveau:
+            return int(match_niveau.group(1)) - 1  # A1=0, A2=1, A3=2, A4=3
+        
+        # Autres patterns possibles
+        if 'A1' in poule or '1' in poule and 'A' in poule:
+            return 0
+        elif 'A2' in poule or '2' in poule and 'A' in poule:
+            return 1
+        elif 'A3' in poule or '3' in poule and 'A' in poule:
+            return 2
+        elif 'A4' in poule or '4' in poule and 'A' in poule:
+            return 3
+        
+        return None  # Niveau indéterminé
     
     def _est_entente(self, match: Match) -> bool:
         """
@@ -317,23 +349,30 @@ class CPSATSolver(BaseSolver):
         assignment_vars = {}
         match_assigned = []
         
+        # Filtrer les créneaux valides selon semaine_min
+        creneaux_valides = [creneau for creneau in creneaux if creneau.semaine >= self.config.semaine_min]
+        creneau_index_map = {j: i for i, j in enumerate([idx for idx, c in enumerate(creneaux) if c.semaine >= self.config.semaine_min])}
+        
+        if self.config.afficher_progression:
+            print(f"   → {len(creneaux_valides)} créneaux valides sur {len(creneaux)} total (semaine_min={self.config.semaine_min})")
+        
         # Créer les variables
         for i, match in enumerate(matchs):
             # Variable pour savoir si le match est assigné
             assigned_var = model.NewBoolVar(f'match_{i}_assigned')
             match_assigned.append(assigned_var)
             
-            for j, creneau in enumerate(creneaux):
+            for j, creneau in enumerate(creneaux_valides):
                 var = model.NewBoolVar(f'match_{i}_creneau_{j}')
                 assignment_vars[(i, j)] = var
         
         # CONTRAINTE 1: Chaque match est assigné à exactement 1 créneau (ou aucun)
         for i in range(len(matchs)):
-            model.Add(sum(assignment_vars[(i, j)] for j in range(len(creneaux))) == match_assigned[i])
+            model.Add(sum(assignment_vars[(i, j)] for j in range(len(creneaux_valides))) == match_assigned[i])
         
         # CONTRAINTE 2: Capacité des gymnases (avec support de capacité réduite)
-        for j in range(len(creneaux)):
-            creneau = creneaux[j]
+        for j in range(len(creneaux_valides)):
+            creneau = creneaux_valides[j]
             gymnase = gymnases.get(creneau.gymnase)
             if gymnase:
                 # Utiliser la capacité disponible (qui peut être réduite)
@@ -342,7 +381,7 @@ class CPSATSolver(BaseSolver):
         
         # CONTRAINTE 3: Disponibilité des équipes (DURE)
         for i, match in enumerate(matchs):
-            for j, creneau in enumerate(creneaux):
+            for j, creneau in enumerate(creneaux_valides):
                 if not match.equipe1.est_disponible(creneau.semaine, creneau.horaire):
                     model.Add(assignment_vars[(i, j)] == 0)
                 if not match.equipe2.est_disponible(creneau.semaine, creneau.horaire):
@@ -353,15 +392,15 @@ class CPSATSolver(BaseSolver):
             for i, match in enumerate(matchs):
                 contrainte = self._get_contrainte_temporelle(match)
                 if contrainte:
-                    for j, creneau in enumerate(creneaux):
+                    for j, creneau in enumerate(creneaux_valides):
                         # Si la contrainte n'est pas respectée, bloquer ce placement
                         if not contrainte.est_respectee(creneau.semaine):
                             model.Add(assignment_vars[(i, j)] == 0)
         
         # CONTRAINTE 4: Une équipe ne peut jouer qu'une fois par (semaine, horaire)
-        # Grouper les créneaux par (semaine, horaire)
+        # Grouper les créneaux valides par (semaine, horaire)
         creneaux_par_semaine_horaire = {}
-        for j, creneau in enumerate(creneaux):
+        for j, creneau in enumerate(creneaux_valides):
             key = (creneau.semaine, creneau.horaire)
             if key not in creneaux_par_semaine_horaire:
                 creneaux_par_semaine_horaire[key] = []
@@ -391,15 +430,15 @@ class CPSATSolver(BaseSolver):
         max_matchs_semaine = self.config.max_matchs_par_equipe_par_semaine
         
         for equipe_id in equipes_uniques:
-            for semaine in range(1, self.config.nb_semaines + 1):
-                # Trouver tous les créneaux de cette semaine
-                indices_semaine = [j for j, c in enumerate(creneaux) if c.semaine == semaine]
+            for semaine in range(self.config.semaine_min, self.config.nb_semaines + 1):
+                # Trouver tous les créneaux valides de cette semaine
+                indices_semaine_valides = [j for j, c in enumerate(creneaux_valides) if c.semaine == semaine]
                 
                 # Trouver tous les matchs où cette équipe joue
                 vars_equipe_semaine = []
                 for i, match in enumerate(matchs):
                     if match.equipe1.id_unique == equipe_id or match.equipe2.id_unique == equipe_id:
-                        for j in indices_semaine:
+                        for j in indices_semaine_valides:
                             vars_equipe_semaine.append(assignment_vars[(i, j)])
                 
                 # Limiter le nombre de matchs
@@ -408,7 +447,7 @@ class CPSATSolver(BaseSolver):
         
         # CONTRAINTE 6: Obligations de présence
         for i, match in enumerate(matchs):
-            for j, creneau in enumerate(creneaux):
+            for j, creneau in enumerate(creneaux_valides):
                 institution_requise = obligations_presence.get(creneau.gymnase)
                 
                 if institution_requise:
@@ -422,7 +461,7 @@ class CPSATSolver(BaseSolver):
         
         # CONTRAINTE 7: Disponibilité des gymnases
         for i, match in enumerate(matchs):
-            for j, creneau in enumerate(creneaux):
+            for j, creneau in enumerate(creneaux_valides):
                 gymnase = gymnases.get(creneau.gymnase)
                 if gymnase and not gymnase.est_disponible(creneau.semaine, creneau.horaire):
                     model.Add(assignment_vars[(i, j)] == 0)
@@ -443,7 +482,7 @@ class CPSATSolver(BaseSolver):
         
         # Pénalités pour préférences horaires (sophistiquée avec distance)
         for i, match in enumerate(matchs):
-            for j, creneau in enumerate(creneaux):
+            for j, creneau in enumerate(creneaux_valides):
                 penalty = self._calculate_time_preference_penalty(match, creneau)
                 
                 if penalty > 0:
@@ -454,7 +493,7 @@ class CPSATSolver(BaseSolver):
             for i, match in enumerate(matchs):
                 contrainte = self._get_contrainte_temporelle(match)
                 if contrainte:
-                    for j, creneau in enumerate(creneaux):
+                    for j, creneau in enumerate(creneaux_valides):
                         # Si la contrainte n'est pas respectée, ajouter une pénalité
                         if not contrainte.est_respectee(creneau.semaine):
                             penalty = int(self.config.contrainte_temporelle_penalite)
@@ -465,7 +504,7 @@ class CPSATSolver(BaseSolver):
             base_penalty = 2 * max(self.config.bonus_preferences_gymnases)
             
             for i, match in enumerate(matchs):
-                for j, creneau in enumerate(creneaux):
+                for j, creneau in enumerate(creneaux_valides):
                     penalty = base_penalty
                     
                     # Soustraire bonus si équipe 1 a ce gymnase dans ses préférences
@@ -485,13 +524,42 @@ class CPSATSolver(BaseSolver):
                     # Ajouter la pénalité (négative car on maximise)
                     objective_terms.append(-int(penalty) * assignment_vars[(i, j)])
         
+        # Bonus pour gymnases par niveau (classification haut/bas niveau)
+        # Applique un bonus positif quand un match est assigné à un gymnase de niveau approprié
+        if self.niveaux_gymnases and (self.config.bonus_niveau_gymnases_haut or self.config.bonus_niveau_gymnases_bas):
+            for i, match in enumerate(matchs):
+                # Déterminer le niveau du match (basé sur la poule: A1=0, A2=1, A3=2, A4=3)
+                niveau_match = self._get_niveau_match(match)
+                if niveau_match is None:
+                    continue
+                
+                for j, creneau in enumerate(creneaux_valides):
+                    # Récupérer le niveau du gymnase
+                    niveau_gymnase = self.niveaux_gymnases.get(creneau.gymnase)
+                    if not niveau_gymnase:
+                        continue
+                    
+                    # Calculer le bonus selon le niveau du gymnase et du match
+                    bonus = 0
+                    if niveau_gymnase == 'Haut niveau' and niveau_match < len(self.config.bonus_niveau_gymnases_haut):
+                        bonus = self.config.bonus_niveau_gymnases_haut[niveau_match]
+                    elif niveau_gymnase == 'Bas niveau' and niveau_match < len(self.config.bonus_niveau_gymnases_bas):
+                        bonus = self.config.bonus_niveau_gymnases_bas[niveau_match]
+                    
+                    # Ajouter le bonus à l'objectif (négatif car on minimise, donc -bonus pour encourager)
+                    # Exemple: bonus=10 pour A1 en haut niveau -> on veut favoriser cette assignation
+                    # En minimisation, on ajoute -10 pour réduire le coût
+                    if bonus != 0:
+                        objective_terms.append(-int(bonus) * assignment_vars[(i, j)])
+
+        
         # CONTRAINTE SOUPLE: Espacement entre matchs d'une même équipe
         # Pour chaque équipe, pénaliser les matchs trop rapprochés
         if self.config.penalites_espacement_repos:
             # Grouper les créneaux par semaine pour chaque équipe
             for equipe_id in equipes_uniques:
                 # Pour chaque paire de semaines, détecter si l'équipe joue aux deux
-                for semaine1 in range(1, self.config.nb_semaines + 1):
+                for semaine1 in range(self.config.semaine_min, self.config.nb_semaines + 1):
                     for semaine2 in range(semaine1 + 1, self.config.nb_semaines + 1):
                         # Calculer le nombre de semaines de repos entre ces deux semaines
                         weeks_rest = semaine2 - semaine1 - 1
@@ -501,9 +569,9 @@ class CPSATSolver(BaseSolver):
                             penalty_value = self.config.penalites_espacement_repos[weeks_rest]
                             
                             if penalty_value > 0:
-                                # Trouver tous les créneaux de semaine1 et semaine2
-                                creneaux_s1 = [j for j, c in enumerate(creneaux) if c.semaine == semaine1]
-                                creneaux_s2 = [j for j, c in enumerate(creneaux) if c.semaine == semaine2]
+                                # Trouver tous les créneaux valides de semaine1 et semaine2
+                                creneaux_s1 = [j for j, c in enumerate(creneaux_valides) if c.semaine == semaine1]
+                                creneaux_s2 = [j for j, c in enumerate(creneaux_valides) if c.semaine == semaine2]
                                 
                                 # Trouver tous les matchs où cette équipe joue
                                 matchs_equipe = [i for i, m in enumerate(matchs) 
@@ -538,7 +606,7 @@ class CPSATSolver(BaseSolver):
         # CONTRAINTE SOUPLE 1: Compaction temporelle (prioriser les matchs en début de calendrier)
         if self.config.compaction_temporelle_actif:
             for i in range(len(matchs)):
-                for j, creneau in enumerate(creneaux):
+                for j, creneau in enumerate(creneaux_valides):
                     semaine = creneau.semaine
                     
                     # Récupérer la pénalité pour cette semaine (indice 0 = semaine 1)
@@ -554,9 +622,9 @@ class CPSATSolver(BaseSolver):
         # CONTRAINTE SOUPLE 2: Éviter les overlaps d'institution (matchs simultanés de même institution/équipe)
         # Appliqué seulement aux groupes configurés dans groupes_non_simultaneite
         if self.config.overlap_institution_actif:
-            # Grouper les créneaux identiques (même semaine, même horaire, même gymnase)
+            # Grouper les créneaux valides identiques (même semaine, même horaire, même gymnase)
             creneaux_identiques = {}
-            for j, creneau in enumerate(creneaux):
+            for j, creneau in enumerate(creneaux_valides):
                 key = (creneau.semaine, creneau.horaire, creneau.gymnase)
                 if key not in creneaux_identiques:
                     creneaux_identiques[key] = []
@@ -602,8 +670,8 @@ class CPSATSolver(BaseSolver):
                 # Pour chaque paire aller-retour
                 for i1, i2 in paires_aller_retour:
                     # Variables pour détecter si planifiés dans même semaine ou semaines consécutives
-                    for j1, creneau1 in enumerate(creneaux):
-                        for j2, creneau2 in enumerate(creneaux):
+                    for j1, creneau1 in enumerate(creneaux_valides):
+                        for j2, creneau2 in enumerate(creneaux_valides):
                             semaine_diff = abs(creneau1.semaine - creneau2.semaine)
                             
                             # Pénalité si dans même semaine
@@ -629,6 +697,7 @@ class CPSATSolver(BaseSolver):
         # MAXIMISER (bonus - pénalités)
         if objective_terms:
             model.Maximize(sum(objective_terms))
+
         
         # ============================================================================
         # WARM START : Utiliser une solution précédente comme point de départ
@@ -659,7 +728,7 @@ class CPSATSolver(BaseSolver):
                     # Note: La signature sera créée/passée depuis l'orchestrateur
                     # Pour l'instant, on fait une validation basique
                     hint, stats = self._apply_warm_start_basic(
-                        previous_solution, matchs, creneaux, assignment_vars, model
+                        previous_solution, matchs, creneaux_valides, assignment_vars, model
                     )
                     
                     # Toujours afficher les statistiques de réutilisation (important!)
@@ -761,7 +830,7 @@ class CPSATSolver(BaseSolver):
         if status in [cp_model.OPTIMAL, cp_model.FEASIBLE]:
             for i, match in enumerate(matchs):
                 assigned = False
-                for j, creneau in enumerate(creneaux):
+                for j, creneau in enumerate(creneaux_valides):
                     if solver.Value(assignment_vars[(i, j)]) == 1:
                         match.creneau = creneau
                         matchs_planifies.append(match)

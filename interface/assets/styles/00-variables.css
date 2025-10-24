@@ -1,0 +1,138 @@
+/**
+ * PyCalendar Interface - CSS Variables
+ * Central design tokens for consistent theming
+ */
+
+:root {
+    /* ==================== PALETTE TRICOLORE FRANÇAISE ==================== */
+    
+    /* Bleus - Inspirés du drapeau */
+    --primary: #0055A4;
+    --primary-hover: #1E3A8A;
+    --primary-light: rgba(0, 85, 164, 0.08);
+    --primary-lighter: #EFF6FF;
+    
+    /* Rouges - Palette étendue */
+    --danger: #EF4444;
+    --danger-dark: #DC2626;
+    --danger-darker: #B91C1C;
+    --danger-deepest: #991B1B;
+    --danger-light: rgba(239, 68, 68, 0.1);
+    --danger-glow: rgba(239, 68, 68, 0.3);
+    
+    /* Couleurs complémentaires */
+    --secondary: #10B981;
+    --secondary-light: rgba(16, 185, 129, 0.1);
+    --warning: #F59E0B;
+    --warning-light: rgba(245, 158, 11, 0.1);
+    
+    /* Violets - Modernité et élégance */
+    --accent: #8B5CF6;
+    --accent-light: rgba(139, 92, 246, 0.1);
+    
+    /* Gris sophistiqués */
+    --dark: #1E293B;
+    --gray: #64748B;
+    --gray-light: #94A3B8;
+    --light: #F8FAFC;
+    --border: #E2E8F0;
+    
+    /* Blancs */
+    --white: #FFFFFF;
+    --off-white: #F1F5F9;
+    
+    /* ==================== CONFLITS ==================== */
+    
+    --conflict-critical: #DC2626;
+    --conflict-warning: #F59E0B;
+    --conflict-border: 3px;
+    --conflict-glow: 0 0 12px rgba(220, 38, 38, 0.4);
+    
+    /* ==================== GENRES ==================== */
+    
+    --male: #3B82F6;
+    --male-dark: #2563EB;
+    --male-light: rgba(59, 130, 246, 0.12);
+    
+    --female: #EC4899;
+    --female-dark: #DB2777;
+    --female-light: rgba(236, 72, 153, 0.12);
+    
+    --mixed: #8B5CF6;
+    --mixed-dark: #7C3AED;
+    --mixed-light: rgba(139, 92, 246, 0.12);
+    
+    /* ==================== CATÉGORIES ==================== */
+    
+    --cat-a1: #8B5CF6;
+    --cat-a2: #6366F1;
+    --cat-a3: #3B82F6;
+    --cat-a4: #14B8A6;
+    
+    /* ==================== OMBRES ==================== */
+    
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+    --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1);
+    
+    /* ==================== SPACING ==================== */
+    
+    --spacing-xs: 0.25rem;
+    --spacing-sm: 0.5rem;
+    --spacing-md: 1rem;
+    --spacing-lg: 1.5rem;
+    --spacing-xl: 2rem;
+    --spacing-2xl: 3rem;
+    
+    /* ==================== BORDER RADIUS ==================== */
+    
+    --radius-sm: 0.25rem;
+    --radius-md: 0.5rem;
+    --radius-lg: 0.75rem;
+    --radius-xl: 1rem;
+    --radius-full: 9999px;
+    
+    /* ==================== TRANSITIONS ==================== */
+    
+    --transition-fast: 150ms ease;
+    --transition-base: 200ms ease;
+    --transition-slow: 300ms ease;
+    
+    /* ==================== FONT SIZES ==================== */
+    
+    --text-xs: 0.75rem;
+    --text-sm: 0.875rem;
+    --text-base: 1rem;
+    --text-lg: 1.125rem;
+    --text-xl: 1.25rem;
+    --text-2xl: 1.5rem;
+    --text-3xl: 1.875rem;
+    --text-4xl: 2.25rem;
+    
+    /* ==================== LAYOUT GRID ==================== */
+    
+    --cards-columns: 3;
+    --card-gap: 1.25rem;
+    --max-width: 1400px;
+    
+    /* ==================== Z-INDEX SCALE ==================== */
+    
+    --z-base: 1;
+    --z-dropdown: 100;
+    --z-sticky: 200;
+    --z-fixed: 300;
+    --z-modal-backdrop: 400;
+    --z-modal: 500;
+    --z-tooltip: 600;
+}
+
+/* ==================== DARK THEME (Pour plus tard) ==================== */
+
+[data-theme="dark"] {
+    --background: #0F172A;
+    --text-color: #F1F5F9;
+    --border: #334155;
+    
+    /* À compléter quand le thème sombre sera implémenté */
+}

@@ -17,12 +17,44 @@ class GreedySolver(BaseSolver):
     """Fast greedy solver for large-scale scheduling."""
     
     def __init__(self, config: Config, groupes_non_simultaneite: Optional[Dict[str, Set[str]]] = None,
-                 ententes: Optional[Dict] = None, contraintes_temporelles: Optional[Dict] = None):
+                 ententes: Optional[Dict] = None, contraintes_temporelles: Optional[Dict] = None,
+                 niveaux_gymnases: Optional[Dict[str, str]] = None):
         super().__init__(config)
         self.groupes_non_simultaneite = groupes_non_simultaneite or {}
         self.ententes = ententes or {}  # Dict avec paires d'institutions et leurs pénalités
         self.contraintes_temporelles = contraintes_temporelles or {}  # Dict avec paires d'équipes et leurs contraintes temporelles
+        self.niveaux_gymnases = niveaux_gymnases or {}  # Dict avec niveaux des gymnases
         self.validator = self._build_validator()
+    
+    def _get_niveau_match(self, match: Match) -> Optional[int]:
+        """
+        Détermine le niveau d'un match basé sur sa poule.
+        
+        Args:
+            match: Le match dont on veut connaître le niveau
+            
+        Returns:
+            Le niveau (0=A1, 1=A2, 2=A3, 3=A4, etc.) ou None si indéterminé
+        """
+        poule = match.poule.upper()
+        
+        # Chercher un pattern comme A1, A2, A3, A4 ou similaire
+        import re
+        match_niveau = re.search(r'A(\d+)', poule)
+        if match_niveau:
+            return int(match_niveau.group(1)) - 1  # A1=0, A2=1, A3=2, A4=3
+        
+        # Autres patterns possibles
+        if 'A1' in poule or '1' in poule and 'A' in poule:
+            return 0
+        elif 'A2' in poule or '2' in poule and 'A' in poule:
+            return 1
+        elif 'A3' in poule or '3' in poule and 'A' in poule:
+            return 2
+        elif 'A4' in poule or '4' in poule and 'A' in poule:
+            return 3
+        
+        return None  # Niveau indéterminé
     
     def _est_entente(self, match: Match) -> bool:
         """Vérifie si un match est une entente (paire d'institutions configurée)."""
@@ -135,6 +167,39 @@ class GreedySolver(BaseSolver):
         
         return penalty
     
+    def _calculer_penalite_niveau_gymnase(self, match: Match, creneau: Creneau) -> float:
+        """
+        Calcule la pénalité/bonus pour les niveaux de gymnase.
+        
+        Args:
+            match: Le match à planifier
+            creneau: Le créneau candidat
+            
+        Returns:
+            Pénalité finale (plus petit = meilleur, valeurs négatives = bonus)
+        """
+        if not self.config.bonus_niveau_gymnases_haut or not self.config.bonus_niveau_gymnases_bas or not self.niveaux_gymnases:
+            return 0.0
+        
+        # Déterminer le niveau du match
+        niveau_match = self._get_niveau_match(match)
+        if niveau_match is None:
+            return 0.0
+        
+        # Récupérer le niveau du gymnase
+        niveau_gymnase = self.niveaux_gymnases.get(creneau.gymnase)
+        if not niveau_gymnase:
+            return 0.0
+        
+        # Calculer le bonus (négatif = bonus)
+        bonus = 0
+        if niveau_gymnase == 'Haut niveau' and niveau_match < len(self.config.bonus_niveau_gymnases_haut):
+            bonus = self.config.bonus_niveau_gymnases_haut[niveau_match]
+        elif niveau_gymnase == 'Bas niveau' and niveau_match < len(self.config.bonus_niveau_gymnases_bas):
+            bonus = self.config.bonus_niveau_gymnases_bas[niveau_match]
+        
+        return -bonus  # Négatif car bonus = réduction de pénalité
+    
     def solve(self, matchs: List[Match], creneaux: List[Creneau], 
              gymnases: Dict[str, Gymnase], obligations_presence: Dict[str, str] = {}) -> Solution:
         """Solve using greedy algorithm with multiple attempts.
@@ -207,6 +272,10 @@ class GreedySolver(BaseSolver):
                 if match.creneau:
                     break
                 
+                # Vérifier la contrainte semaine_min (ne pas planifier avant cette semaine)
+                if creneau.semaine < self.config.semaine_min:
+                    continue
+                
                 # Vérifier la contrainte temporelle
                 if not self._respecte_contrainte_temporelle(match, creneau):
                     if self.config.contrainte_temporelle_dure:
@@ -225,6 +294,10 @@ class GreedySolver(BaseSolver):
                 # Ajouter la pénalité pour les préférences de gymnase
                 penalty_gymnase = self._calculer_penalite_gymnase(match, creneau)
                 penalty += penalty_gymnase
+                
+                # Ajouter la pénalité/bonus pour les niveaux de gymnase
+                penalty_niveau = self._calculer_penalite_niveau_gymnase(match, creneau)
+                penalty += penalty_niveau
                 
                 if is_valid and penalty < best_penalty:
                     best_creneau = creneau

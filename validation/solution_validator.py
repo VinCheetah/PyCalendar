@@ -57,7 +57,17 @@ class SolutionValidator:
             return False, {
                 'est_valide': False,
                 'message': 'Aucun match planifié',
-                'violations': []
+                'violations': [],
+                'nb_violations_dures': 0,
+                'nb_violations_souples': 0,
+                'violations_dures': [],
+                'violations_souples': [],
+                'nb_matchs_planifies': 0,
+                'nb_matchs_non_planifies': len(solution.matchs_non_planifies) if solution else 0,
+                'taux_planification': 0.0,
+                'stats_compaction': None,
+                'stats_overlaps': None,
+                'stats_preferences_horaires': None
             }
         
         # Construire l'état de la solution pour les vérifications
@@ -229,12 +239,12 @@ class SolutionValidator:
             
             for equipe_id, count in equipes_count.items():
                 if count > 1:
-                    # Extraire le nom pour l'affichage (avant le |)
-                    equipe_nom = equipe_id.split('|')[0]
+                    # Afficher le nom complet avec le genre pour différencier les équipes
+                    equipe_nom_complet = equipe_id.replace('|', ' ')
                     self.violations.append(ViolationDetail(
                         type_contrainte="Équipe joue plusieurs fois simultanément",
                         severite="DURE",
-                        description=f"L'équipe {equipe_nom} joue {count} fois au même créneau",
+                        description=f"L'équipe {equipe_nom_complet} joue {count} fois au même créneau",
                         creneau_concerne=f"S{semaine} - {horaire}",
                         penalite=1000.0
                     ))
@@ -244,13 +254,15 @@ class SolutionValidator:
         max_matchs = self.config.max_matchs_par_equipe_par_semaine
         
         for key, count in etat['matchs_par_equipe_semaine'].items():
-            equipe, semaine = key
+            equipe_id, semaine = key
             
             if count > max_matchs:
+                # Afficher le nom complet avec le genre
+                equipe_nom_complet = equipe_id.replace('|', ' ')
                 self.violations.append(ViolationDetail(
                     type_contrainte="Trop de matchs par semaine",
                     severite="DURE",
-                    description=f"L'équipe {equipe} joue {count} matchs semaine {semaine} (max: {max_matchs})",
+                    description=f"L'équipe {equipe_nom_complet} joue {count} matchs semaine {semaine} (max: {max_matchs})",
                     penalite=500.0
                 ))
     

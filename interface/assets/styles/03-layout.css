@@ -1,0 +1,311 @@
+/**
+ * PyCalendar Interface - Layout
+ * Main application layout and container styles
+ */
+
+/* ==================== APP CONTAINER ==================== */
+
+.app-container {
+    min-height: 100vh;
+    padding: var(--spacing-lg);
+    max-width: var(--max-width);
+    margin: 0 auto;
+}
+
+/* ==================== HEADER ==================== */
+
+.header {
+    background: white;
+    padding: var(--spacing-xl);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow);
+    margin-bottom: var(--spacing-xl);
+}
+
+.header-title {
+    font-size: var(--text-4xl);
+    font-weight: 800;
+    background: linear-gradient(135deg, var(--primary), var(--accent));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: var(--spacing-sm);
+}
+
+.header-subtitle {
+    color: var(--gray);
+    font-size: var(--text-lg);
+    margin-bottom: var(--spacing-xl);
+}
+
+/* ==================== STATS GRID ==================== */
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: var(--spacing-lg);
+}
+
+.stat-card {
+    background: linear-gradient(135deg, var(--primary-lighter), var(--white));
+    padding: var(--spacing-lg);
+    border-radius: var(--radius-lg);
+    border-left: 4px solid var(--primary);
+    transition: var(--transition-base);
+}
+
+.stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+}
+
+.stat-value {
+    font-size: var(--text-3xl);
+    font-weight: 700;
+    color: var(--primary);
+    margin-bottom: var(--spacing-xs);
+}
+
+.stat-label {
+    font-size: var(--text-sm);
+    color: var(--gray);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* ==================== CONTROLS SECTION ==================== */
+
+.controls-section {
+    background: white;
+    padding: var(--spacing-xl);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow);
+    margin-bottom: var(--spacing-xl);
+}
+
+.control-group {
+    margin-bottom: var(--spacing-lg);
+}
+
+.control-group:last-child {
+    margin-bottom: 0;
+}
+
+.control-group-title {
+    font-size: var(--text-lg);
+    font-weight: 600;
+    color: var(--dark);
+    margin-bottom: var(--spacing-md);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+/* ==================== TABS ==================== */
+
+.tabs-container {
+    background: white;
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+    margin-bottom: var(--spacing-xl);
+}
+
+.tabs-nav {
+    display: flex;
+    background: var(--light);
+    border-bottom: 2px solid var(--border);
+    overflow-x: auto;
+}
+
+.tab-button {
+    flex: 1;
+    min-width: 150px;
+    padding: var(--spacing-md) var(--spacing-lg);
+    font-size: var(--text-base);
+    font-weight: 600;
+    color: var(--gray);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    transition: var(--transition-base);
+    border-bottom: 3px solid transparent;
+    white-space: nowrap;
+}
+
+.tab-button:hover {
+    background: var(--white);
+    color: var(--primary);
+}
+
+.tab-button.active {
+    background: var(--white);
+    color: var(--primary);
+    border-bottom-color: var(--primary);
+}
+
+.tab-icon {
+    margin-right: var(--spacing-xs);
+}
+
+/* ==================== CONTENT AREAS ==================== */
+
+.tab-content {
+    padding: var(--spacing-xl);
+}
+
+.tab-pane {
+    display: none;
+}
+
+.tab-pane.active {
+    display: block;
+    animation: fadeIn var(--transition-base);
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* ==================== GRID LAYOUTS ==================== */
+
+.matches-grid {
+    display: grid;
+    gap: var(--card-gap);
+    grid-template-columns: repeat(var(--cards-columns), 1fr);
+}
+
+/* Responsive columns */
+.view-2 .matches-grid {
+    grid-template-columns: repeat(2, 1fr);
+}
+
+.view-3 .matches-grid {
+    grid-template-columns: repeat(3, 1fr);
+}
+
+.view-4 .matches-grid {
+    grid-template-columns: repeat(4, 1fr);
+}
+
+.view-5 .matches-grid {
+    grid-template-columns: repeat(5, 1fr);
+}
+
+.view-6 .matches-grid {
+    grid-template-columns: repeat(6, 1fr);
+}
+
+/* ==================== SECTION CONTAINERS ==================== */
+
+.week-section,
+.pool-section,
+.venue-section {
+    margin-bottom: var(--spacing-2xl);
+}
+
+.week-header,
+.pool-header,
+.venue-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--spacing-md) var(--spacing-lg);
+    background: linear-gradient(135deg, var(--primary-lighter), var(--white));
+    border-radius: var(--radius-lg);
+    border-left: 4px solid var(--primary);
+    margin-bottom: var(--spacing-lg);
+}
+
+.week-title,
+.pool-title,
+.venue-title {
+    font-size: var(--text-xl);
+    font-weight: 700;
+    color: var(--dark);
+}
+
+.week-count,
+.pool-count,
+.venue-count {
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--gray);
+    background: var(--white);
+    padding: var(--spacing-xs) var(--spacing-md);
+    border-radius: var(--radius-full);
+}
+
+/* ==================== EMPTY STATES ==================== */
+
+.empty-state {
+    text-align: center;
+    padding: var(--spacing-2xl);
+    color: var(--gray);
+}
+
+.empty-state-icon {
+    font-size: 4rem;
+    margin-bottom: var(--spacing-lg);
+    opacity: 0.3;
+}
+
+.empty-state-title {
+    font-size: var(--text-2xl);
+    font-weight: 600;
+    margin-bottom: var(--spacing-sm);
+}
+
+.empty-state-message {
+    font-size: var(--text-base);
+    color: var(--gray-light);
+}
+
+/* ==================== RESPONSIVE BREAKPOINTS ==================== */
+
+@media (max-width: 1400px) {
+    .matches-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+@media (max-width: 1024px) {
+    .matches-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 768px) {
+    .app-container {
+        padding: var(--spacing-md);
+    }
+    
+    .matches-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .stats-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .tabs-nav {
+        flex-wrap: wrap;
+    }
+    
+    .tab-button {
+        flex: 1 1 auto;
+        min-width: 120px;
+    }
+}

@@ -33,7 +33,9 @@ class HTMLVisualizerV2:
         )
         unscheduled_data = HTMLVisualizerV2._prepare_unscheduled_data(solution.matchs_non_planifies)
         available_slots_data = HTMLVisualizerV2._prepare_available_slots_data(
-            solution.metadata.get('creneaux_disponibles', [])
+            solution.metadata.get('creneaux_disponibles', []),
+            solution.matchs_planifies,
+            config
         )
         
         # Charger le template HTML
@@ -51,11 +53,20 @@ class HTMLVisualizerV2:
         # JavaScript modules
         js_modules = [
             'utils.js',
+            'data-manager.js',  # NOUVEAU: Gestionnaire centralisé de données
+            'penalty-calculator.js',  # NOUVEAU: Recalcul dynamique des pénalités
             'match-card.js',
             'calendar-view.js',
             'calendar-grid-view.js',  # Nouvelle vue calendrier type Google
+            'simple-agenda-view.js',  # NOUVEAU: Vue agenda simplifiée
             'penalties-view.js',  # Vue des pénalités
-            'filters.js'
+            'filters.js',
+            'slot-manager.js',  # Phase 4: Slot management (libre/occupé)
+            'edit-modal.js',  # Phase 2: Interactive editing
+            'conflict-detector.js',  # Phase 3: Conflict detection
+            'auto-resolver.js',  # Phase 3: Auto-resolution
+            'history-manager.js',  # Phase 3: Undo/Redo
+            'panels-ui.js'  # Phase 3: UI panels
         ]
         
         js_html = ''
@@ -80,6 +91,34 @@ class HTMLVisualizerV2:
             '{{AVAILABLE_SLOTS_DATA}}',
             json.dumps(available_slots_data, ensure_ascii=False, indent=2)
         )
+        
+        # Injecter la configuration des pénalités pour le recalcul dynamique
+        penalty_config = {
+            'weight': config.penalite_apres_horaire_min if config else 10.0,
+            'penaltyBeforeOne': config.penalite_avant_horaire_min if config else 100.0,
+            'penaltyBeforeBoth': config.penalite_avant_horaire_min_deux if config else 300.0,
+            'divisor': config.penalite_horaire_diviseur if config else 60.0,
+            'tolerance': config.penalite_horaire_tolerance if config else 0.0,
+            'penaltyList': config.penalites_espacement_repos if config else [500, 100, 50, 30, 20, 10],
+            'minSpacing': 2  # Minimum jours entre matchs (hardcodé pour l'instant)
+        }
+        html_content = html_content.replace(
+            '{{PENALTY_CONFIG}}',
+            json.dumps(penalty_config, ensure_ascii=False, indent=2)
+        )
+        
+        # Injecter un script d'initialisation pour nettoyer le localStorage
+        # Cela garantit que chaque nouvelle génération commence avec un état propre
+        init_script = '''
+        <script>
+            // Nettoyer le localStorage au chargement pour éviter la persistance
+            // des modifications entre différentes générations de calendrier
+            console.log('🧹 Nettoyage du localStorage pour nouvelle génération...');
+            localStorage.removeItem('matchModifications');
+            console.log('✅ localStorage nettoyé');
+        </script>
+        '''
+        html_content = html_content.replace('</body>', init_script + '\n</body>')
         
         # Écrire le fichier
         output_file = Path(output_path)
@@ -189,11 +228,30 @@ class HTMLVisualizerV2:
         data = []
         for match in matches:
             if match.creneau:
-                # Create match key to lookup penalty
+                # Create match key to lookup penalty (using single underscore for penalties dict)
                 match_key = f"{match.equipe1.id_unique}_{match.equipe2.id_unique}_{match.poule}"
                 penalty = penalties.get(match_key, 0.0)
                 
+                # Create match_id for tracking (using double underscores to match Excel format)
+                match_id = f"{match.equipe1.id_unique}__{match.equipe2.id_unique}__{match.poule}"
+                
+                # Get score from match metadata if available
+                score = match.metadata.get('score') if match.metadata else None
+                has_score = score is not None
+                
+                # Check if this is a fixed match (from configuration)
+                is_fixed = match.metadata.get('fixe', False) if match.metadata else False
+                
+                # Get calendar manager if available
+                calendar_manager = config.calendar_manager if config and config.calendrier_actif else None
+                
+                # Format semaine display
+                semaine_display = match.creneau.semaine
+                if calendar_manager:
+                    semaine_display = calendar_manager.formater_semaine(match.creneau.semaine)
+                
                 data.append({
+                    'match_id': match_id,
                     'equipe1': match.equipe1.nom,
                     'equipe2': match.equipe2.nom,
                     'equipe1_genre': match.equipe1.genre,
@@ -203,10 +261,14 @@ class HTMLVisualizerV2:
                     'institution1': match.equipe1.institution,
                     'institution2': match.equipe2.institution,
                     'poule': match.poule,
-                    'semaine': match.creneau.semaine,
+                    'semaine': match.creneau.semaine,  # Numéro de semaine pour logique interne
+                    'semaine_display': semaine_display,  # Affichage formaté avec date
                     'horaire': match.creneau.horaire,
                     'gymnase': match.creneau.gymnase,
-                    'penalty': penalty
+                    'penalty': penalty,
+                    'score': score,
+                    'has_score': has_score,
+                    'is_fixed': is_fixed
                 })
         return data
     
@@ -215,7 +277,15 @@ class HTMLVisualizerV2:
         """Prépare les données des matchs non planifiés."""
         data = []
         for match in matches:
+            # Create match_id for tracking (using double underscores to match Excel format)
+            match_id = f"{match.equipe1.id_unique}__{match.equipe2.id_unique}__{match.poule}"
+            
+            # Get score from match metadata if available
+            score = match.metadata.get('score') if match.metadata else None
+            has_score = score is not None
+            
             data.append({
+                'match_id': match_id,
                 'equipe1': match.equipe1.nom,
                 'equipe2': match.equipe2.nom,
                 'equipe1_genre': match.equipe1.genre,
@@ -224,18 +294,60 @@ class HTMLVisualizerV2:
                 'equipe2_horaires_preferes': match.equipe2.horaires_preferes if match.equipe2.horaires_preferes else [],
                 'institution1': match.equipe1.institution,
                 'institution2': match.equipe2.institution,
-                'poule': match.poule
+                'poule': match.poule,
+                'score': score,
+                'has_score': has_score
             })
         return data
     
     @staticmethod
-    def _prepare_available_slots_data(slots: List[Creneau]) -> List[Dict]:
-        """Prépare les données des créneaux disponibles."""
+    def _prepare_available_slots_data(slots: List[Creneau], matches: List[Match], config: Optional[Config] = None) -> List[Dict]:
+        """Prépare les données de TOUS les créneaux avec leur statut.
+        
+        Changement majeur:
+        - Génère TOUS les créneaux (occupés et libres)
+        - Chaque créneau a: semaine, horaire, gymnase, statut, match_id
+        - statut = 'libre' ou 'occupé'
+        - match_id = ID du match si occupé, null sinon
+        
+        Args:
+            slots: Tous les créneaux possibles (générés par generer_creneaux)
+            matches: Matchs planifiés
+            
+        Returns:
+            Liste de créneaux avec leur statut d'occupation
+        """
+        # Créer un index des créneaux occupés
+        occupied_slots = {}
+        for match in matches:
+            if match.creneau:
+                key = f"{match.creneau.semaine}_{match.creneau.horaire}_{match.creneau.gymnase}"
+                # Générer le match_id comme dans _prepare_matches_data
+                match_id = f"{match.equipe1.id_unique}__{match.equipe2.id_unique}__{match.poule}"
+                occupied_slots[key] = match_id
+        
+        # Préparer tous les créneaux avec statut
         data = []
         for slot in slots:
-            data.append({
+            key = f"{slot.semaine}_{slot.horaire}_{slot.gymnase}"
+            
+            # Get calendar manager if available
+            calendar_manager = config.calendar_manager if config and config.calendrier_actif else None
+            
+            # Format semaine display
+            semaine_display = slot.semaine
+            if calendar_manager:
+                semaine_display = calendar_manager.formater_semaine(slot.semaine)
+            
+            slot_data = {
                 'semaine': slot.semaine,
+                'semaine_display': semaine_display,  # Affichage formaté avec date
                 'horaire': slot.horaire,
-                'gymnase': slot.gymnase
-            })
+                'gymnase': slot.gymnase,
+                'statut': 'occupé' if key in occupied_slots else 'libre',
+                'match_id': occupied_slots.get(key, None),
+                'slot_id': key  # ID unique du créneau
+            }
+            data.append(slot_data)
+        
         return data

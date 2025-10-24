@@ -104,7 +104,8 @@ class PenaltiesView {
         else if (penalty > 0) penaltyColor = '#84cc16';
         
         // Utiliser le MatchCard existant et ajouter l'indicateur de pénalité
-        const baseCard = MatchCard.render(match, false, filters, preferences);
+        // showWeekBadge = true, showPoolBadge = true car dans la vue pénalités, ni le contexte de semaine ni de poule n'est donné
+        const baseCard = MatchCard.render(match, false, filters, preferences, true, true);
         
         // Ajouter un badge de pénalité en haut de la carte
         const penaltyBadge = `

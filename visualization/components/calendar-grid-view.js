@@ -9,7 +9,7 @@ class CalendarGridView {
         this.timeSlotMinutes = 60; // Granularité : 30, 60 ou 120 minutes (défaut 1h)
         this.startHour = 8;  // Sera calculé dynamiquement
         this.endHour = 22;   // Sera calculé dynamiquement
-        this.matchDuration = 90; // Durée d'un match en minutes
+        this.matchDuration = 120; // Durée d'un match en minutes (2h)
         this.marginMinutes = 30; // Marge avant/après pour le visuel
     }
 
@@ -20,9 +20,12 @@ class CalendarGridView {
         // Logs de débogage réduits (décommenter si nécessaire pour le debug)
         // console.log('🔵 CalendarGridView.render() - Container:', container ? 'OK' : 'NULL', 'Matches:', allMatches?.length || 0);
         
-        // Utiliser timeSlotMinutes depuis preferences
-        if (preferences?.timeSlotMinutes) {
+        // Utiliser timeSlotMinutes depuis preferences, mais seulement si c'est une valeur valide
+        if (preferences?.timeSlotMinutes && [30, 60, 120].includes(preferences.timeSlotMinutes)) {
             this.timeSlotMinutes = preferences.timeSlotMinutes;
+        } else {
+            // Valeur par défaut sécurisée
+            this.timeSlotMinutes = 60;
         }
         
         // Validation du container
@@ -77,8 +80,12 @@ class CalendarGridView {
             weekSlots = availableSlots || [];
         }
         
-        // Calculer la plage horaire optimale basée sur les données réelles
-        this.calculateTimeRange(weekMatches, weekSlots);
+        // CRITICAL FIX: Calculer la plage horaire sur TOUS les matchs (sans filtres)
+        // Cela garantit que la grille a TOUJOURS les mêmes dimensions, peu importe:
+        // - La semaine affichée
+        // - Les filtres appliqués (genre, institution, équipe, poule)
+        // Sinon, les matchs seront mal positionnés car la grille change de taille
+        this.calculateTimeRange(allMatches, availableSlots || []);
         
         // Obtenir les axes selon le mode d'affichage
         // IMPORTANT: Utiliser allMatches pour les axes, pas weekMatches, pour que la structure reste visible
@@ -220,8 +227,9 @@ class CalendarGridView {
      */
     buildHTML(allMatches, weekMatches, weekSlots, axes, displayMode, filters, preferences) {
         const showAvailable = preferences?.showAvailableSlots !== false;
+        const colorMode = preferences?.colorMode || 'genre';
         
-        let html = '<div class="calendar-grid-container">';
+        let html = `<div class="calendar-grid-container color-${colorMode}">`;
         
         // Navigation
         html += this.renderNavigationBar(allMatches, displayMode, filters);
@@ -249,7 +257,7 @@ class CalendarGridView {
         axes.forEach((axis) => {
             const axisMatches = this.getAxisMatches(weekMatches, axis, displayMode, filters);
             const axisSlots = showAvailable ? this.getAxisSlots(weekSlots, axis, displayMode, filters) : [];
-            html += this.renderAxisColumn(axis, axisMatches, axisSlots, displayMode, preferences);
+            html += this.renderAxisColumn(axis, axisMatches, axisSlots, displayMode, preferences, filters);
         });
         html += '</div>'; // calendar-venues-container
         
@@ -261,18 +269,38 @@ class CalendarGridView {
     
     /**
      * Obtient les matchs pour un axe donné
+     * Trie les matchs pour un affichage cohérent
      */
     getAxisMatches(matches, axis, displayMode, filters) {
+        let filtered;
         switch (displayMode) {
             case 'team':
             case 'venue':
                 // Axe = semaine
-                return matches.filter(m => m.semaine == axis);
+                filtered = matches.filter(m => m.semaine == axis);
+                break;
             case 'week':
             default:
                 // Axe = gymnase
-                return matches.filter(m => m.gymnase === axis);
+                filtered = matches.filter(m => m.gymnase === axis);
+                break;
         }
+        
+        // TRI pour affichage cohérent: horaire → equipe1 → equipe2
+        return filtered.sort((a, b) => {
+            // 1. Par horaire
+            if (a.horaire !== b.horaire) {
+                return (a.horaire || '').localeCompare(b.horaire || '');
+            }
+            
+            // 2. Par equipe1
+            if (a.equipe1 !== b.equipe1) {
+                return (a.equipe1 || '').localeCompare(b.equipe1 || '');
+            }
+            
+            // 3. Par equipe2
+            return (a.equipe2 || '').localeCompare(b.equipe2 || '');
+        });
     }
     
     /**
@@ -295,7 +323,7 @@ class CalendarGridView {
     /**
      * Rendu d'une colonne (remplace renderVenueColumn avec gestion multi-mode)
      */
-    renderAxisColumn(axis, matches, availableSlots, displayMode, preferences) {
+    renderAxisColumn(axis, matches, availableSlots, displayMode, preferences, filters) {
         const slotHeight = this.getSlotHeight();
         const timeSlots = this.generateTimeSlots();
         
@@ -304,7 +332,13 @@ class CalendarGridView {
         switch (displayMode) {
             case 'team':
             case 'venue':
-                label = `Semaine ${axis}`;
+                // Axe = semaine - utiliser semaine_display si disponible
+                const sampleMatch = matches.length > 0 ? matches[0] : null;
+                if (sampleMatch && sampleMatch.semaine_display) {
+                    label = sampleMatch.semaine_display;
+                } else {
+                    label = `Semaine ${axis}`;
+                }
                 icon = '📅';
                 break;
             case 'week':
@@ -331,25 +365,40 @@ class CalendarGridView {
         `;
         
         // Grille avec lignes horaires de fond
-        html += '<div class="calendar-venue-grid">';
+        html += `<div class="calendar-venue-grid drop-zone" 
+                     data-week="${displayMode === 'week' ? (filters.week || 1) : axis}"
+                     data-venue="${displayMode === 'week' ? axis : (filters.venue || '')}"
+                     ondragover="CalendarGridView.handleDragOver(event)"
+                     ondragleave="CalendarGridView.handleDragLeave(event)"
+                     ondrop="CalendarGridView.handleDrop(event)">`;
         
         // Lignes de fond
-        timeSlots.forEach(slot => {
+        timeSlots.forEach((slot, index) => {
             const cssClass = slot.isHour ? 'hour-mark' : '';
-            html += `<div class="calendar-grid-line ${cssClass}" style="height: ${slotHeight}px"></div>`;
+            const lineTop = index * slotHeight;
+            html += `<div class="calendar-grid-line ${cssClass}" style="top: ${lineTop}px; height: ${slotHeight}px"></div>`;
         });
         
-        // Créneaux disponibles (blocs verts)
+        // Créneaux disponibles (blocs verts) - SIMPLIFIÉ: ne pas afficher si matchs simultanés
         availableSlots.forEach(slot => {
             const pos = this.calculateBlockPosition(slot.horaire, this.matchDuration);
             if (pos) {
-                html += `
-                    <div class="calendar-available-block" 
-                         style="top: ${pos.top}px; height: ${pos.height}px"
-                         title="Créneau libre: ${slot.horaire}">
-                        ✓
-                    </div>
-                `;
+                // Vérifier combien de matchs simultanés à cet horaire
+                const simultaneousMatches = matchesBySlot[slot.horaire] || [];
+                const count = simultaneousMatches.length;
+                
+                // N'afficher le créneau libre que s'il n'y a pas de matchs simultanés
+                if (count === 0) {
+                    html += `
+                        <div class="calendar-available-block" 
+                             style="top: ${pos.top}px; height: ${pos.height}px"
+                             title="Créneau libre: ${slot.horaire}">
+                            ✓
+                        </div>
+                    `;
+                }
+                // Si des matchs existent à cet horaire, on n'affiche pas le créneau libre
+                // pour éviter les conflits de positionnement
             }
         });
         
@@ -377,6 +426,7 @@ class CalendarGridView {
     
     /**
      * Groupe les matchs par créneau horaire pour gérer les matchs simultanés
+     * IMPORTANT: Trie les matchs de manière déterministe pour éviter le désordre après modifications
      */
     groupMatchesByTimeSlot(matches) {
         const grouped = {};
@@ -389,11 +439,38 @@ class CalendarGridView {
             grouped[key].push(match);
         });
         
+        // TRI DÉTERMINISTE: pour chaque créneau horaire, trier les matchs
+        // Ordre: gymnase → equipe1 → equipe2 → poule
+        Object.keys(grouped).forEach(timeSlot => {
+            grouped[timeSlot].sort((a, b) => {
+                // 1. Par gymnase
+                if (a.gymnase !== b.gymnase) {
+                    return (a.gymnase || '').localeCompare(b.gymnase || '');
+                }
+                
+                // 2. Par equipe1
+                if (a.equipe1 !== b.equipe1) {
+                    return (a.equipe1 || '').localeCompare(b.equipe1 || '');
+                }
+                
+                // 3. Par equipe2
+                if (a.equipe2 !== b.equipe2) {
+                    return (a.equipe2 || '').localeCompare(b.equipe2 || '');
+                }
+                
+                // 4. Par poule
+                return (a.poule || '').localeCompare(b.poule || '');
+            });
+        });
+        
         return grouped;
     }
 
     /**
      * Calcule la plage horaire optimale basée sur les données réelles
+     * IMPORTANT: Cette fonction doit être appelée avec TOUS les matchs (toutes semaines confondues)
+     * pour garantir que la grille a les mêmes dimensions quelle que soit la semaine affichée.
+     * Sinon, les matchs seraient mal positionnés lors du changement de semaine.
      */
     calculateTimeRange(weekMatches, weekSlots) {
         // Récupérer tous les horaires (matchs + créneaux disponibles)
@@ -406,7 +483,6 @@ class CalendarGridView {
             // Par défaut si aucune donnée
             this.startHour = 8;
             this.endHour = 22;
-            console.log(`⏰ Plage horaire par défaut: ${this.startHour}h - ${this.endHour}h`);
             return;
         }
         
@@ -431,11 +507,6 @@ class CalendarGridView {
         // Limites de sécurité
         this.startHour = Math.max(6, this.startHour);  // Pas avant 6h
         this.endHour = Math.min(24, this.endHour);     // Pas après minuit
-        
-        // Debug: afficher la plage calculée (décommenter si nécessaire)
-        // const minTime = `${Math.floor(minMinutes / 60)}h${String(minMinutes % 60).padStart(2, '0')}`;
-        // const maxTime = `${Math.floor(maxMinutes / 60)}h${String(maxMinutes % 60).padStart(2, '0')}`;
-        // console.log(`⏰ Plage: ${minTime} - ${maxTime} → Grille: ${this.startHour}h - ${this.endHour}h`);
     }
 
     /**
@@ -470,17 +541,23 @@ class CalendarGridView {
                 </div>
             `;
             
+            // Trouver un match de la semaine courante pour obtenir semaine_display
+            const currentWeekMatch = allMatches.find(m => m.semaine == this.currentWeek);
+            const weekDisplay = currentWeekMatch && currentWeekMatch.semaine_display 
+                ? currentWeekMatch.semaine_display 
+                : `Semaine ${this.currentWeek}`;
+            
             // Si un filtre de poule est actif, l'afficher dans le titre
             if (filters.pool) {
                 titleHTML = `
                     <h2 class="calendar-title">
-                        🏆 ${filters.pool} - Semaine ${this.currentWeek}
+                        🏆 ${filters.pool} - ${weekDisplay}
                     </h2>
                 `;
             } else {
                 titleHTML = `
                     <h2 class="calendar-title">
-                        📅 Semaine ${this.currentWeek}
+                        📅 ${weekDisplay}
                     </h2>
                 `;
             }
@@ -538,6 +615,7 @@ class CalendarGridView {
     renderMatchBlock(match, pos, displayMode = 'week', preferences = {}) {
         const gender = Utils.getGender(match);
         const colorClass = gender === 'M' || gender === 'male' ? 'male' : gender === 'F' || gender === 'female' ? 'female' : 'mixed';
+        const category = Utils.getCategory(match.poule);
         
         // Déterminer le niveau de détail selon la hauteur réelle calculée
         const height = pos.height;
@@ -545,6 +623,9 @@ class CalendarGridView {
         
         // Icône genre
         const genderIcon = colorClass === 'male' ? '♂' : colorClass === 'female' ? '♀' : '⚥';
+        
+        // Use match_id from data (double underscore format from Phase 1)
+        const matchId = match.match_id || `${match.equipe1}_${match.equipe2}_${match.poule}`;
         
         // NOUVEAU: Gérer le positionnement en sous-colonnes
         const subColumnIndex = pos.subColumnIndex || 0;
@@ -560,9 +641,9 @@ class CalendarGridView {
         const team1 = truncate(match.equipe1, detailLevel === 'minimal' ? maxLength - 2 : maxLength);
         const team2 = truncate(match.equipe2, detailLevel === 'minimal' ? maxLength - 2 : maxLength);
         
-        // Extraire catégorie et numéro de poule
+        // Extraire catégorie et numéro de poule (utiliser categoryCode pour éviter conflit)
         const pouleMatch = match.poule ? match.poule.match(/^([A-Z]+)([A-Z]\d+)(.*)$/) : null;
-        const category = pouleMatch ? pouleMatch[1] : '';
+        const categoryCode = pouleMatch ? pouleMatch[1] : '';
         const level = pouleMatch ? pouleMatch[2] : '';
         const poolNum = pouleMatch ? pouleMatch[3] : match.poule
         
@@ -573,21 +654,45 @@ class CalendarGridView {
         const tooltipParts = [
             `${match.equipe1} vs ${match.equipe2}`,
             match.horaire ? `⏰ ${match.horaire}` : '',
-            match.poule ? `� ${match.poule}` : '',
+            match.poule ? `🎯 ${match.poule}` : '',
             match.gymnase ? `🏢 ${match.gymnase}` : '',
             match.institution1 && match.institution2 ? `🏛️ ${match.institution1} vs ${match.institution2}` : '',
+            !match.has_score ? `⏳ Score non saisi` : '',
             match.equipe1_horaires_preferes && match.equipe1_horaires_preferes.length > 0 ? 
                 `⏰ Préf. ${match.equipe1}: ${match.equipe1_horaires_preferes.join(', ')}` : '',
             match.equipe2_horaires_preferes && match.equipe2_horaires_preferes.length > 0 ? 
                 `⏰ Préf. ${match.equipe2}: ${match.equipe2_horaires_preferes.join(', ')}` : ''
         ].filter(p => p).join('\n');
         
+        // Escape single quotes in match data for onclick
+        const escapeQuotes = (str) => str ? str.replace(/'/g, "\\'") : '';
+        
         // === RENDU MINIMAL (créneaux < 70px - granularité 30min ou 120min) ===
         if (detailLevel === 'minimal') {
             return `
-                <div class="calendar-match-block calendar-match-${colorClass} detail-minimal" 
-                     style="${subColumnStyle}"
+                <div class="calendar-match-block calendar-match-${colorClass} detail-minimal ${!match.has_score ? 'no-score' : ''}" 
+                     draggable="true"
+                     ondragstart="CalendarGridView.handleDragStart(event)"
+                     ondragend="CalendarGridView.handleDragEnd(event)"
+                     style="top: ${pos.top}px; height: ${pos.height}px;"
+                     data-match-id="${matchId}"
+                     data-gender="${colorClass}"
+                     data-category="${category}"
+                     data-pool="${Utils.escapeHtml(match.poule)}"
+                     data-institution1="${Utils.escapeHtml(match.institution1)}"
+                     data-institution2="${Utils.escapeHtml(match.institution2)}"
+                     data-subcolumn-count="${subColumnCount}"
+                     data-subcolumn-index="${subColumnIndex}"
                      title="${tooltipParts}">
+                    <button class="match-edit-btn" onclick="editModal.open({
+                        match_id: '${matchId}',
+                        equipe1: '${escapeQuotes(match.equipe1)}',
+                        equipe2: '${escapeQuotes(match.equipe2)}',
+                        poule: '${escapeQuotes(match.poule)}',
+                        semaine: ${match.semaine},
+                        horaire: '${escapeQuotes(match.horaire)}',
+                        gymnase: '${escapeQuotes(match.gymnase)}'
+                    }, this.closest('.calendar-match-block'))">✏️</button>
                     <div class="match-content-minimal">
                         <div class="match-teams-minimal">
                             <div class="team-name-minimal">${team1}</div>
@@ -605,18 +710,42 @@ class CalendarGridView {
             let contextBadge = '';
             if (displayMode !== 'week' && match.gymnase) {
                 contextBadge = `<span class="context-badge">📍 ${truncate(match.gymnase, 10)}</span>`;
-            } else if (category) {
-                contextBadge = `<span class="context-badge">${category}</span>`;
+            } else if (categoryCode) {
+                contextBadge = `<span class="context-badge">${categoryCode}</span>`;
             }
             
+            // Indicateur pour les matchs auto-programmés
+            const autoIndicator = !match.is_fixed ? '<span class="auto-indicator">🤖</span>' : '';
+            
             return `
-                <div class="calendar-match-block calendar-match-${colorClass} detail-compact" 
-                     style="${subColumnStyle}"
+                <div class="calendar-match-block calendar-match-${colorClass} detail-compact ${!match.has_score ? 'no-score' : ''} ${!match.is_fixed ? 'auto-scheduled' : ''}" 
+                     draggable="true"
+                     ondragstart="CalendarGridView.handleDragStart(event)"
+                     ondragend="CalendarGridView.handleDragEnd(event)"
+                     style="top: ${pos.top}px; height: ${pos.height}px;"
+                     data-match-id="${matchId}"
+                     data-gender="${colorClass}"
+                     data-category="${category}"
+                     data-pool="${Utils.escapeHtml(match.poule)}"
+                     data-institution1="${Utils.escapeHtml(match.institution1)}"
+                     data-institution2="${Utils.escapeHtml(match.institution2)}"
+                     data-subcolumn-count="${subColumnCount}"
+                     data-subcolumn-index="${subColumnIndex}"
                      title="${tooltipParts}">
+                    <button class="match-edit-btn" onclick="editModal.open({
+                        match_id: '${matchId}',
+                        equipe1: '${escapeQuotes(match.equipe1)}',
+                        equipe2: '${escapeQuotes(match.equipe2)}',
+                        poule: '${escapeQuotes(match.poule)}',
+                        semaine: ${match.semaine},
+                        horaire: '${escapeQuotes(match.horaire)}',
+                        gymnase: '${escapeQuotes(match.gymnase)}'
+                    }, this.closest('.calendar-match-block'))">✏️</button>
                     <div class="match-content-compact">
                         <div class="match-header-compact">
                             ${contextBadge}
                             <span class="gender-badge-compact">${genderIcon}</span>
+                            ${autoIndicator}
                         </div>
                         <div class="match-teams-compact">
                             <div class="team-name-compact">${team1}</div>
@@ -638,8 +767,8 @@ class CalendarGridView {
         }
         
         let poolLine = '';
-        if (category && poolNum) {
-            poolLine = `<div class="pool-line"><span class="category-badge">${category}</span> <span class="level-badge">${level}</span> <span class="pool-badge">${poolNum}</span></div>`;
+        if (categoryCode && poolNum) {
+            poolLine = `<div class="pool-line"><span class="category-badge">${categoryCode}</span> <span class="level-badge">${level}</span> <span class="pool-badge">${poolNum}</span></div>`;
         }
         
         // Horaires préférés (affichés seulement si espace suffisant et si préférences activées)
@@ -653,14 +782,38 @@ class CalendarGridView {
             }
         }
         
+        // Indicateur pour les matchs auto-programmés
+        const autoIndicator = !match.is_fixed ? '<span class="auto-indicator">🤖</span>' : '';
+        
         return `
-            <div class="calendar-match-block calendar-match-${colorClass} detail-full" 
-                 style="${subColumnStyle}"
+            <div class="calendar-match-block calendar-match-${colorClass} detail-full ${!match.has_score ? 'no-score' : ''} ${!match.is_fixed ? 'auto-scheduled' : ''}" 
+                 draggable="true"
+                 ondragstart="CalendarGridView.handleDragStart(event)"
+                 ondragend="CalendarGridView.handleDragEnd(event)"
+                 style="top: ${pos.top}px; height: ${pos.height}px;"
+                 data-match-id="${matchId}"
+                 data-gender="${colorClass}"
+                 data-category="${category}"
+                 data-pool="${Utils.escapeHtml(match.poule)}"
+                 data-institution1="${Utils.escapeHtml(match.institution1)}"
+                 data-institution2="${Utils.escapeHtml(match.institution2)}"
+                 data-subcolumn-count="${subColumnCount}"
+                 data-subcolumn-index="${subColumnIndex}"
                  title="${tooltipParts}">
+                <button class="match-edit-btn" onclick="editModal.open({
+                    match_id: '${matchId}',
+                    equipe1: '${escapeQuotes(match.equipe1)}',
+                    equipe2: '${escapeQuotes(match.equipe2)}',
+                    poule: '${escapeQuotes(match.poule)}',
+                    semaine: ${match.semaine},
+                    horaire: '${escapeQuotes(match.horaire)}',
+                    gymnase: '${escapeQuotes(match.gymnase)}'
+                }, this.closest('.calendar-match-block'))">✏️</button>
                 <div class="match-content-full">
                     <div class="match-header-full">
-                        <span class="horaire-badge">${match.horaire}</span>
+                        <span class="horaire-badge match-time">${match.horaire}</span>
                         <span class="gender-badge-full">${genderIcon}</span>
+                        ${autoIndicator}
                     </div>
                     <div class="match-teams-full">
                         <div class="team-name-full">${team1}</div>
@@ -705,7 +858,7 @@ class CalendarGridView {
         const gridStartMinutes = this.startHour * 60;
         const gridEndMinutes = this.endHour * 60;
         
-        // Vérifier si dans la plage (silencieux si hors plage - comportement normal)
+        // Vérifier si dans la plage (retourner null si hors plage)
         if (matchMinutes < gridStartMinutes || matchMinutes >= gridEndMinutes) {
             return null;
         }
@@ -713,10 +866,12 @@ class CalendarGridView {
         const offsetMinutes = matchMinutes - gridStartMinutes;
         const pixelsPerMinute = this.getSlotHeight() / this.timeSlotMinutes;
         
-        return {
+        const pos = {
             top: offsetMinutes * pixelsPerMinute,
             height: durationMinutes * pixelsPerMinute
         };
+        
+        return pos;
     }
 
     /**
@@ -727,7 +882,10 @@ class CalendarGridView {
         // Calculer la hauteur disponible pour la grille
         // Hauteur fenêtre - (header app + title/stats ~150px + controls section ~180px + nav calendrier ~95px + header grille ~60px + padding/marges ~80px)
         const fixedElementsHeight = 565;
-        const availableHeight = window.innerHeight - fixedElementsHeight;
+        
+        // Gérer le cas où window n'est pas défini (génération côté serveur)
+        const windowHeight = (typeof window !== 'undefined' && window.innerHeight) ? window.innerHeight : 800; // Valeur par défaut raisonnable
+        const availableHeight = windowHeight - fixedElementsHeight;
         
         // Calculer le nombre total de créneaux
         const totalMinutes = (this.endHour - this.startHour) * 60;
@@ -746,7 +904,11 @@ class CalendarGridView {
         const minHeight = minHeights[this.timeSlotMinutes] || 45;
         
         // Retourner le maximum entre la hauteur calculée et la hauteur minimale
-        const finalHeight = Math.max(calculatedHeight, minHeight);
+        // Gérer le cas où calculatedHeight est NaN ou Infinity
+        let finalHeight = calculatedHeight;
+        if (isNaN(finalHeight) || !isFinite(finalHeight) || finalHeight < minHeight) {
+            finalHeight = minHeight;
+        }
         
         return finalHeight;
     }
@@ -789,5 +951,703 @@ class CalendarGridView {
                 this.render(container, allMatches, availableSlots, filters, preferences);
             });
         }
+    }
+    
+    /**
+     * Handle drag start event on match blocks
+     */
+    static handleDragStart(e) {
+        const matchBlock = e.currentTarget;
+        const matchId = matchBlock.dataset.matchId;
+        
+        // Add dragging class for visual feedback
+        matchBlock.classList.add('dragging');
+        
+        // Force show available slots during drag
+        const availableBlocks = document.querySelectorAll('.calendar-available-block');
+        availableBlocks.forEach(block => {
+            block.classList.add('drag-active');
+            block.style.display = 'flex'; // Force display
+        });
+        
+        // Also make available slots droppable
+        availableBlocks.forEach(block => {
+            if (!block.hasAttribute('data-drop-listeners')) {
+                block.setAttribute('data-drop-listeners', 'true');
+                block.addEventListener('dragover', CalendarGridView.handleAvailableSlotDragOver);
+                block.addEventListener('dragleave', CalendarGridView.handleAvailableSlotDragLeave);
+                block.addEventListener('drop', CalendarGridView.handleAvailableSlotDrop);
+            }
+        });
+        
+        // Make other match blocks droppable for swap
+        const otherMatchBlocks = document.querySelectorAll('.calendar-match-block:not(.dragging)');
+        otherMatchBlocks.forEach(block => {
+            block.classList.add('swap-target');
+            if (!block.hasAttribute('data-swap-listeners')) {
+                block.setAttribute('data-swap-listeners', 'true');
+                block.addEventListener('dragover', CalendarGridView.handleMatchBlockDragOver);
+                block.addEventListener('dragleave', CalendarGridView.handleMatchBlockDragLeave);
+                block.addEventListener('drop', CalendarGridView.handleMatchBlockDrop);
+            }
+        });
+        
+        // Find match data from the global matches array
+        const match = window.allMatches?.find(m => m.match_id === matchId);
+        
+        if (match) {
+            // Store match data in drag transfer
+            const matchData = {
+                match_id: match.match_id,
+                equipe1: match.equipe1,
+                equipe2: match.equipe2,
+                poule: match.poule,
+                semaine: match.semaine,
+                horaire: match.horaire,
+                gymnase: match.gymnase,
+                institution1: match.institution1 || '',
+                institution2: match.institution2 || ''
+            };
+            
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('application/json', JSON.stringify(matchData));
+            e.dataTransfer.setData('text/plain', `${match.equipe1} vs ${match.equipe2}`);
+            
+            console.log('Drag started:', matchData);
+        } else {
+            console.warn('Match not found for ID:', matchId);
+        }
+    }
+    
+    /**
+     * Handle drag end event on match blocks
+     */
+    static handleDragEnd(e) {
+        const matchBlock = e.currentTarget;
+        
+        // Remove dragging class
+        matchBlock.classList.remove('dragging');
+        
+        // Remove drag-active class from available slots
+        document.querySelectorAll('.calendar-available-block').forEach(block => {
+            block.classList.remove('drag-active', 'highlight-drop');
+        });
+        
+        // Remove swap-target class from match blocks
+        document.querySelectorAll('.calendar-match-block').forEach(block => {
+            block.classList.remove('swap-target', 'swap-highlight');
+        });
+        
+        // Remove any active drop zone highlights
+        document.querySelectorAll('.drop-zone-active').forEach(zone => {
+            zone.classList.remove('drop-zone-active');
+            delete zone.dataset.targetTime;
+        });
+    }
+    
+    /**
+     * Handle drag over event on match blocks (for swap)
+     */
+    static handleMatchBlockDragOver(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        const matchBlock = e.currentTarget;
+        e.dataTransfer.dropEffect = 'move';
+        matchBlock.classList.add('swap-highlight');
+    }
+    
+    /**
+     * Handle drag leave event on match blocks
+     */
+    static handleMatchBlockDragLeave(e) {
+        e.preventDefault();
+        const matchBlock = e.currentTarget;
+        if (!matchBlock.contains(e.relatedTarget)) {
+            matchBlock.classList.remove('swap-highlight');
+        }
+    }
+    
+    /**
+     * Handle drop event on match blocks (for swap)
+     */
+    static handleMatchBlockDrop(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const targetMatchBlock = e.currentTarget;
+        targetMatchBlock.classList.remove('swap-highlight');
+        
+        try {
+            // Get dragged match data
+            const draggedMatchDataStr = e.dataTransfer.getData('application/json');
+            if (!draggedMatchDataStr) {
+                console.warn('No match data in drop event');
+                return;
+            }
+            
+            const draggedMatchData = JSON.parse(draggedMatchDataStr);
+            
+            // Get target match data
+            const targetMatchId = targetMatchBlock.dataset.matchId;
+            const targetMatch = window.allMatches?.find(m => m.match_id === targetMatchId);
+            
+            if (!targetMatch) {
+                console.warn('Target match not found');
+                return;
+            }
+            
+            if (draggedMatchData.match_id === targetMatch.match_id) {
+                console.log('Cannot swap match with itself');
+                return;
+            }
+            
+            console.log('Swapping matches:', draggedMatchData.match_id, '↔', targetMatch.match_id);
+            
+            // Create swap modifications
+            const modifications = [
+                {
+                    match_id: draggedMatchData.match_id,
+                    original: {
+                        week: draggedMatchData.semaine,
+                        time: draggedMatchData.horaire,
+                        venue: draggedMatchData.gymnase
+                    },
+                    new: {
+                        week: targetMatch.semaine,
+                        time: targetMatch.horaire,
+                        venue: targetMatch.gymnase
+                    }
+                },
+                {
+                    match_id: targetMatch.match_id,
+                    original: {
+                        week: targetMatch.semaine,
+                        time: targetMatch.horaire,
+                        venue: targetMatch.gymnase
+                    },
+                    new: {
+                        week: draggedMatchData.semaine,
+                        time: draggedMatchData.horaire,
+                        venue: draggedMatchData.gymnase
+                    }
+                }
+            ];
+            
+            // Save both modifications
+            modifications.forEach(mod => {
+                CalendarGridView.saveModification(mod);
+            });
+            
+            // Show feedback
+            const dropZone = targetMatchBlock.closest('.drop-zone');
+            if (dropZone) {
+                CalendarGridView.showDropFeedback(dropZone, '🔄 Matchs échangés!');
+            }
+            
+            // Re-render calendar after a brief delay
+            setTimeout(() => {
+                if (window.app && typeof window.app.reloadAndRender === 'function') {
+                    window.app.reloadAndRender();
+                } else {
+                    console.warn('window.app.reloadAndRender not available');
+                }
+            }, 300);
+            
+        } catch (error) {
+            console.error('Error handling match block drop:', error);
+        }
+    }
+    
+    /**
+     * Handle drag over event on available slots
+     */
+    static handleAvailableSlotDragOver(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        const availableBlock = e.currentTarget;
+        e.dataTransfer.dropEffect = 'move';
+        availableBlock.classList.add('highlight-drop');
+    }
+    
+    /**
+     * Handle drag leave event on available slots
+     */
+    static handleAvailableSlotDragLeave(e) {
+        e.preventDefault();
+        const availableBlock = e.currentTarget;
+        if (!availableBlock.contains(e.relatedTarget)) {
+            availableBlock.classList.remove('highlight-drop');
+        }
+    }
+    
+    /**
+     * Handle drop event on available slots
+     */
+    static handleAvailableSlotDrop(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const availableBlock = e.currentTarget;
+        availableBlock.classList.remove('highlight-drop');
+        
+        try {
+            // Get match data from drag
+            const matchDataStr = e.dataTransfer.getData('application/json');
+            if (!matchDataStr) {
+                console.warn('No match data in drop event');
+                return;
+            }
+            
+            const matchData = JSON.parse(matchDataStr);
+            
+            // Extract time from title attribute
+            const title = availableBlock.getAttribute('title');
+            const timeMatch = title.match(/Créneau libre: (\d{2}:\d{2})/);
+            if (!timeMatch) {
+                console.warn('Could not extract time from available slot');
+                return;
+            }
+            const targetTime = timeMatch[1];
+            
+            // Get venue and week from parent drop zone
+            const dropZone = availableBlock.closest('.drop-zone');
+            const targetWeek = parseInt(dropZone?.dataset.week);
+            const targetVenue = dropZone?.dataset.venue;
+            
+            // Create modification
+            const modification = {
+                match_id: matchData.match_id,
+                original: {
+                    week: matchData.semaine,
+                    time: matchData.horaire,
+                    venue: matchData.gymnase
+                },
+                new: {
+                    week: targetWeek || matchData.semaine,
+                    time: targetTime,
+                    venue: targetVenue || matchData.gymnase
+                }
+            };
+            
+            console.log('Dropping on available slot:', modification);
+            
+            // Save modification
+            CalendarGridView.saveModification(modification);
+            
+            // Re-render calendar after a brief delay
+            setTimeout(() => {
+                if (window.app && typeof window.app.reloadAndRender === 'function') {
+                    window.app.reloadAndRender();
+                } else {
+                    console.warn('window.app.reloadAndRender not available');
+                }
+            }, 300);
+            
+        } catch (error) {
+            console.error('Error handling available slot drop:', error);
+        }
+    }
+    
+    /**
+     * Handle drag over event on drop zones
+     */
+    static handleDragOver(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const dropZone = e.currentTarget;
+        e.dataTransfer.dropEffect = 'move';
+        
+        // Calculate time slot from cursor position
+        const rect = dropZone.getBoundingClientRect();
+        const relativeY = e.clientY - rect.top;
+        const timeSlot = CalendarGridView.getTimeSlotFromPosition(dropZone, relativeY);
+        
+        // Highlight drop zone
+        dropZone.classList.add('drop-zone-active');
+        
+        // Store target time for visual feedback
+        dropZone.dataset.targetTime = timeSlot;
+    }
+    
+    /**
+     * Handle drag leave event
+     */
+    static handleDragLeave(e) {
+        e.preventDefault();
+        const dropZone = e.currentTarget;
+        
+        // Only remove highlighting if leaving the drop zone entirely
+        if (!dropZone.contains(e.relatedTarget)) {
+            dropZone.classList.remove('drop-zone-active');
+            delete dropZone.dataset.targetTime;
+        }
+    }
+    
+    /**
+     * Handle drop event
+     */
+    static handleDrop(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const dropZone = e.currentTarget;
+        dropZone.classList.remove('drop-zone-active');
+        
+        try {
+            // Get match data from drag
+            const matchDataStr = e.dataTransfer.getData('application/json');
+            if (!matchDataStr) {
+                console.warn('No match data in drop event');
+                return;
+            }
+            
+            const matchData = JSON.parse(matchDataStr);
+            
+            // Calculate time slot from drop position
+            const rect = dropZone.getBoundingClientRect();
+            const relativeY = e.clientY - rect.top;
+            const targetTime = CalendarGridView.getTimeSlotFromPosition(dropZone, relativeY);
+            
+            // Get target week and venue from drop zone
+            const targetWeek = parseInt(dropZone.dataset.week);
+            const targetVenue = dropZone.dataset.venue;
+            
+            // Check if dropping on another match (for swap)
+            const targetMatch = CalendarGridView.findMatchAtPosition(targetWeek, targetVenue, targetTime);
+            
+            if (targetMatch && targetMatch.match_id !== matchData.match_id) {
+                // SWAP: Valider avant d'échanger
+                const swapValid = CalendarGridView.validateSwap(matchData, targetMatch);
+                
+                if (!swapValid.canSwap) {
+                    CalendarGridView.showDropFeedback(dropZone, `❌ ${swapValid.reason}`, true);
+                    return;
+                }
+                
+                if (swapValid.warnings && swapValid.warnings.length > 0) {
+                    // Demander confirmation si avertissements
+                    if (!confirm(`⚠️ Avertissement:\n${swapValid.warnings.join('\n')}\n\nContinuer quand même?`)) {
+                        return;
+                    }
+                }
+                
+                // SWAP: Two matches exchange positions
+                console.log('Swap detected between:', matchData.match_id, 'and', targetMatch.match_id);
+                
+                const modifications = [
+                    {
+                        match_id: matchData.match_id,
+                        original: {
+                            week: matchData.semaine,
+                            time: matchData.horaire,
+                            venue: matchData.gymnase
+                        },
+                        new: {
+                            week: targetMatch.semaine,
+                            time: targetMatch.horaire,
+                            venue: targetMatch.gymnase
+                        }
+                    },
+                    {
+                        match_id: targetMatch.match_id,
+                        original: {
+                            week: targetMatch.semaine,
+                            time: targetMatch.horaire,
+                            venue: targetMatch.gymnase
+                        },
+                        new: {
+                            week: matchData.semaine,
+                            time: matchData.horaire,
+                            venue: matchData.gymnase
+                        }
+                    }
+                ];
+                
+                // Save both modifications
+                modifications.forEach(mod => {
+                    CalendarGridView.saveModification(mod);
+                });
+                
+                CalendarGridView.showDropFeedback(dropZone, '🔄 Matchs échangés!');
+                
+            } else {
+                // MOVE: Valider avant de déplacer
+                const moveValid = CalendarGridView.validateMove(matchData, targetWeek, targetVenue, targetTime);
+                
+                if (!moveValid.canMove) {
+                    CalendarGridView.showDropFeedback(dropZone, `❌ ${moveValid.reason}`, true);
+                    return;
+                }
+                
+                if (moveValid.warnings && moveValid.warnings.length > 0) {
+                    // Demander confirmation si avertissements
+                    if (!confirm(`⚠️ Avertissement:\n${moveValid.warnings.join('\n')}\n\nContinuer quand même?`)) {
+                        return;
+                    }
+                }
+                
+                // MOVE: Simple relocation
+                const modification = {
+                    match_id: matchData.match_id,
+                    original: {
+                        week: matchData.semaine,
+                        time: matchData.horaire,
+                        venue: matchData.gymnase
+                    },
+                    new: {
+                        week: targetWeek || matchData.semaine,
+                        time: targetTime || matchData.horaire,
+                        venue: targetVenue || matchData.gymnase
+                    }
+                };
+                
+                // Check if actually changed
+                const changed = modification.original.week !== modification.new.week ||
+                               modification.original.time !== modification.new.time ||
+                               modification.original.venue !== modification.new.venue;
+                
+                if (!changed) {
+                    console.log('No change detected, ignoring drop');
+                    return;
+                }
+                
+                // Save modification
+                CalendarGridView.saveModification(modification);
+                CalendarGridView.showDropFeedback(dropZone, '✅ Match déplacé!');
+            }
+            
+            // Re-render calendar after a brief delay
+            setTimeout(() => {
+                if (window.app && typeof window.app.reloadAndRender === 'function') {
+                    window.app.reloadAndRender();
+                } else {
+                    console.warn('window.app.reloadAndRender not available');
+                }
+            }, 300);
+            
+        } catch (error) {
+            console.error('Error handling drop:', error);
+            CalendarGridView.showDropFeedback(dropZone, '❌ Erreur!');
+        }
+    }
+    
+    /**
+     * Find match at specific position
+     */
+    static findMatchAtPosition(week, venue, time) {
+        if (!window.allMatches) return null;
+        
+        return window.allMatches.find(m => 
+            m.semaine === week && 
+            m.gymnase === venue && 
+            m.horaire === time
+        );
+    }
+    
+    /**
+     * Valider un déplacement de match
+     * Retourne {canMove: boolean, reason?: string, warnings?: string[]}
+     */
+    static validateMove(match, targetWeek, targetVenue, targetTime) {
+        const warnings = [];
+        
+        // 1. Vérifier qu'il n'y a pas déjà un match à cet endroit
+        const existingMatch = CalendarGridView.findMatchAtPosition(targetWeek, targetVenue, targetTime);
+        if (existingMatch) {
+            return {
+                canMove: false,
+                reason: 'Un match existe déjà à cet emplacement'
+            };
+        }
+        
+        // 2. Utiliser le détecteur de conflits si disponible
+        if (window.conflictDetector) {
+            // Créer une copie temporaire du match avec la nouvelle position
+            const tempMatch = {
+                ...match,
+                semaine: targetWeek,
+                horaire: targetTime,
+                gymnase: targetVenue
+            };
+            
+            const conflicts = window.conflictDetector.checkConflictsForMatch(tempMatch);
+            
+            // Séparer conflits critiques et avertissements
+            const criticalConflicts = conflicts.filter(c => c.severity === 'critical');
+            const warningConflicts = conflicts.filter(c => c.severity === 'warning');
+            
+            if (criticalConflicts.length > 0) {
+                return {
+                    canMove: false,
+                    reason: `Conflit critique: ${criticalConflicts[0].message}`
+                };
+            }
+            
+            if (warningConflicts.length > 0) {
+                warnings.push(...warningConflicts.map(c => c.message));
+            }
+        }
+        
+        // 3. Vérifier la disponibilité du créneau avec SlotManager
+        if (window.slotManager) {
+            const slotId = `${targetWeek}_${targetTime}_${targetVenue}`;
+            const slot = window.slotManager.slots.get(slotId);
+            
+            if (slot && slot.statut === 'occupé' && slot.match_id !== match.match_id) {
+                return {
+                    canMove: false,
+                    reason: 'Créneau déjà occupé'
+                };
+            }
+        }
+        
+        return {
+            canMove: true,
+            warnings: warnings.length > 0 ? warnings : null
+        };
+    }
+    
+    /**
+     * Valider un échange de matchs
+     * Retourne {canSwap: boolean, reason?: string, warnings?: string[]}
+     */
+    static validateSwap(match1, match2) {
+        const warnings = [];
+        
+        // 1. Utiliser le détecteur de conflits pour les deux positions
+        if (window.conflictDetector) {
+            // Match1 à la position de Match2
+            const tempMatch1 = {
+                ...match1,
+                semaine: match2.semaine,
+                horaire: match2.horaire,
+                gymnase: match2.gymnase
+            };
+            
+            // Match2 à la position de Match1
+            const tempMatch2 = {
+                ...match2,
+                semaine: match1.semaine,
+                horaire: match1.horaire,
+                gymnase: match1.gymnase
+            };
+            
+            const conflicts1 = window.conflictDetector.checkConflictsForMatch(tempMatch1);
+            const conflicts2 = window.conflictDetector.checkConflictsForMatch(tempMatch2);
+            
+            const criticalConflicts = [
+                ...conflicts1.filter(c => c.severity === 'critical'),
+                ...conflicts2.filter(c => c.severity === 'critical')
+            ];
+            
+            if (criticalConflicts.length > 0) {
+                return {
+                    canSwap: false,
+                    reason: `Conflit critique: ${criticalConflicts[0].message}`
+                };
+            }
+            
+            const warningConflicts = [
+                ...conflicts1.filter(c => c.severity === 'warning'),
+                ...conflicts2.filter(c => c.severity === 'warning')
+            ];
+            
+            if (warningConflicts.length > 0) {
+                warnings.push(...warningConflicts.map(c => c.message));
+            }
+        }
+        
+        return {
+            canSwap: true,
+            warnings: warnings.length > 0 ? warnings : null
+        };
+    }
+    
+    /**
+     * Save modification helper with slot management
+     */
+    static saveModification(modification) {
+        // 1. Update slot manager: free old slot + occupy new slot
+        if (window.slotManager) {
+            const success = window.slotManager.moveMatch(
+                modification.match_id,
+                modification.original,  // old slot
+                modification.new        // new slot
+            );
+            
+            if (!success) {
+                console.error('❌ SlotManager failed to move match');
+                return;
+            }
+        } else {
+            console.warn('⚠️ SlotManager not available');
+        }
+        
+        // 2. Save modification via DataManager (qui notifiera automatiquement)
+        if (window.dataManager) {
+            window.dataManager.saveModification(modification);
+        } else if (window.editModal && typeof window.editModal.saveModification === 'function') {
+            // Fallback: ancien système
+            window.editModal.saveModification(modification);
+        } else {
+            console.error('❌ Neither DataManager nor editModal available');
+        }
+    }
+    
+    /**
+     * Calculate time slot from Y position in grid
+     */
+    static getTimeSlotFromPosition(dropZone, relativeY) {
+        // Get all available time slots (assuming 15-min intervals from 8:00 to 22:00)
+        const startHour = 8;
+        const endHour = 22;
+        const intervalMinutes = 15;
+        
+        const totalMinutes = (endHour - startHour) * 60;
+        const slotCount = totalMinutes / intervalMinutes;
+        
+        const gridHeight = dropZone.offsetHeight;
+        const slotHeight = gridHeight / slotCount;
+        
+        const slotIndex = Math.floor(relativeY / slotHeight);
+        const minutesFromStart = slotIndex * intervalMinutes;
+        
+        const hour = startHour + Math.floor(minutesFromStart / 60);
+        const minute = minutesFromStart % 60;
+        
+        return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+    }
+    
+    /**
+     * Show visual feedback after drop
+     */
+    static showDropFeedback(element, message, isError = false) {
+        const feedback = document.createElement('div');
+        feedback.className = `drop-feedback ${isError ? 'error' : 'success'}`;
+        feedback.textContent = message;
+        feedback.style.cssText = `
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: ${isError ? '#f44336' : '#4CAF50'};
+            color: white;
+            padding: 10px 20px;
+            border-radius: 4px;
+            font-weight: bold;
+            z-index: 10000;
+            pointer-events: none;
+            animation: fadeInOut 2s ease;
+        `;
+        
+        element.style.position = 'relative';
+        element.appendChild(feedback);
+        
+        setTimeout(() => {
+            if (feedback.parentNode) {
+                feedback.parentNode.removeChild(feedback);
+            }
+        }, 2000);
     }
 }

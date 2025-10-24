@@ -1,33 +1,48 @@
 """Data transformers and utilities."""
 
-from typing import List, Set
+from typing import List, Set, Optional
 from core.models import Equipe, Gymnase, Creneau
+from core.calendar_manager import CalendarManager
 
 
 class DataTransformer:
     """Transforms and prepares data for scheduling."""
     
     @staticmethod
-    def generer_creneaux(gymnases: List[Gymnase], nb_semaines: int) -> List[Creneau]:
-        """Generate all available time slots.
+    def generer_creneaux(gymnases: List[Gymnase], nb_semaines: int, calendar_manager: Optional[CalendarManager] = None) -> List[Creneau]:
+        """Generate ALL possible time slots (occupied or not).
         
-        Note: Each time slot is created once. The capacity constraint is handled
-        by the solvers, not by duplicating time slots.
+        Changes from previous version:
+        - Generates ALL slots (gymnase × horaire × semaine)
+        - Filters out vacation weeks if calendar_manager is provided
+        - Doesn't filter by availability yet (done when assigning matches)
+        - Each slot is unique: (semaine, horaire, gymnase)
+        
+        Args:
+            gymnases: List of gymnasiums
+            nb_semaines: Total number of weeks
+            calendar_manager: Optional calendar manager to filter vacation weeks
+            
+        Returns:
+            List of ALL possible time slots (excluding vacation weeks)
         """
         creneaux = []
         
         for semaine in range(1, nb_semaines + 1):
+            # Skip vacation weeks if calendar manager is available
+            if calendar_manager and calendar_manager.est_semaine_banalisee(semaine):
+                continue
+                
             for gymnase in gymnases:
                 for horaire in gymnase.horaires_disponibles:
-                    if gymnase.est_disponible(semaine, horaire):
-                        # Create only ONE slot per (week, time, venue)
-                        # Capacity is enforced by the solver
-                        creneau = Creneau(
-                            semaine=semaine,
-                            horaire=horaire,
-                            gymnase=gymnase.nom
-                        )
-                        creneaux.append(creneau)
+                    # Create slot for EVERY combination
+                    # Availability check happens during match assignment
+                    creneau = Creneau(
+                        semaine=semaine,
+                        horaire=horaire,
+                        gymnase=gymnase.nom
+                    )
+                    creneaux.append(creneau)
         
         return creneaux
     

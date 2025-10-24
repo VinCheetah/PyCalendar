@@ -28,7 +28,7 @@ class CalendarView {
                         <div class="week-count">${weekMatches.length} match${weekMatches.length > 1 ? 's' : ''}</div>
                     </div>
                     <div class="matches-grid">
-                        ${weekMatches.map(m => MatchCard.render(m, false, filters, preferences)).join('')}
+                        ${weekMatches.map(m => MatchCard.render(m, false, filters, preferences, false, true)).join('')}
                     </div>
                 </section>
             `;
@@ -61,7 +61,7 @@ class CalendarView {
                         <div class="week-count">${poolMatches.length} match${poolMatches.length > 1 ? 's' : ''}</div>
                     </div>
                     <div class="matches-grid">
-                        ${poolMatches.map(m => MatchCard.render(m, false, filters, preferences)).join('')}
+                        ${poolMatches.map(m => MatchCard.render(m, false, filters, preferences, true, false)).join('')}
                     </div>
                 </section>
             `;
@@ -94,7 +94,7 @@ class CalendarView {
                         <div class="week-count">${venueMatches.length} match${venueMatches.length > 1 ? 's' : ''}</div>
                     </div>
                     <div class="matches-grid">
-                        ${venueMatches.map(m => MatchCard.render(m, false, filters, preferences)).join('')}
+                        ${venueMatches.map(m => MatchCard.render(m, false, filters, preferences, true, true)).join('')}
                     </div>
                 </section>
             `;
@@ -114,20 +114,26 @@ class CalendarView {
             return;
         }
         
-        // Grouper par poule
+        // Grouper par poule pour une meilleure organisation
         const byPool = Utils.groupBy(matches, m => m.poule);
         
-        let html = '';
+        let html = `
+            <div class="unscheduled-header">
+                <div class="unscheduled-title">⚠️ Matchs Non Planifiés</div>
+                <div class="unscheduled-count">${matches.length} match${matches.length > 1 ? 's' : ''} à planifier</div>
+            </div>
+        `;
+        
         Object.keys(byPool).sort().forEach(pool => {
             const poolMatches = byPool[pool];
             html += `
-                <section class="week-section">
-                    <div class="week-header" style="background: linear-gradient(135deg, var(--danger) 0%, #DC2626 100%);">
-                        <div class="week-title">⚠️ ${pool}</div>
-                        <div class="week-count">${poolMatches.length} non planifié${poolMatches.length > 1 ? 's' : ''}</div>
+                <section class="pool-section">
+                    <div class="pool-header">
+                        <div class="pool-title">🏆 ${pool}</div>
+                        <div class="pool-count">${poolMatches.length} match${poolMatches.length > 1 ? 's' : ''}</div>
                     </div>
                     <div class="matches-grid">
-                        ${poolMatches.map(m => MatchCard.render(m, true, filters, preferences)).join('')}
+                        ${poolMatches.map(m => MatchCard.render(m, true, filters, preferences, true, false)).join('')}
                     </div>
                 </section>
             `;

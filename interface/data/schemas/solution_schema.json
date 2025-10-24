@@ -1,0 +1,263 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PyCalendar Solution Data v2.0",
+  "description": "Enriched solution data format for PyCalendar web interface",
+  "type": "object",
+  "required": ["version", "generated_at", "metadata", "matches"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "description": "Data format version",
+      "const": "2.0"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Generation timestamp (ISO 8601)"
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Solution metadata",
+      "properties": {
+        "solution_name": {"type": "string"},
+        "solver": {"type": "string"},
+        "status": {"type": "string", "enum": ["OPTIMAL", "FEASIBLE", "INFEASIBLE", "UNKNOWN"]},
+        "score": {"type": "number"},
+        "execution_time_seconds": {"type": "number"}
+      }
+    },
+    "config": {
+      "type": "object",
+      "description": "Configuration summary",
+      "properties": {
+        "hash": {"type": "string"},
+        "nb_semaines": {"type": "integer"},
+        "semaine_min": {"type": "integer"},
+        "strategie": {"type": "string"},
+        "temps_max_secondes": {"type": "integer"},
+        "constraints": {"type": "object"}
+      }
+    },
+    "entities": {
+      "type": "object",
+      "description": "All entities (teams, venues, pools)",
+      "properties": {
+        "equipes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "nom", "institution", "genre", "poule"],
+            "properties": {
+              "id": {"type": "string"},
+              "nom": {"type": "string"},
+              "nom_complet": {"type": "string"},
+              "institution": {"type": "string"},
+              "numero_equipe": {"type": "string"},
+              "genre": {"type": "string", "enum": ["M", "F", ""]},
+              "poule": {"type": "string"},
+              "horaires_preferes": {"type": "array", "items": {"type": "string"}},
+              "lieux_preferes": {"type": "array", "items": {"type": "string"}},
+              "semaines_indisponibles": {"type": "object"}
+            }
+          }
+        },
+        "gymnases": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "nom", "capacite"],
+            "properties": {
+              "id": {"type": "string"},
+              "nom": {"type": "string"},
+              "capacite": {"type": "integer"},
+              "horaires_disponibles": {"type": "array", "items": {"type": "string"}},
+              "semaines_indisponibles": {"type": "object"},
+              "capacite_reduite": {"type": "object"}
+            }
+          }
+        },
+        "poules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "nom", "genre", "niveau"],
+            "properties": {
+              "id": {"type": "string"},
+              "nom": {"type": "string"},
+              "genre": {"type": "string"},
+              "niveau": {"type": "string"},
+              "nb_equipes": {"type": "integer"},
+              "equipes_ids": {"type": "array", "items": {"type": "string"}},
+              "nb_matchs_planifies": {"type": "integer"},
+              "nb_matchs_non_planifies": {"type": "integer"}
+            }
+          }
+        }
+      }
+    },
+    "matches": {
+      "type": "object",
+      "required": ["scheduled", "unscheduled"],
+      "properties": {
+        "scheduled": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["match_id", "equipe1_id", "equipe2_id", "poule", "semaine", "horaire", "gymnase"],
+            "properties": {
+              "match_id": {"type": "string"},
+              "equipe1_id": {"type": "string"},
+              "equipe1_nom": {"type": "string"},
+              "equipe1_nom_complet": {"type": "string"},
+              "equipe1_institution": {"type": "string"},
+              "equipe1_genre": {"type": "string"},
+              "equipe1_horaires_preferes": {"type": "array"},
+              "equipe2_id": {"type": "string"},
+              "equipe2_nom": {"type": "string"},
+              "equipe2_nom_complet": {"type": "string"},
+              "equipe2_institution": {"type": "string"},
+              "equipe2_genre": {"type": "string"},
+              "equipe2_horaires_preferes": {"type": "array"},
+              "poule": {"type": "string"},
+              "semaine": {"type": "integer"},
+              "horaire": {"type": "string"},
+              "gymnase": {"type": "string"},
+              "is_fixed": {"type": "boolean"},
+              "is_entente": {"type": "boolean"},
+              "is_external": {"type": "boolean"},
+              "score": {
+                "type": "object",
+                "properties": {
+                  "equipe1": {"type": ["integer", "null"]},
+                  "equipe2": {"type": ["integer", "null"]},
+                  "has_score": {"type": "boolean"}
+                }
+              },
+              "penalties": {
+                "type": "object",
+                "properties": {
+                  "total": {"type": "number"},
+                  "horaire_prefere": {"type": "number"},
+                  "espacement": {"type": "number"},
+                  "indisponibilite": {"type": "number"},
+                  "compaction": {"type": "number"},
+                  "overlap": {"type": "number"}
+                }
+              }
+            }
+          }
+        },
+        "unscheduled": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["match_id", "equipe1_id", "equipe2_id", "poule"],
+            "properties": {
+              "match_id": {"type": "string"},
+              "equipe1_id": {"type": "string"},
+              "equipe2_id": {"type": "string"},
+              "poule": {"type": "string"},
+              "reason": {"type": "string"},
+              "constraints_violated": {"type": "array", "items": {"type": "string"}}
+            }
+          }
+        }
+      }
+    },
+    "slots": {
+      "type": "object",
+      "properties": {
+        "available": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["slot_id", "gymnase", "semaine", "horaire", "status"],
+            "properties": {
+              "slot_id": {"type": "string"},
+              "gymnase": {"type": "string"},
+              "semaine": {"type": "integer"},
+              "horaire": {"type": "string"},
+              "status": {"type": "string", "const": "libre"}
+            }
+          }
+        },
+        "occupied": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["slot_id", "gymnase", "semaine", "horaire", "status", "match_id"],
+            "properties": {
+              "slot_id": {"type": "string"},
+              "gymnase": {"type": "string"},
+              "semaine": {"type": "integer"},
+              "horaire": {"type": "string"},
+              "status": {"type": "string", "const": "occupé"},
+              "match_id": {"type": "string"}
+            }
+          }
+        }
+      }
+    },
+    "statistics": {
+      "type": "object",
+      "properties": {
+        "global": {
+          "type": "object",
+          "properties": {
+            "taux_planification": {"type": "number"},
+            "score_total": {"type": "number"},
+            "score_moyen_par_match": {"type": "number"},
+            "nb_matchs_total": {"type": "integer"},
+            "nb_matchs_planifies": {"type": "integer"},
+            "nb_matchs_non_planifies": {"type": "integer"},
+            "nb_matchs_fixes": {"type": "integer"},
+            "nb_matchs_auto": {"type": "integer"}
+          }
+        },
+        "par_semaine": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "nb_matchs": {"type": "integer"},
+              "par_horaire": {"type": "object"}
+            }
+          }
+        },
+        "par_poule": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "nb_matchs_planifies": {"type": "integer"},
+              "nb_matchs_non_planifies": {"type": "integer"},
+              "taux_completion": {"type": "number"}
+            }
+          }
+        },
+        "par_gymnase": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "nb_matchs": {"type": "integer"},
+              "capacite": {"type": "integer"},
+              "taux_occupation": {"type": "number"}
+            }
+          }
+        },
+        "par_equipe": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "nb_matchs_planifies": {"type": "integer"},
+              "nb_matchs_non_planifies": {"type": "integer"},
+              "horaires_repartition": {"type": "object"}
+            }
+          }
+        }
+      }
+    }
+  }
+}

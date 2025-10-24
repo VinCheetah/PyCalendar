@@ -8,7 +8,7 @@ institutional constraints to all teams.
 import pandas as pd
 from typing import List, Dict, Set, Tuple, Optional
 from pathlib import Path
-from core.models import Equipe, Gymnase, ContrainteTemporelle
+from core.models import Equipe, Gymnase, ContrainteTemporelle, Match
 from core.utils import extraire_genre_depuis_poule, parser_nom_avec_genre, formater_nom_avec_genre
 from core.config_manager import ConfigManager
 import logging
@@ -562,6 +562,47 @@ class DataLoader:
         logger.info(f"Ententes chargées: {len(ententes)} paires d'institutions")
         return ententes
     
+    def charger_niveaux_gymnases(self) -> Dict[str, str]:
+        """
+        Charge les niveaux des gymnases (haut/bas niveau).
+        
+        Structure de la feuille Niveaux_Gymnases:
+        - Gymnase: Nom du gymnase (doit exister dans la feuille Gymnases)
+        - Niveau: "Haut niveau" ou "Bas niveau"
+        - Remarque: Commentaire optionnel
+        
+        Returns:
+            Dictionnaire {nom_gymnase: niveau}
+        """
+        df = self.config.lire_feuille('Niveaux_Gymnases')
+        if df is None or df.empty:
+            logger.debug("Pas de feuille Niveaux_Gymnases")
+            return {}
+        
+        niveaux = {}
+        
+        for idx, row in df.iterrows():
+            gymnase = str(row.get('Gymnase', '')).strip()
+            niveau = str(row.get('Niveau', '')).strip()
+            
+            if not gymnase or pd.isna(row.get('Gymnase')):
+                logger.warning(f"Ligne {idx+2}: Gymnase manquant, ligne ignorée")
+                continue
+            
+            if not niveau or pd.isna(row.get('Niveau')):
+                logger.warning(f"Ligne {idx+2}: Niveau manquant pour gymnase '{gymnase}', ligne ignorée")
+                continue
+            
+            # Validation du niveau
+            if niveau not in ['Haut niveau', 'Bas niveau']:
+                logger.warning(f"Ligne {idx+2}: Niveau invalide '{niveau}' pour gymnase '{gymnase}', doit être 'Haut niveau' ou 'Bas niveau'")
+                continue
+            
+            niveaux[gymnase] = niveau
+        
+        logger.info(f"Niveaux de gymnases chargés: {len(niveaux)} gymnases classés")
+        return niveaux
+    
     def charger_contraintes_temporelles(self) -> Dict[Tuple[str, str], 'ContrainteTemporelle']:
         """
         Charge les contraintes temporelles sur matchs spécifiques.
@@ -570,21 +611,20 @@ class DataLoader:
         avant ou après une semaine donnée (ex: matchs CFE après semaine 8).
         
         Structure de la feuille Contraintes_Temporelles (optionnelle):
-        - Equipe_1: Première équipe de la paire (format: "NOM (X)" ou "NOM (X) [M]" ou "NOM (X) [F]")
-        - Equipe_2: Seconde équipe de la paire (même format)
+        - Equipe_1: Première équipe de la paire (format: "NOM (X)" sans [F]/[M])
+        - Equipe_2: Seconde équipe de la paire (format: "NOM (X)" sans [F]/[M])
+        - Genre: Genre commun aux deux équipes (M ou F)
         - Type_Contrainte: "Avant" ou "Apres"
         - Semaine: Numéro de semaine limite (1-52)
         - Horaires_Possibles: Liste d'horaires préférés séparés par virgule (optionnel)
         - Remarques: Commentaires (optionnel)
         
         Format des noms d'équipes:
-        - Avec genre: "LYON 1 (1) [M]" -> s'applique uniquement à l'équipe masculine
-        - Sans genre: "LYON 1 (1)" -> s'applique à TOUTES les équipes LYON 1 (1) quel que soit leur genre
+        - Noms sans genre: "LYON 1 (1)" - le genre est spécifié dans la colonne Genre
         
         Returns:
             Dictionnaire {(equipe1_id, equipe2_id): ContrainteTemporelle}
-            - Si genre spécifié: clé = (nom|genre, nom|genre) ex: ("LYON 1 (1)|M", "LYON 2 (1)|F")
-            - Si genre non spécifié: clé = (nom|, nom|) ex: ("LYON 1 (1)|", "LYON 2 (1)|")
+            Clé = (nom|genre, nom|genre) ex: ("LYON 1 (1)|M", "LYON 2 (1)|M")
             La clé est un tuple trié alphabétiquement pour détection bidirectionnelle
         """
         from core.models import ContrainteTemporelle
@@ -601,6 +641,7 @@ class DataLoader:
             
             eq1_str = str(row.get('Equipe_1', '')).strip()
             eq2_str = str(row.get('Equipe_2', '')).strip()
+            genre_str = str(row.get('Genre', '')).strip().upper()
             type_contrainte = str(row.get('Type_Contrainte', '')).strip()
             semaine = row.get('Semaine')
             
@@ -611,11 +652,19 @@ class DataLoader:
             if not eq2_str or pd.isna(row.get('Equipe_2')):
                 logger.warning(f"Ligne {ligne_num}: Equipe_2 manquante, ligne ignorée")
                 continue
+            if not genre_str or pd.isna(row.get('Genre')):
+                logger.warning(f"Ligne {ligne_num}: Genre manquant, ligne ignorée")
+                continue
             if not type_contrainte or pd.isna(row.get('Type_Contrainte')):
                 logger.warning(f"Ligne {ligne_num}: Type_Contrainte manquant, ligne ignorée")
                 continue
             if pd.isna(semaine):
                 logger.warning(f"Ligne {ligne_num}: Semaine manquante, ligne ignorée")
+                continue
+            
+            # Valider le genre
+            if genre_str not in ['M', 'F']:
+                logger.warning(f"Ligne {ligne_num}: Genre invalide '{genre_str}', doit être 'M' ou 'F', ligne ignorée")
                 continue
             
             # Valider le type
@@ -641,15 +690,10 @@ class DataLoader:
                 # Séparer par virgule ou point-virgule
                 horaires_possibles = [h.strip() for h in horaires_str.replace(';', ',').split(',') if h.strip()]
             
-            # Parser les noms avec genre optionnel
-            # Format attendu: "LYON 1 (1) [M]" ou "LYON 1 (1)" (sans genre = tous genres)
-            eq1_nom, eq1_genre = parser_nom_avec_genre(eq1_str)
-            eq2_nom, eq2_genre = parser_nom_avec_genre(eq2_str)
-            
             # Créer les identifiants pour la clé
-            # Format: "NOM|GENRE" où GENRE peut être vide si non spécifié
-            eq1_id = f"{eq1_nom}|{eq1_genre}"
-            eq2_id = f"{eq2_nom}|{eq2_genre}"
+            # Format: "NOM|GENRE" - les noms sont déjà sans genre, le genre vient de la colonne Genre
+            eq1_id = f"{eq1_str}|{genre_str}"
+            eq2_id = f"{eq2_str}|{genre_str}"
             
             # Créer clé triée pour détection bidirectionnelle
             cle = tuple(sorted([eq1_id, eq2_id]))
@@ -712,6 +756,143 @@ class DataLoader:
             logger.info(f"  - {nb_aller_retour} poule(s) Aller-Retour")
         
         return types
+    
+    def charger_matchs_fixes(self) -> List[Match]:
+        """
+        Charge les matchs déjà joués ou planifiés depuis la feuille Matchs_Fixes.
+        
+        Ces matchs seront intégrés directement dans la solution finale et
+        ne seront pas inclus dans la génération automatique.
+        
+        Structure attendue:
+        - Equipe_1: Nom de la première équipe
+        - Equipe_2: Nom de la deuxième équipe
+        - Genre: Genre du match (F ou M)
+        - Poule: Code de la poule
+        - Semaine: Numéro de semaine
+        - Horaire: Heure du match (HH:MM)
+        - Gymnase: Nom du gymnase
+        - Score: Score du match si joué (optionnel)
+        - Type_Competition: CFE, CFU, Acad, ou Autre
+        - Remarques: Informations complémentaires (optionnel)
+        
+        Returns:
+            Liste des matchs fixes avec leurs informations complètes
+        """
+        df = self.config.lire_feuille('Matchs_Fixes')
+        if df is None or df.empty:
+            logger.info("Aucun match fixe trouvé")
+            return []
+        
+        matchs_fixes = []
+        
+        # Charger les équipes pour pouvoir créer les objets Match complets
+        equipes = self.charger_equipes()
+        equipes_dict = {eq.nom: eq for eq in equipes}
+        
+        for idx, row in df.iterrows():
+            equipe1_nom = str(row.get('Equipe_1', '')).strip()
+            equipe2_nom = str(row.get('Equipe_2', '')).strip()
+            genre = str(row.get('Genre', '')).strip().upper()
+            poule = str(row.get('Poule', '')).strip()
+            
+            if not equipe1_nom or not equipe2_nom or pd.isna(equipe1_nom) or pd.isna(equipe2_nom):
+                logger.warning(f"Ligne {idx}: équipes manquantes, ligne ignorée")
+                continue
+            
+            # Si genre présent, on l'ajoute au nom pour matcher avec les équipes de la config
+            equipe1_nom_complet = f"{equipe1_nom} [{genre}]" if genre in ['F', 'M'] else equipe1_nom
+            equipe2_nom_complet = f"{equipe2_nom} [{genre}]" if genre in ['F', 'M'] else equipe2_nom
+            
+            # Essayer d'abord avec le genre complet, puis sans genre
+            equipe1 = equipes_dict.get(equipe1_nom_complet) or equipes_dict.get(equipe1_nom)
+            equipe2 = equipes_dict.get(equipe2_nom_complet) or equipes_dict.get(equipe2_nom)
+            
+            # Vérifier que les équipes existent, sinon créer des équipes temporaires pour les externes
+            if not equipe1:
+                # Créer une équipe temporaire pour les équipes hors championnat
+                equipe1 = Equipe(
+                    nom=equipe1_nom_complet,
+                    poule=poule,
+                    institution="EXTERNE",  # Marquer comme équipe externe
+                    genre=genre.lower() if genre in ['F', 'M'] else "",
+                    numero_equipe=""
+                )
+                logger.info(f"Ligne {idx}: équipe externe '{equipe1_nom_complet}' créée pour match fixe")
+            
+            if not equipe2:
+                # Créer une équipe temporaire pour les équipes hors championnat
+                equipe2 = Equipe(
+                    nom=equipe2_nom_complet,
+                    poule=poule,
+                    institution="EXTERNE",  # Marquer comme équipe externe
+                    genre=genre.lower() if genre in ['F', 'M'] else "",
+                    numero_equipe=""
+                )
+                logger.info(f"Ligne {idx}: équipe externe '{equipe2_nom_complet}' créée pour match fixe")
+            
+            semaine = row.get('Semaine')
+            if pd.isna(semaine):
+                logger.warning(f"Ligne {idx+2}: semaine manquante pour {equipe1_nom} vs {equipe2_nom}, ligne ignorée")
+                continue
+            try:
+                semaine = int(semaine)
+            except (ValueError, TypeError):
+                logger.warning(f"Ligne {idx+2}: semaine invalide '{semaine}', ligne ignorée")
+                continue
+            
+            semaine = row.get('Semaine')
+            if pd.isna(semaine):
+                logger.warning(f"Ligne {idx}: semaine manquante pour {equipe1_nom} vs {equipe2_nom}, ligne ignorée")
+                continue
+            try:
+                semaine = int(semaine)
+            except (ValueError, TypeError):
+                logger.warning(f"Ligne {idx}: semaine invalide '{semaine}', ligne ignorée")
+                continue
+            
+            horaire = str(row.get('Horaire', '')).strip()
+            if not horaire or pd.isna(horaire):
+                logger.warning(f"Ligne {idx}: horaire manquant pour {equipe1_nom} vs {equipe2_nom}, ligne ignorée")
+                continue
+            
+            gymnase = str(row.get('Gymnase', '')).strip()
+            if not gymnase or pd.isna(gymnase):
+                logger.warning(f"Ligne {idx}: gymnase manquant pour {equipe1_nom} vs {equipe2_nom}, ligne ignorée")
+                continue
+            
+            # Informations optionnelles
+            score = row.get('Score')
+            score_str = str(score).strip() if pd.notna(score) and str(score).strip() else None
+            
+            type_competition = row.get('Type_Competition')
+            type_competition_str = str(type_competition).strip() if pd.notna(type_competition) else 'Acad'
+            
+            remarques = row.get('Remarques')
+            remarques_str = str(remarques).strip() if pd.notna(remarques) and str(remarques).strip() else ''
+            
+            # Créer le match (on utilise un créneau fictif pour l'instant)
+            # Le créneau sera créé/trouvé lors de l'intégration dans le pipeline
+            match = Match(
+                equipe1=equipe1,
+                equipe2=equipe2,
+                poule=poule,
+                creneau=None,  # Sera assigné plus tard dans le pipeline
+                metadata={
+                    'fixe': True,
+                    'semaine': semaine,
+                    'horaire': horaire,
+                    'gymnase': gymnase,
+                    'score': score_str,
+                    'type_competition': type_competition_str,
+                    'remarques': remarques_str
+                }
+            )
+            
+            matchs_fixes.append(match)
+        
+        logger.info(f"{len(matchs_fixes)} matchs fixes chargés depuis la feuille Matchs_Fixes")
+        return matchs_fixes
     
     def get_poules_dict(self, equipes: List[Equipe]) -> Dict[str, List[Equipe]]:
         """Group teams by pool."""

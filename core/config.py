@@ -4,6 +4,7 @@ import yaml
 from dataclasses import dataclass, field
 from typing import Dict, Any, Optional, List
 from pathlib import Path
+from .calendar_manager import CalendarManager, CalendarConfig
 
 
 @dataclass
@@ -21,6 +22,7 @@ class Config:
     
     # Planning parameters
     nb_semaines: int
+    semaine_min: int  # Semaine minimum pour la planification (permet de simuler une compétition déjà commencée)
     taille_poule_min: int
     taille_poule_max: int
     
@@ -42,6 +44,10 @@ class Config:
     # Préférences de gymnase (nouveau système avec bonus)
     nb_preferences_gymnases: int  # Nombre de gymnases préférés configurables (défaut: 5)
     bonus_preferences_gymnases: List[float]  # Bonus par rang [rang1, rang2, ...]
+    
+    # Bonus pour gymnases par niveau (classification haut/bas niveau)
+    bonus_niveau_gymnases_haut: List[float]  # Bonus par niveau de match pour gymnases haut niveau
+    bonus_niveau_gymnases_bas: List[float]  # Bonus par niveau de match pour gymnases bas niveau
     
     # Spacing constraint (list of penalties by weeks of rest)
     penalites_espacement_repos: List[float]
@@ -75,6 +81,12 @@ class Config:
     aller_retour_min_semaines: int  # Espacement minimum en semaines entre aller et retour
     aller_retour_penalite_meme_semaine: float  # Pénalité si aller et retour dans même semaine
     aller_retour_penalite_consecutives: float  # Pénalité si aller et retour dans semaines consécutives
+    
+    # Calendar management
+    calendrier_actif: bool  # Activer/désactiver la gestion calendrier avec dates réelles
+    calendrier_date_debut: str  # Date de début de saison (format: YYYY-MM-DD)
+    calendrier_jour_match: str  # Jour des matchs (ex: "jeudi", "Thursday")
+    calendrier_semaines_banalisees: List[int]  # Liste des numéros de semaines banalisées (vacances)
     
     # Advanced settings
     max_matchs_par_equipe_par_semaine: int
@@ -151,6 +163,7 @@ class Config:
         if 'planification' in merged_data:
             p = merged_data['planification']
             config_dict['nb_semaines'] = p['nb_semaines']
+            config_dict['semaine_min'] = p.get('semaine_min', 1)  # Par défaut: 1 (début normal)
             config_dict['strategie'] = p['strategie']
             config_dict['fallback_greedy'] = p['fallback_greedy']
             config_dict['taille_poule_min'] = p['taille_poule_min']
@@ -179,6 +192,10 @@ class Config:
             # Nouvelles préférences de gymnase avec bonus par rang
             config_dict['nb_preferences_gymnases'] = ct['nb_preferences_gymnases']
             config_dict['bonus_preferences_gymnases'] = ct['bonus_preferences_gymnases']
+            
+            # Bonus pour gymnases par niveau (classification haut/bas niveau)
+            config_dict['bonus_niveau_gymnases_haut'] = ct['bonus_niveau_gymnases_haut']
+            config_dict['bonus_niveau_gymnases_bas'] = ct['bonus_niveau_gymnases_bas']
             
             config_dict['penalite_avant_horaire_min'] = ct['penalite_avant_horaire_min']
             config_dict['penalite_avant_horaire_min_deux'] = ct['penalite_avant_horaire_min_deux']
@@ -212,10 +229,31 @@ class Config:
             config_dict['aller_retour_penalite_meme_semaine'] = ct.get('aller_retour_penalite_meme_semaine', 5000.0)
             config_dict['aller_retour_penalite_consecutives'] = ct.get('aller_retour_penalite_consecutives', 2000.0)
         
+        # Calendar management
+        if 'calendrier' in merged_data:
+            cal = merged_data['calendrier']
+            config_dict['calendrier_actif'] = cal.get('actif', False)
+            config_dict['calendrier_date_debut'] = cal.get('date_debut', '2025-09-01')
+            config_dict['calendrier_jour_match'] = cal.get('jour_match', 'jeudi')
+            config_dict['calendrier_semaines_banalisees'] = cal.get('semaines_banalisees', [])
+        
         # Store extra parameters
         config_dict['extra'] = merged_data.get('extra', {})
         
         return cls(**config_dict)
+    
+    @property
+    def calendar_manager(self) -> Optional[CalendarManager]:
+        """Get calendar manager if calendar is active."""
+        if not self.calendrier_actif:
+            return None
+        
+        calendar_config = CalendarConfig(
+            date_debut=self.calendrier_date_debut,
+            jour_match=self.calendrier_jour_match,
+            semaines_banalisees=self.calendrier_semaines_banalisees
+        )
+        return CalendarManager(calendar_config)
     
     def to_yaml(self, filepath: str):
         """Save configuration to YAML file."""
@@ -226,6 +264,7 @@ class Config:
             },
             'planification': {
                 'nb_semaines': self.nb_semaines,
+                'semaine_min': self.semaine_min,
                 'strategie': self.strategie,
                 'fallback_greedy': self.fallback_greedy,
                 'taille_poule_min': self.taille_poule_min,

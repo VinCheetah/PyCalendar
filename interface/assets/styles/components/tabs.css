@@ -1,0 +1,136 @@
+/* ===============================================
+   Tabs & Navigation
+   =============================================== */
+
+/* Tabs container */
+.tabs-container {
+    background: var(--bg-primary);
+    border-radius: 8px;
+    box-shadow: var(--shadow-md);
+    overflow: hidden;
+}
+
+/* Tabs navigation */
+.tabs-nav {
+    display: flex;
+    gap: 0;
+    background: var(--bg-secondary);
+    border-bottom: 2px solid var(--border-color);
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+}
+
+.tabs-nav::-webkit-scrollbar {
+    height: 4px;
+}
+
+.tabs-nav::-webkit-scrollbar-track {
+    background: var(--bg-secondary);
+}
+
+.tabs-nav::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 2px;
+}
+
+/* Tab button */
+.tab-button {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-md) var(--spacing-lg);
+    background: transparent;
+    border: none;
+    border-bottom: 3px solid transparent;
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+    position: relative;
+}
+
+.tab-button:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.tab-button.active {
+    color: var(--primary);
+    border-bottom-color: var(--primary);
+    background: var(--bg-primary);
+}
+
+.tab-button:focus {
+    outline: none;
+    box-shadow: inset 0 0 0 2px var(--primary-light);
+}
+
+.tab-icon {
+    font-size: 1.1rem;
+}
+
+/* Badge on tab (for counts) */
+.tab-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    background: var(--danger);
+    color: white;
+    font-size: 0.75rem;
+    font-weight: 600;
+    border-radius: 10px;
+    margin-left: var(--spacing-xs);
+}
+
+.tab-button.active .tab-badge {
+    background: var(--primary);
+}
+
+/* Tab content */
+.tab-content {
+    padding: var(--spacing-lg);
+    min-height: 500px;
+}
+
+/* Tab pane */
+.tab-pane {
+    display: none;
+    animation: fadeIn 0.3s ease;
+}
+
+.tab-pane.active {
+    display: block;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Responsive tabs */
+@media (max-width: 768px) {
+    .tab-button {
+        padding: var(--spacing-sm) var(--spacing-md);
+        font-size: 0.85rem;
+    }
+    
+    .tab-icon {
+        font-size: 1rem;
+    }
+    
+    .tab-content {
+        padding: var(--spacing-md);
+    }
+}

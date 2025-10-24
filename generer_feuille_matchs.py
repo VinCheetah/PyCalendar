@@ -36,11 +36,19 @@ def extraire_genre_niveau(code_poule):
         VBFA1PA -> (F, A1)
         VBMA3PB -> (M, A3)
     """
+    # Gérer les cas où code_poule est NaN ou None
+    if pd.isna(code_poule) or not isinstance(code_poule, str):
+        return 'M', 'A1'  # Valeurs par défaut
+    
+    # Vérifier que le code fait au moins 5 caractères
+    if len(code_poule) < 5:
+        return 'M', 'A1'  # Valeurs par défaut
+    
     # Le genre est en position 2 (après VB)
-    genre = code_poule[2]  # 'F' ou 'M'
+    genre = code_poule[2] if len(code_poule) > 2 else 'M'  # 'F' ou 'M'
     
     # Le niveau est en position 3-4 (A + chiffre)
-    niveau = code_poule[3:5]  # 'A1', 'A2', 'A3', ou 'A4'
+    niveau = code_poule[3:5] if len(code_poule) > 4 else 'A1'  # 'A1', 'A2', 'A3', ou 'A4'
     
     return genre, niveau
 
@@ -89,9 +97,63 @@ def charger_et_filtrer_matchs(fichier_calendrier, numero_semaine, date_str):
         print(f"⚠️  Aucun match trouvé pour la semaine {numero_semaine}")
         return None
     
-    # Extraire genre et niveau depuis le code de poule
-    df_semaine['Genre'] = df_semaine['Poule'].apply(lambda x: extraire_genre_niveau(x)[0])
-    df_semaine['Niveau'] = df_semaine['Poule'].apply(lambda x: extraire_genre_niveau(x)[1])
+    # NE PAS filtrer les matchs sans poule - inclure tous les matchs
+    # df_semaine = df_semaine[df_semaine['Poule'].notna()].copy()
+    
+    # Remplir les poules manquantes avec une valeur par défaut
+    df_semaine['Poule'] = df_semaine['Poule'].fillna('HORS_CHAMPIONNAT')
+    
+    # Extraire genre et niveau depuis le code de poule OU utiliser les colonnes Genre directement
+    def get_genre(row):
+        # Pour les matchs avec poule, extraire depuis le code
+        if row['Poule'] != 'HORS_CHAMPIONNAT':
+            return extraire_genre_niveau(row['Poule'])[0]
+        # Pour les matchs hors championnat, déterminer le genre approprié
+        else:
+            genre1 = str(row.get('Genre_1', '')).upper()
+            genre2 = str(row.get('Genre_2', '')).upper()
+            equipe1 = str(row.get('Equipe_1', ''))
+            equipe2 = str(row.get('Equipe_2', ''))
+            
+            # Normaliser les genres
+            genre1 = genre1 if genre1 in ['F', 'M'] else None
+            genre2 = genre2 if genre2 in ['F', 'M'] else None
+            
+            # Si les deux genres sont identiques et valides, utiliser ce genre
+            if genre1 and genre2 and genre1 == genre2:
+                return genre1
+            
+            # Si un genre est manquant, utiliser l'autre
+            if genre1 and not genre2:
+                return genre1
+            if genre2 and not genre1:
+                return genre2
+            
+            # Pour les matchs avec EXTERNE, privilégier le genre de l'équipe non-EXTERNE
+            if 'EXTERNE' in equipe1 and genre2:
+                return genre2
+            if 'EXTERNE' in equipe2 and genre1:
+                return genre1
+            
+            # Pour les autres cas (genres différents ou mixtes), privilégier F si présent, sinon M
+            if genre1 == 'F' or genre2 == 'F':
+                return 'F'
+            elif genre1 == 'M' or genre2 == 'M':
+                return 'M'
+            else:
+                # Fallback par défaut
+                return 'M'
+    
+    def get_niveau(row):
+        # Pour les matchs avec poule, extraire depuis le code
+        if row['Poule'] != 'HORS_CHAMPIONNAT':
+            return extraire_genre_niveau(row['Poule'])[1]
+        # Pour les matchs hors championnat, niveau par défaut
+        else:
+            return 'EXT'
+    
+    df_semaine['Genre'] = df_semaine.apply(get_genre, axis=1)
+    df_semaine['Niveau'] = df_semaine.apply(get_niveau, axis=1)
     
     # Mapper les gymnases
     df_semaine['Lieu'] = df_semaine['Gymnase'].apply(mapper_gymnase)

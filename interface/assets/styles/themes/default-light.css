@@ -1,0 +1,24 @@
+/**
+ * PyCalendar Interface - Default Light Theme
+ * Main color scheme and theme-specific overrides
+ */
+
+[data-theme="light"],
+:root {
+    /* Already defined in 00-variables.css */
+    /* This file can override or extend variables if needed */
+    
+    /* Additional theme-specific variables */
+    --page-background: #F8FAFC;
+    --card-background: #FFFFFF;
+    --text-primary: #1E293B;
+    --text-secondary: #64748B;
+    --text-tertiary: #94A3B8;
+}
+
+/* Theme-specific component overrides can go here */
+
+body[data-theme="light"] {
+    background: var(--page-background);
+    color: var(--text-primary);
+}

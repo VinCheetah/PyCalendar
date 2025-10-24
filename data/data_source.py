@@ -172,6 +172,15 @@ class DataSource:
         
         logger.debug(f"Indisponibilités appliquées aux gymnases")
     
+    def charger_matchs_fixes(self):
+        """
+        Charge les matchs déjà joués ou planifiés.
+        
+        Returns:
+            Liste des matchs fixes
+        """
+        return self.loader.charger_matchs_fixes()
+    
     def charger_contraintes_specifiques(self) -> Dict[str, List[Dict]]:
         """
         Charge les contraintes spécifiques depuis la configuration.
@@ -274,6 +283,15 @@ class DataSource:
             Dictionnaire {(inst1, inst2): penalite_non_planif}
         """
         return self.loader.charger_ententes()
+    
+    def charger_niveaux_gymnases(self) -> Dict[str, str]:
+        """
+        Charge les niveaux des gymnases (haut/bas niveau).
+        
+        Returns:
+            Dictionnaire {nom_gymnase: niveau}
+        """
+        return self.loader.charger_niveaux_gymnases()
     
     def charger_contraintes_temporelles(self) -> Dict:
         """

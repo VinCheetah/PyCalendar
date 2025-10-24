@@ -37,15 +37,26 @@ class ConfigManager:
     
     # Définition des structures de chaque feuille
     STRUCTURES = {
-        'Equipes': {
-            'colonnes': ['Equipe', 'Poule', 'Horaire_Prefere'],
-            'description': 'Liste des équipes (À REMPLIR MANUELLEMENT)',
+        'Equipes_Hors_Championnat': {
+            'colonnes': ['Equipe', 'Institution', 'Genre', 'Type_Championnat', 'Motif', 'Remarques'],
+            'description': 'Équipes autorisées hors championnat académique pour les matchs fixés',
             'type': 'manuel',
             'exemple': {
-                'Equipe': 'CENTRALE 1 (1)',
-                'Poule': 'HBFA1PK',
-                'Horaire_Prefere': '18:00'
-            }
+                'Equipe': 'EXTERIEUR (1)',
+                'Institution': 'EXTERIEUR',
+                'Genre': 'M',
+                'Type_Championnat': 'CFE',
+                'Motif': 'Match amical',
+                'Remarques': 'Équipe invitée pour tournoi'
+            },
+            'notes': [
+                'Equipe: Nom complet de l\'équipe (format: Institution (numéro))',
+                'Institution: Institution de rattachement',
+                'Genre: M (masculin) ou F (féminin)',
+                'Type_Championnat: Type de championnat (CFE, CFU, Autre)',
+                'Motif: Raison de l\'autorisation (match amical, tournoi, etc.)',
+                'Remarques: Informations complémentaires'
+            ]
         },
         'Gymnases': {
             'colonnes': ['Gymnase', 'Adresse', 'Capacite', 'Creneaux'],
@@ -168,19 +179,21 @@ class ConfigManager:
             ]
         },
         'Contraintes_Temporelles': {
-            'colonnes': ['Equipe_1', 'Equipe_2', 'Type_Contrainte', 'Semaine', 'Horaires_Possibles', 'Remarques'],
+            'colonnes': ['Equipe_1', 'Equipe_2', 'Genre', 'Type_Contrainte', 'Semaine', 'Horaires_Possibles', 'Remarques'],
             'description': 'Contraintes temporelles sur matchs spécifiques (ex: CFE après semaine X)',
             'type': 'manuel',
             'exemple': {
-                'Equipe_1': 'LYON 1 M1',
-                'Equipe_2': 'LYON 2 F1',
+                'Equipe_1': 'LYON 1 (1)',
+                'Equipe_2': 'LYON 2 (1)',
+                'Genre': 'M',
                 'Type_Contrainte': 'Apres',
                 'Semaine': '8',
                 'Horaires_Possibles': 'Mercredi 18h00, Vendredi 16h00',
                 'Remarques': 'Match CFE à planifier après la semaine 8'
             },
             'notes': [
-                'Equipe_1 et Equipe_2: Paire d\'équipes concernées (ordre non important)',
+                'Equipe_1 et Equipe_2: Noms des équipes sans genre (Institution (numéro))',
+                'Genre: M (masculin) ou F (féminin) - même genre pour les deux équipes',
                 'Type_Contrainte: "Avant" ou "Apres" (planifier avant/après la semaine indiquée)',
                 'Semaine: Numéro de semaine limite (1-52)',
                 'Horaires_Possibles: Liste d\'horaires autorisés pour ce match (optionnel, séparés par virgule)',
@@ -204,6 +217,58 @@ class ConfigManager:
                 '  → Aller-Retour: Chaque paire joue 2 matchs (aller ET retour, n×(n-1) matchs)',
                 'Aller-Retour implique de jouer le match une fois chez chaque équipe (inversion ordre)',
                 'L\'espacement entre matchs aller et retour est paramétrable via YAML'
+            ]
+        },
+        'Matchs_Fixes': {
+            'colonnes': ['Equipe_1', 'Equipe_2', 'Genre', 'Poule', 'Semaine', 'Horaire', 'Gymnase', 'Score', 'Type_Competition', 'Remarques'],
+            'description': 'Matchs déjà joués ou planifiés à intégrer dans le calendrier',
+            'type': 'manuel',
+            'exemple': {
+                'Equipe_1': 'LYON 1 (1)',
+                'Equipe_2': 'LYON 2 (1)',
+                'Genre': 'F',
+                'Poule': 'VBFA1PA',
+                'Semaine': '1',
+                'Horaire': '18:00',
+                'Gymnase': 'PARC DES SPORTS',
+                'Score': '3-1',
+                'Type_Competition': 'CFE',
+                'Remarques': 'Match déjà joué'
+            },
+            'notes': [
+                'Equipe_1 et Equipe_2: Noms exacts des équipes sans le genre (Institution (numéro) seulement)',
+                'Genre: F ou M (obligatoire)',
+                'Poule: Code de la poule (doit correspondre aux équipes)',
+                'Semaine: Numéro de semaine où le match a été/sera joué (1 à nb_semaines)',
+                'Horaire: Heure du match (format HH:MM)',
+                'Gymnase: Nom exact du gymnase (doit exister dans la feuille Gymnases)',
+                'Score: Score du match si déjà joué (optionnel, format: "X-Y")',
+                'Type_Competition: Nature de la compétition',
+                '  → CFE: Championnat de France des Écoles',
+                '  → CFU: Championnat de France Universitaire',
+                '  → Acad: Match de championnat régulier',
+                '  → Autre: Autre type de match',
+                'Remarques: Informations complémentaires (optionnel)',
+                '',
+                '⚠️ IMPORTANT: Ces matchs seront exclus de la planification automatique',
+                'Ils apparaîtront dans le calendrier final aux créneaux indiqués'
+            ]
+        },
+                'Niveaux_Gymnases': {
+            'colonnes': ['Gymnase', 'Niveau', 'Remarque'],
+            'description': 'Classification des gymnases par niveau (haut/bas) avec bonus par niveau de match',
+            'type': 'manuel',
+            'exemple': {
+                'Gymnase': 'PARC DES SPORTS',
+                'Niveau': 'Haut niveau',
+                'Remarque': 'Gymnase principal de la ville'
+            },
+            'notes': [
+                'Gymnase: Nom exact du gymnase (doit exister dans la feuille Gymnases)',
+                'Niveau: "Haut niveau" ou "Bas niveau"',
+                'Remarque: Explication ou commentaire optionnel',
+                'Bonus par niveau de match configurés dans YAML: bonus_haut_niveau et bonus_bas_niveau',
+                'Exemple: bonus_haut_niveau: [10, 8, 5, 1] signifie +10 pour A1, +8 pour A2, etc. dans gymnase haut niveau'
             ]
         }
     }

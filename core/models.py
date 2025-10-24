@@ -124,6 +124,7 @@ class Match:
     poule: str
     creneau: Optional[Creneau] = None
     priorite: int = 0
+    metadata: Dict = field(default_factory=dict)  # Métadonnées additionnelles (ex: matchs fixes)
     
     def get_equipes_tuple(self) -> Tuple[str, str]:
         equipes = sorted([self.equipe1.nom_complet, self.equipe2.nom_complet])

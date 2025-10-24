@@ -132,9 +132,29 @@
                         <div class="toggle-switch"></div>
                         <span class="toggle-label">⚧️ Badges genre</span>
                     </div>
+                    <div class="toggle-container" id="toggleWeekBadges" data-visible-tabs="pools,venues,penalized">
+                        <div class="toggle-switch"></div>
+                        <span class="toggle-label">📅 Badge semaine</span>
+                    </div>
+                    <div class="toggle-container" id="togglePoolBadges" data-visible-tabs="calendar,venues">
+                        <div class="toggle-switch"></div>
+                        <span class="toggle-label">🎯 Badge poule</span>
+                    </div>
                     <div class="toggle-container" id="toggleAvailableSlots" data-visible-tabs="grid">
                         <div class="toggle-switch"></div>
                         <span class="toggle-label">📅 Créneaux libres</span>
+                    </div>
+                    
+                    <!-- Sélecteur de mode de couleur -->
+                    <div class="color-mode-selector" data-visible-tabs="calendar,pools,venues,unscheduled,penalized">
+                        <label class="control-label">🎨 Coloration des cartes</label>
+                        <select id="colorModeSelect" class="color-mode-select">
+                            <option value="genre">Genre (♂/♀)</option>
+                            <option value="level">Niveau (A1/A2/A3/A4)</option>
+                            <option value="both">Genre + Niveau</option>
+                            <option value="pool">Par poule</option>
+                            <option value="institution">Par institution</option>
+                        </select>
                     </div>
                 </div>
                 
@@ -165,65 +185,218 @@
         <main class="content-section">
             <!-- TABS -->
             <nav class="tabs-nav">
-                <button class="tab-btn active" data-tab="grid">&#x1F4CA; Calendrier</button>
-                <button class="tab-btn" data-tab="calendar">&#x1F4C5; Par semaines</button>
-                <button class="tab-btn" data-tab="pools">&#x1F3AF; Par Poule</button>
-                <button class="tab-btn" data-tab="venues">&#x1F3E2; Par Gymnase</button>
-                <button class="tab-btn" data-tab="penalized">&#x1F4B0; Matchs Pénalisés</button>
-                <button class="tab-btn" data-tab="unscheduled" id="unscheduledTab">&#x26A0;&#xFE0F; Non Planifiés</button>
+                <button class="tab-btn active" data-tab="grid">📊 Calendrier</button>
+                <button class="tab-btn" data-tab="simpleAgenda">🗓️ Agenda Simple</button>
+                <button class="tab-btn" data-tab="calendar">📅 Par semaines</button>
+                <button class="tab-btn" data-tab="pools">🎯 Par Poule</button>
+                <button class="tab-btn" data-tab="venues">🏢 Par Gymnase</button>
+                <button class="tab-btn" data-tab="penalized">💰 Matchs Pénalisés</button>
+                <button class="tab-btn" data-tab="unscheduled" id="unscheduledTab">⚠️ Non Planifiés</button>
             </nav>
             
             <!-- TAB CONTENTS -->
             <div id="gridContent" class="tab-content active"></div>
+            <div id="simpleAgendaContent" class="tab-content"></div>
             <div id="calendarContent" class="tab-content"></div>
             <div id="poolsContent" class="tab-content"></div>
             <div id="venuesContent" class="tab-content"></div>
             <div id="penalizedContent" class="tab-content"></div>
             <div id="unscheduledContent" class="tab-content"></div>
         </main>
+        
+        <!-- ==================== PANEL TOGGLES ==================== -->
+        <button class="panel-toggle history" onclick="window.historyPanel?.toggle()">
+            📜 Historique
+        </button>
+        <button class="panel-toggle conflicts" onclick="window.conflictPanel?.toggle()">
+            ⚠️ Conflits <span class="badge" id="conflictBadge">0</span>
+        </button>
+        <button class="panel-toggle resolver" onclick="window.resolverPanel?.toggle()">
+            🤖 Auto-Résolution
+        </button>
+    </div>
+    
+    <!-- ==================== EDIT CONTROLS (Phase 2) ==================== -->
+    <div class="modification-counter" id="modificationCounter" style="display: none;">
+        <span class="badge">0 modifications</span>
+    </div>
+    
+    <div class="edit-controls">
+        <button class="edit-control-btn export-btn" onclick="editModal.exportModifications()">
+            📥 Exporter Modifications
+        </button>
+        <button class="edit-control-btn discard-btn" onclick="editModal.discardAll()">
+            🗑️ Annuler Tout
+        </button>
     </div>
     
     <!-- SCRIPTS -->
     <!-- SCRIPTS_PLACEHOLDER -->
     
     <script>
-        // ==================== DONNÉES ====================
-        const matchsData = {{MATCHES_DATA}};
-        const unscheduledData = {{UNSCHEDULED_DATA}};
-        const availableSlotsData = {{AVAILABLE_SLOTS_DATA}};
-        
-        // Rendre accessible globalement
-        window.matchsData = matchsData;
-        window.unscheduledData = unscheduledData;
-        window.availableSlotsData = availableSlotsData;
+        // ==================== DONNÉES BRUTES ====================
+        const rawMatchsData = {{MATCHES_DATA}};
+        const rawUnscheduledData = {{UNSCHEDULED_DATA}};
+        const rawAvailableSlotsData = {{AVAILABLE_SLOTS_DATA}};
+        const penaltyConfig = {{PENALTY_CONFIG}};
         
         // ==================== INITIALISATION ====================
         class PyCalendarApp {
             constructor() {
+                // ============ SYSTÈME CENTRALISÉ DE DONNÉES ============
+                // DataManager est la SEULE source de vérité
+                this.dataManager = new DataManager(
+                    rawMatchsData,
+                    rawAvailableSlotsData,
+                    rawUnscheduledData
+                );
+                
+                // ============ PENALTY CALCULATOR ============
+                // Recalcul dynamique des pénalités après modifications
+                this.penaltyCalculator = new PenaltyCalculator(penaltyConfig);
+                console.log('🧮 PenaltyCalculator initialized with config:', penaltyConfig);
+                
+                // Rendre accessible globalement pour compatibilité
+                window.dataManager = this.dataManager;
+                window.matchsData = this.dataManager.getCurrentMatches(); // Pour compatibilité
+                window.allMatches = this.dataManager.getCurrentMatches(); // Pour edit-modal
+                window.unscheduledData = rawUnscheduledData;
+                window.availableSlotsData = rawAvailableSlotsData;
+                
+                // ============ AUTRES SYSTÈMES ============
                 this.filterManager = new FilterManager();
                 this.calendarGridView = new CalendarGridView();
                 this.currentTab = 'grid';
+                
+                // Initialize slot manager (synchronisé avec DataManager)
+                this.slotManager = new SlotManager(rawAvailableSlotsData);
+                window.slotManager = this.slotManager;
+                
+                // Initialize systems
+                this.conflictDetector = new ConflictDetector();
+                this.autoResolver = new AutoResolver(this.conflictDetector);
+                this.historyManager = new HistoryManager();
+                
+                // ============ SYNCHRONISATION ============
+                // Quand DataManager change, mettre à jour les références globales
+                this.dataManager.subscribe((event) => {
+                    console.log('📡 DataManager event:', event.type);
+                    console.log('  Event data:', event);
+                    
+                    window.matchsData = this.dataManager.getCurrentMatches();
+                    window.allMatches = this.dataManager.getCurrentMatches();
+                    
+                    console.log('  Updated matchsData:', window.matchsData.length, 'matches');
+                    
+                    // Re-render si nécessaire
+                    if (event.type === 'MODIFICATION_SAVED' || 
+                        event.type === 'MODIFICATION_UNDONE' || 
+                        event.type === 'ALL_MODIFICATIONS_RESET') {
+                        console.log('  🔄 Triggering reload and render...');
+                        this.reloadAndRender();
+                    }
+                });
+            }
+            
+            /**
+             * Reload match data and re-render current view
+             * SIMPLIFIÉ: DataManager gère tout automatiquement
+             */
+            reloadAndRender() {
+                console.log('🔄 reloadAndRender() called');
+                console.log('  Current tab:', this.currentTab);
+                
+                // Reload slot state from localStorage
+                if (this.slotManager) {
+                    console.log('  📋 Reloading SlotManager state...');
+                    this.slotManager.loadFromLocalStorage();
+                }
+                
+                // DataManager recalcule automatiquement l'état actuel
+                // Pas besoin de reset/apply manuel - DataManager le fait déjà!
+                let currentMatches = this.dataManager.getCurrentMatches();
+                console.log('  📊 Current matches from DataManager:', currentMatches.length);
+                
+                // ============ RECALCULER LES PÉNALITÉS ============
+                console.log('  🧮 Recalculating penalties...');
+                currentMatches = this.penaltyCalculator.recalculateAllPenalties(currentMatches);
+                
+                window.matchsData = currentMatches;
+                window.allMatches = currentMatches;
+                
+                // ============ ACTUALISER LES MATCHS NON PLANIFIÉS ============
+                // Recalculer les matchs non planifiés depuis les matchs actuels
+                const updatedUnscheduled = currentMatches.filter(m => !m.semaine || !m.horaire || !m.gymnase);
+                window.rawUnscheduledData = updatedUnscheduled;
+                window.unscheduledData = updatedUnscheduled;
+                console.log('  ⚠️ Updated unscheduled matches:', updatedUnscheduled.length);
+                
+                // Mettre à jour le compteur et le label du tab
+                const unscheduledCount = updatedUnscheduled.length;
+                const totalUnscheduledEl = document.getElementById('totalUnscheduled');
+                const unscheduledTabEl = document.getElementById('unscheduledTab');
+                
+                if (totalUnscheduledEl) {
+                    totalUnscheduledEl.textContent = unscheduledCount;
+                }
+                if (unscheduledTabEl) {
+                    unscheduledTabEl.textContent = unscheduledCount > 0 
+                        ? `⚠️ Non Planifiés (${unscheduledCount})` 
+                        : '✅ Tous Planifiés';
+                }
+                
+                // ============ ACTUALISER LES STATS GÉNÉRALES ============
+                const stats = Utils.calculateStats(currentMatches);
+                
+                const totalMatchesEl = document.getElementById('totalMatches');
+                const totalWeeksEl = document.getElementById('totalWeeks');
+                const totalPoolsEl = document.getElementById('totalPools');
+                const totalVenuesEl = document.getElementById('totalVenues');
+                
+                if (totalMatchesEl) totalMatchesEl.textContent = stats.totalMatches;
+                if (totalWeeksEl) totalWeeksEl.textContent = stats.totalWeeks;
+                if (totalPoolsEl) totalPoolsEl.textContent = stats.totalPools;
+                if (totalVenuesEl) totalVenuesEl.textContent = stats.totalVenues;
+                
+                console.log('  📈 Updated stats:', stats);
+                
+                // Afficher les statistiques de pénalités
+                const penaltyStats = this.penaltyCalculator.getPenaltyStats(currentMatches);
+                console.log('  💰 Penalty stats:', penaltyStats);
+                
+                // Re-render current view
+                console.log('  🎨 Re-rendering current view...');
+                this.render(this.filterManager.filters, this.filterManager.preferences);
+                
+                // Update conflicts after reload
+                setTimeout(() => {
+                    console.log('  ⚔️ Updating conflicts...');
+                    this.updateConflicts();
+                }, 200);
+                
+                console.log('✅ reloadAndRender() completed');
             }
             
             init() {
                 console.log('🚀 Initialisation PyCalendar Pro V2');
-                console.log('  Matchs planifiés:', matchsData.length);
-                console.log('  Matchs non planifiés:', unscheduledData.length);
-                console.log('  Créneaux disponibles:', availableSlotsData.length);
+                console.log('  Matchs planifiés:', this.dataManager.getCurrentMatches().length);
+                console.log('  Matchs non planifiés:', rawUnscheduledData.length);
+                console.log('  Créneaux disponibles:', rawAvailableSlotsData.length);
                 
-                const stats = Utils.calculateStats(matchsData);
+                const currentMatches = this.dataManager.getCurrentMatches();
+                const stats = Utils.calculateStats(currentMatches);
                 
                 // Update header stats
                 document.getElementById('totalMatches').textContent = stats.totalMatches;
-                document.getElementById('totalUnscheduled').textContent = unscheduledData.length;
+                document.getElementById('totalUnscheduled').textContent = rawUnscheduledData.length;
                 document.getElementById('totalWeeks').textContent = stats.totalWeeks;
                 document.getElementById('totalPools').textContent = stats.totalPools;
                 document.getElementById('totalVenues').textContent = stats.totalVenues;
-                document.getElementById('totalAvailableSlots').textContent = availableSlotsData.length;
+                document.getElementById('totalAvailableSlots').textContent = rawAvailableSlotsData.length;
                 
                 // Update unscheduled tab
-                if (unscheduledData.length > 0) {
-                    document.getElementById('unscheduledTab').textContent = `⚠️ Non Planifiés (${unscheduledData.length})`;
+                if (rawUnscheduledData.length > 0) {
+                    document.getElementById('unscheduledTab').textContent = `⚠️ Non Planifiés (${rawUnscheduledData.length})`;
                 }
                 
                 // Initialize filter manager
@@ -243,7 +416,79 @@
                 // Initial render
                 this.render(this.filterManager.filters, this.filterManager.preferences);
                 
+                // Initialize UI panels
+                this.initializePanels();
+                
+                // Setup drag-and-drop history tracking
+                this.setupDragAndDropHistory();
+                
                 console.log('✅ Initialisation terminée');
+            }
+            
+            initializePanels() {
+                // Create UI panels
+                window.conflictPanel = new ConflictPanel(this.conflictDetector);
+                window.historyPanel = new HistoryPanel(this.historyManager);
+                window.resolverPanel = new ResolverPanel(this.autoResolver);
+                
+                // Expose managers globally
+                window.conflictDetector = this.conflictDetector;
+                window.autoResolver = this.autoResolver;
+                window.historyManager = this.historyManager;
+                
+                // Initial conflict detection
+                this.updateConflicts();
+                
+                console.log('✅ Panels initialized');
+            }
+            
+            setupDragAndDropHistory() {
+                // Override the saveModification function to track history
+                if (window.editModal) {
+                    const originalSaveModification = window.editModal.saveModification.bind(window.editModal);
+                    
+                    window.editModal.saveModification = (modification) => {
+                        // Save modification as usual
+                        originalSaveModification(modification);
+                        
+                        // Track in history
+                        window.historyManager.pushAction({
+                            type: 'move',
+                            description: `Déplacé match vers ${modification.new.venue} à ${modification.new.time}`,
+                            data: {
+                                matchId: modification.match_id,
+                                from: modification.original,
+                                to: modification.new
+                            }
+                        });
+                        
+                        // Update conflicts after modification
+                        setTimeout(() => this.updateConflicts(), 300);
+                    };
+                }
+            }
+            
+            updateConflicts() {
+                if (!window.conflictPanel) return;
+                
+                // Detect conflicts
+                window.conflictPanel.update(matchsData);
+                
+                // Add badges to match cards
+                window.conflictPanel.addConflictBadges(matchsData);
+                
+                // Update conflict count badge
+                const stats = this.conflictDetector.getConflictStats();
+                const badge = document.getElementById('conflictBadge');
+                if (badge) {
+                    badge.textContent = stats.critical;
+                    badge.style.display = stats.critical > 0 ? 'inline-block' : 'none';
+                }
+                
+                // Update resolver suggestions
+                if (window.resolverPanel) {
+                    window.resolverPanel.update(matchsData, availableSlotsData);
+                }
             }
             
             setupTabs() {
@@ -270,8 +515,10 @@
             }
             
             render(filters, preferences) {
-                const filtered = this.filterManager.getFilteredMatches(matchsData);
-                const unscheduledFiltered = this.filterManager.getFilteredUnscheduled(unscheduledData);
+                // Utiliser les données actuelles du DataManager
+                const currentMatches = this.dataManager.getCurrentMatches();
+                const filtered = this.filterManager.getFilteredMatches(currentMatches);
+                const unscheduledFiltered = this.filterManager.getFilteredUnscheduled(rawUnscheduledData);
                 
                 // Update filter info
                 CalendarView.updateFilterInfo(filtered, unscheduledFiltered, filters);
@@ -284,13 +531,20 @@
                         break;
                     case 'grid':
                         // Nouvelle vue grille type Google Calendar
-                        // IMPORTANT: Utiliser matchsData (tous les matchs) et non filtered
-                        // Car la vue grille gère elle-même le filtrage par semaine
+                        // Utiliser UNIQUEMENT les matchs planifiés (avec gymnase et horaire)
+                        const scheduledMatches = currentMatches.filter(m => m.gymnase && m.horaire);
                         const container = document.getElementById('gridContent');
                         console.log('🔄 Render grid - Tab actif:', this.currentTab);
-                        console.log('  Total matchs:', matchsData.length);
+                        console.log('  Total matchs planifiés:', scheduledMatches.length, '(sur', currentMatches.length, 'total)');
                         console.log('  Container:', container);
-                        this.calendarGridView.render(container, matchsData, availableSlotsData, filters, preferences);
+                        this.calendarGridView.render(container, scheduledMatches, rawAvailableSlotsData, filters, preferences);
+                        break;
+                    case 'simpleAgenda':
+                        // NOUVELLE VUE: Agenda simplifié
+                        const scheduledMatchesAgenda = currentMatches.filter(m => m.gymnase && m.horaire);
+                        const containerAgenda = document.getElementById('simpleAgendaContent');
+                        console.log('🆕 Render simple-agenda - Matchs:', scheduledMatchesAgenda.length);
+                        SimpleAgendaView.instance.render(containerAgenda, scheduledMatchesAgenda, filters, preferences);
                         break;
                     case 'pools':
                         CalendarView.renderByPool(filtered, filters, preferences);
@@ -310,6 +564,7 @@
         
         // ==================== LANCEMENT ====================
         const app = new PyCalendarApp();
+        window.app = app; // Expose globally for drag-and-drop callbacks
         
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', () => app.init());

@@ -173,7 +173,7 @@ class SolutionStore:
         )
     
     def save_solution(self, solution: Solution, signature: ConfigSignature,
-                     config_name: str = "unknown") -> Path:
+                     config_name: str = "unknown", fixed_matches: List = None) -> Path:
         """
         Sauvegarde une solution avec sa signature de configuration.
         
@@ -181,12 +181,21 @@ class SolutionStore:
             solution: La solution à sauvegarder
             signature: Signature de la configuration utilisée
             config_name: Nom de la configuration (pour traçabilité)
+            fixed_matches: Liste des matchs fixes originaux (pour marquer is_fixed)
             
         Returns:
             Path du fichier sauvegardé
         """
         timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
         filename = self.solutions_dir / f"solution_{self.solution_name}_{timestamp}.json"
+        
+        # Créer un index des matchs fixes pour une recherche rapide
+        fixed_matches_index = set()
+        if fixed_matches:
+            for match in fixed_matches:
+                # Clé unique basée sur les noms d'équipes et la semaine
+                key = f"{match.equipe1.nom}|{match.equipe2.nom}|{match.metadata.get('semaine', '')}"
+                fixed_matches_index.add(key)
         
         data = {
             "metadata": {
@@ -198,6 +207,7 @@ class SolutionStore:
                 "score": float(solution.score),
                 "matchs_planifies": len(solution.matchs_planifies),
                 "matchs_non_planifies": len(solution.matchs_non_planifies),
+                "matchs_fixes": len(fixed_matches) if fixed_matches else 0,
             },
             "config_signature": signature.to_dict(),
             "assignments": [
@@ -209,9 +219,11 @@ class SolutionStore:
                     "equipe2_nom": match.equipe2.nom,
                     "equipe2_genre": match.equipe2.genre,
                     "equipe2_id": match.equipe2.id_unique,
+                    "poule": match.poule,  # Ajout du champ poule
                     "semaine": match.creneau.semaine,
                     "horaire": match.creneau.horaire,
                     "gymnase": match.creneau.gymnase,
+                    "is_fixed": f"{match.equipe1.nom}|{match.equipe2.nom}|{match.creneau.semaine}" in fixed_matches_index,
                 }
                 for i, match in enumerate(solution.matchs_planifies)
             ]

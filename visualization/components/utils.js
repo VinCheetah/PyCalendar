@@ -96,14 +96,14 @@ const Utils = {
         };
         
         matches.forEach(m => {
-            stats.weeks.add(m.semaine);
-            stats.pools.add(m.poule);
-            stats.venues.add(m.gymnase);
-            stats.institutions.add(m.institution1);
-            stats.institutions.add(m.institution2);
-            stats.teams.add(m.equipe1);
-            stats.teams.add(m.equipe2);
-            stats.timeSlots.add(m.horaire);
+            if (m.semaine) stats.weeks.add(m.semaine);
+            if (m.poule) stats.pools.add(m.poule);
+            if (m.gymnase) stats.venues.add(m.gymnase);
+            if (m.institution1) stats.institutions.add(m.institution1);
+            if (m.institution2) stats.institutions.add(m.institution2);
+            if (m.equipe1) stats.teams.add(m.equipe1);
+            if (m.equipe2) stats.teams.add(m.equipe2);
+            if (m.horaire) stats.timeSlots.add(m.horaire);
         });
         
         return {
@@ -126,6 +126,11 @@ const Utils = {
      * Parse une heure au format "HH:MM" en minutes depuis minuit
      */
     parseTime(timeStr) {
+        // Vérifier si timeStr est null, undefined ou vide
+        if (!timeStr || typeof timeStr !== 'string') {
+            return 0; // Retourner 0 pour minuit par défaut
+        }
+        
         const [hours, minutes] = timeStr.split(':').map(Number);
         return hours * 60 + (minutes || 0);
     },
@@ -248,6 +253,9 @@ const Utils = {
      * Échappe le HTML
      */
     escapeHtml(text) {
+        if (text == null) {
+            return '';
+        }
         const map = {
             '&': '&amp;',
             '<': '&lt;',

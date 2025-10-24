@@ -33,6 +33,7 @@ class SchedulingPipeline:
         self.groupes_non_simultaneite = {}
         self.ententes = {}
         self.contraintes_temporelles = {}
+        self.niveaux_gymnases = {}
     
     def run(self):
         """Execute the complete scheduling pipeline."""
@@ -46,6 +47,7 @@ class SchedulingPipeline:
         self.groupes_non_simultaneite = self._load_groupes_non_simultaneite()
         self.ententes = self._load_ententes()
         self.contraintes_temporelles = self._load_contraintes_temporelles()
+        self.niveaux_gymnases = self._load_niveaux_gymnases()
         
         if not self._validate_data(equipes, gymnases):
             print("❌ Erreurs de validation. Arrêt du pipeline.")
@@ -54,14 +56,33 @@ class SchedulingPipeline:
         poules = self.source.get_poules_dict(equipes)
         self._afficher_info_donnees(equipes, poules, gymnases)
         
+        # Charger les matchs fixes
+        matchs_fixes = self._load_matchs_fixes()
+        
         matchs = self._generer_matchs(poules)
-        creneaux = DataTransformer.generer_creneaux(gymnases, self.config.nb_semaines)
         
-        print(f"✓ {len(matchs)} matchs à planifier sur {len(creneaux)} créneaux disponibles\n")
+        # Exclure les matchs déjà fixés de la génération
+        if matchs_fixes:
+            matchs = self._exclure_matchs_fixes(matchs, matchs_fixes)
         
-        solution = self._resoudre(matchs, creneaux.copy(), gymnases)
+        creneaux = DataTransformer.generer_creneaux(gymnases, self.config.nb_semaines, self.config.calendar_manager)
+        
+        # Exclure les créneaux occupés par les matchs fixes
+        if matchs_fixes:
+            creneaux = self._exclure_creneaux_fixes(creneaux, matchs_fixes, gymnases)
+        
+        print(f"✓ {len(matchs)} matchs à planifier sur {len(creneaux)} créneaux disponibles")
+        if matchs_fixes:
+            print(f"  ({len(matchs_fixes)} matchs fixes déjà planifiés)")
+        print()
+        
+        solution = self._resoudre(matchs, creneaux.copy(), gymnases, matchs_fixes)
         
         if solution:
+            # Intégrer les matchs fixes dans la solution
+            if matchs_fixes:
+                solution = self._integrer_matchs_fixes(solution, matchs_fixes, gymnases)
+            
             # Calculer les créneaux restants
             creneaux_utilises = {(m.creneau.gymnase, m.creneau.semaine, m.creneau.horaire) 
                                 for m in solution.matchs_planifies if m.creneau}
@@ -72,6 +93,9 @@ class SchedulingPipeline:
             
             # Validation post-solution
             self._valider_solution(solution, gymnases)
+            
+            # Sauvegarder la solution avec les matchs fixes pour traçabilité
+            self._save_solution(solution, matchs, creneaux, gymnases, matchs_fixes)
             
             self._exporter_solution(solution)
             return solution
@@ -173,6 +197,127 @@ class SchedulingPipeline:
             print()
             return {}
     
+    def _load_niveaux_gymnases(self) -> Dict[str, str]:
+        """Load gymnasium level classifications (high/low level)."""
+        print("🏆 Chargement des niveaux de gymnases...")
+        try:
+            niveaux = self.source.charger_niveaux_gymnases()
+            
+            if niveaux:
+                haut_niveau = [g for g, n in niveaux.items() if n == 'Haut niveau']
+                bas_niveau = [g for g, n in niveaux.items() if n == 'Bas niveau']
+                
+                print(f"✓ {len(niveaux)} gymnases classés:")
+                if haut_niveau:
+                    print(f"  • Haut niveau ({len(haut_niveau)}): {', '.join(sorted(haut_niveau))}")
+                if bas_niveau:
+                    print(f"  • Bas niveau ({len(bas_niveau)}): {', '.join(sorted(bas_niveau))}")
+            else:
+                print("  ℹ️  Aucun gymnase classé par niveau")
+            print()
+            return niveaux
+        except Exception as e:
+            print(f"  ⚠️  Erreur lors du chargement des niveaux de gymnases: {e}")
+            print()
+            return {}
+    
+    def _load_matchs_fixes(self):
+        """Load fixed/already played matches."""
+        print("📌 Chargement des matchs fixes...")
+        try:
+            matchs_fixes = self.source.charger_matchs_fixes()
+            
+            if matchs_fixes:
+                print(f"✓ {len(matchs_fixes)} matchs fixes chargés:")
+                for match in matchs_fixes[:5]:  # Afficher les 5 premiers
+                    meta = match.metadata
+                    print(f"  • {match.equipe1.nom} vs {match.equipe2.nom} - S{meta['semaine']} {meta['horaire']} @ {meta['gymnase']}")
+                if len(matchs_fixes) > 5:
+                    print(f"  ... et {len(matchs_fixes) - 5} autres")
+            else:
+                print("  ℹ️  Aucun match fixe défini")
+            print()
+            return matchs_fixes
+        except Exception as e:
+            print(f"  ⚠️  Erreur lors du chargement des matchs fixes: {e}")
+            print()
+            return []
+    
+    def _exclure_matchs_fixes(self, matchs, matchs_fixes):
+        """Exclut les matchs déjà fixés de la liste des matchs à planifier."""
+        if not matchs_fixes:
+            return matchs
+        
+        # Créer un ensemble des paires d'équipes déjà fixées (ordre non important)
+        paires_fixes = set()
+        for match_fixe in matchs_fixes:
+            eq1, eq2 = match_fixe.equipe1.nom, match_fixe.equipe2.nom
+            paires_fixes.add(tuple(sorted([eq1, eq2])))
+        
+        # Filtrer les matchs
+        matchs_a_planifier = []
+        for match in matchs:
+            eq1, eq2 = match.equipe1.nom, match.equipe2.nom
+            paire = tuple(sorted([eq1, eq2]))
+            if paire not in paires_fixes:
+                matchs_a_planifier.append(match)
+        
+        nb_exclus = len(matchs) - len(matchs_a_planifier)
+        if nb_exclus > 0:
+            print(f"  ℹ️  {nb_exclus} matchs exclus de la planification (déjà fixés)")
+        
+        return matchs_a_planifier
+    
+    def _exclure_creneaux_fixes(self, creneaux, matchs_fixes, gymnases):
+        """Exclut les créneaux occupés par les matchs fixes."""
+        if not matchs_fixes:
+            return creneaux
+        
+        # Créer un ensemble des créneaux occupés
+        creneaux_occupes = set()
+        for match_fixe in matchs_fixes:
+            meta = match_fixe.metadata
+            creneaux_occupes.add((meta['gymnase'], meta['semaine'], meta['horaire']))
+        
+        # Filtrer les créneaux
+        creneaux_disponibles = []
+        for creneau in creneaux:
+            key = (creneau.gymnase, creneau.semaine, creneau.horaire)
+            if key not in creneaux_occupes:
+                creneaux_disponibles.append(creneau)
+        
+        nb_exclus = len(creneaux) - len(creneaux_disponibles)
+        if nb_exclus > 0:
+            print(f"  ℹ️  {nb_exclus} créneaux exclus (occupés par matchs fixes)")
+        
+        return creneaux_disponibles
+    
+    def _integrer_matchs_fixes(self, solution, matchs_fixes, gymnases):
+        """Intègre les matchs fixes dans la solution finale."""
+        from core.models import Creneau
+        
+        # Créer les créneaux pour les matchs fixes
+        for match_fixe in matchs_fixes:
+            meta = match_fixe.metadata
+            
+            # Créer le créneau correspondant
+            creneau = Creneau(
+                semaine=meta['semaine'],
+                horaire=meta['horaire'],
+                gymnase=meta['gymnase']
+            )
+            
+            # Assigner le créneau au match
+            match_fixe.creneau = creneau
+            
+            # Ajouter aux matchs planifiés
+            solution.matchs_planifies.append(match_fixe)
+        
+        # Trier par semaine pour un affichage cohérent
+        solution.matchs_planifies.sort(key=lambda m: (m.creneau.semaine, m.creneau.horaire) if m.creneau else (999, ''))
+        
+        return solution
+    
     def _validate_data(self, equipes: List[Equipe], gymnases: List[Gymnase]) -> bool:
         """Validate loaded data."""
         print("\n🔍 Validation des données...")
@@ -211,29 +356,29 @@ class SchedulingPipeline:
         print(f"✓ {len(matchs)} matchs générés")
         return matchs
     
-    def _resoudre(self, matchs, creneaux, gymnases):
+    def _resoudre(self, matchs, creneaux, gymnases, matchs_fixes=None):
         """Solve the scheduling problem with optional warm start."""
         print(f"🧮 Résolution avec algorithme: {self.config.strategie.upper()}\n")
         
         gymnases_dict = {g.nom: g for g in gymnases}
         
         if self.config.strategie == "greedy":
-            solver = GreedySolver(self.config, self.groupes_non_simultaneite, self.ententes, self.contraintes_temporelles)
+            solver = GreedySolver(self.config, self.groupes_non_simultaneite, self.ententes, self.contraintes_temporelles, self.niveaux_gymnases)
             solution = solver.solve(matchs, creneaux, gymnases_dict, self.obligations_presence)
             
             # Sauvegarder la solution pour utilisation future
             if solution and solution.matchs_planifies:
-                self._save_solution(solution, matchs, creneaux, gymnases)
+                self._save_solution(solution, matchs, creneaux, gymnases, matchs_fixes)
             
             return solution
         
         elif self.config.strategie == "cpsat":
             if not CPSAT_AVAILABLE:
                 print("⚠️  OR-Tools non installé, basculement vers Greedy")
-                solver = GreedySolver(self.config, self.groupes_non_simultaneite, self.ententes, self.contraintes_temporelles)
+                solver = GreedySolver(self.config, self.groupes_non_simultaneite, self.ententes, self.contraintes_temporelles, self.niveaux_gymnases)
                 return solver.solve(matchs, creneaux, gymnases_dict, self.obligations_presence)
             
-            solver = CPSATSolver(self.config, self.groupes_non_simultaneite, self.ententes, self.contraintes_temporelles)
+            solver = CPSATSolver(self.config, self.groupes_non_simultaneite, self.ententes, self.contraintes_temporelles, self.niveaux_gymnases)
             try:
                 # CP-SAT avec warm start activé par défaut
                 use_warm_start = getattr(self.config, 'cpsat_warm_start', True)
@@ -243,7 +388,7 @@ class SchedulingPipeline:
                 
                 # Sauvegarder la solution pour utilisation future
                 if solution and solution.matchs_planifies:
-                    self._save_solution(solution, matchs, creneaux, gymnases)
+                    self._save_solution(solution, matchs, creneaux, gymnases, matchs_fixes)
                 
                 return solution
                 
@@ -258,7 +403,7 @@ class SchedulingPipeline:
             print(f"❌ Stratégie inconnue: {self.config.strategie}")
             return None
     
-    def _save_solution(self, solution: Solution, matchs, creneaux, gymnases):
+    def _save_solution(self, solution: Solution, matchs, creneaux, gymnases, matchs_fixes=None):
         """Sauvegarde la solution avec sa signature pour réutilisation future."""
         try:
             from core.solution_store import SolutionStore
@@ -291,7 +436,8 @@ class SchedulingPipeline:
             store.save_solution(
                 solution=solution,
                 signature=signature,
-                config_name=str(self.source.fichier_config)
+                config_name=str(self.source.fichier_config),
+                fixed_matches=matchs_fixes
             )
             
         except Exception as e:
@@ -311,18 +457,13 @@ class SchedulingPipeline:
         print("💾 Export de la solution...")
         ExcelExporter.export(solution, self.config.fichier_sortie)
         
-        # Calculer les créneaux restants pour passer au visualizer
-        creneaux_utilises = {(m.creneau.gymnase, m.creneau.semaine, m.creneau.horaire) 
-                            for m in solution.matchs_planifies if m.creneau}
-        
-        # Récupérer tous les créneaux depuis les données
+        # Générer TOUS les créneaux possibles (occupés et libres)
+        # Le visualizer gérera le statut libre/occupé
         gymnases = self.source.charger_gymnases()
-        tous_creneaux = DataTransformer.generer_creneaux(gymnases, self.config.nb_semaines)
-        creneaux_restants = [c for c in tous_creneaux 
-                            if (c.gymnase, c.semaine, c.horaire) not in creneaux_utilises]
+        tous_creneaux = DataTransformer.generer_creneaux(gymnases, self.config.nb_semaines, self.config.calendar_manager)
         
-        # Stocker dans metadata de la solution
-        solution.metadata['creneaux_disponibles'] = creneaux_restants
+        # Stocker TOUS les créneaux dans metadata (pas seulement les libres)
+        solution.metadata['creneaux_disponibles'] = tous_creneaux
         
         html_path = self.config.fichier_sortie.replace('.xlsx', '.html')
         #html_file = HTMLVisualizer.generate(solution, html_path)
