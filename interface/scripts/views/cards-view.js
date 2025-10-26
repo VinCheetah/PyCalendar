@@ -242,12 +242,24 @@ class CardsView {
      * Génère une carte de match
      */
     _generateMatchCard(match, data) {
-        const equipes = this.dataManager.getEquipesByIds(match.equipes);
         const gymnase = this.dataManager.getGymnaseById(match.gymnase);
         const poule = this.dataManager.getPouleById(match.poule);
         
-        const equipe1 = equipes[0] || { nom: 'Équipe 1', institution: 'N/A' };
-        const equipe2 = equipes[1] || { nom: 'Équipe 2', institution: 'N/A' };
+        // Les données d'équipe sont déjà dans le match (format v2.0)
+        const equipe1 = {
+            id: match.equipe1_id,
+            nom: match.equipe1_nom || 'Équipe 1',
+            nom_complet: match.equipe1_nom_complet || match.equipe1_nom || 'Équipe 1',
+            institution: match.equipe1_institution || 'N/A',
+            genre: match.equipe1_genre
+        };
+        const equipe2 = {
+            id: match.equipe2_id,
+            nom: match.equipe2_nom || 'Équipe 2',
+            nom_complet: match.equipe2_nom_complet || match.equipe2_nom || 'Équipe 2',
+            institution: match.equipe2_institution || 'N/A',
+            genre: match.equipe2_genre
+        };
         
         // Calculer la classe de couleur selon le mode
         let colorClass = '';
@@ -289,14 +301,14 @@ class CardsView {
                     
                     <div class="card-teams">
                         <div class="team">
-                            <div class="team-name">${equipe1.nom}</div>
+                            <div class="team-name">${equipe1.nom_complet || equipe1.nom}</div>
                             <div class="team-institution">${equipe1.institution}</div>
                         </div>
                         
                         <div class="vs">VS</div>
                         
                         <div class="team">
-                            <div class="team-name">${equipe2.nom}</div>
+                            <div class="team-name">${equipe2.nom_complet || equipe2.nom}</div>
                             <div class="team-institution">${equipe2.institution}</div>
                         </div>
                     </div>

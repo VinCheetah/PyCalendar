@@ -66,6 +66,7 @@ class Config:
     # Institution overlaps (soft constraint)
     overlap_institution_actif: bool
     overlap_institution_poids: float
+    overlap_institution_institutions: List[str]  # Liste des institutions à surveiller (vide = toutes)
     
     # Ententes (specific institution pairs - reduced penalty when unscheduled)
     entente_penalite_non_planif: float  # Pénalité par défaut si match entente non planifié
@@ -92,6 +93,9 @@ class Config:
     max_matchs_par_equipe_par_semaine: int
     afficher_progression: bool
     niveau_log: int
+    
+    # Solution format
+    solution_format: str = "v2.0"  # Format de sauvegarde: 'v1.0' ou 'v2.0' (défaut: 'v2.0')
     
     # Additional parameters
     extra: Dict[str, Any] = field(default_factory=dict)
@@ -213,6 +217,7 @@ class Config:
             # Overlaps institution
             config_dict['overlap_institution_actif'] = ct['overlap_institution_actif']
             config_dict['overlap_institution_poids'] = ct['overlap_institution_poids']
+            config_dict['overlap_institution_institutions'] = ct.get('overlap_institution_institutions', [])
             
             # Ententes (paires d'institutions spécifiques)
             config_dict['entente_actif'] = ct['entente_actif']
@@ -295,6 +300,7 @@ class Config:
                 # Overlaps institution
                 'overlap_institution_actif': self.overlap_institution_actif,
                 'overlap_institution_poids': self.overlap_institution_poids,
+                'overlap_institution_institutions': self.overlap_institution_institutions,
                 # Ententes (paires d'institutions spécifiques)
                 'entente_actif': self.entente_actif,
                 'entente_penalite_non_planif': self.entente_penalite_non_planif,

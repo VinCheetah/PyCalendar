@@ -757,6 +757,40 @@ class DataLoader:
         
         return types
     
+    def charger_groupes_non_simultaneite(self) -> Dict[str, List[str]]:
+        """
+        Charge les groupes d'équipes/institutions à ne pas faire jouer simultanément.
+        
+        Returns:
+            Dictionnaire {nom_groupe: [liste_entites]} où entites sont les équipes/institutions
+            du groupe qui ne doivent pas jouer simultanément
+        """
+        df = self.config.lire_feuille('Groupes_Non_Simultaneite')
+        
+        if df is None or df.empty:
+            logger.info("Aucun groupe de non-simultanéité défini")
+            return {}
+        
+        groupes = {}
+        for _, row in df.iterrows():
+            nom_groupe = str(row.get('Nom_Groupe', '')).strip()
+            entites_str = str(row.get('Entites', '')).strip()
+            
+            if not nom_groupe or not entites_str:
+                continue
+            
+            # Parser les entités (séparées par des virgules)
+            entites = [entite.strip() for entite in entites_str.split(',') if entite.strip()]
+            
+            if entites:
+                groupes[nom_groupe] = entites
+        
+        logger.info(f"Groupes de non-simultanéité chargés: {len(groupes)} groupe(s)")
+        for nom_groupe, entites in groupes.items():
+            logger.info(f"  - {nom_groupe}: {len(entites)} entité(s)")
+        
+        return groupes
+    
     def charger_matchs_fixes(self) -> List[Match]:
         """
         Charge les matchs déjà joués ou planifiés depuis la feuille Matchs_Fixes.
@@ -790,14 +824,25 @@ class DataLoader:
         equipes = self.charger_equipes()
         equipes_dict = {eq.nom: eq for eq in equipes}
         
-        for idx, row in df.iterrows():
+        for ligne_idx, (idx, row) in enumerate(df.iterrows()):
+            ligne_num = ligne_idx + 2  # Numéro de ligne dans Excel (header + 1-based)
             equipe1_nom = str(row.get('Equipe_1', '')).strip()
             equipe2_nom = str(row.get('Equipe_2', '')).strip()
             genre = str(row.get('Genre', '')).strip().upper()
             poule = str(row.get('Poule', '')).strip()
             
-            if not equipe1_nom or not equipe2_nom or pd.isna(equipe1_nom) or pd.isna(equipe2_nom):
-                logger.warning(f"Ligne {idx}: équipes manquantes, ligne ignorée")
+            # Nettoyer les données d'entrée
+            if pd.isna(equipe1_nom) or equipe1_nom.lower() == 'nan':
+                equipe1_nom = ''
+            if pd.isna(equipe2_nom) or equipe2_nom.lower() == 'nan':
+                equipe2_nom = ''
+            if pd.isna(genre) or genre.lower() == 'nan':
+                genre = ''
+            if pd.isna(poule) or poule.lower() == 'nan':
+                poule = ''
+            
+            if not equipe1_nom or not equipe2_nom:
+                logger.warning(f"Ligne {ligne_num}: équipes manquantes, ligne ignorée")
                 continue
             
             # Si genre présent, on l'ajoute au nom pour matcher avec les équipes de la config
@@ -818,7 +863,7 @@ class DataLoader:
                     genre=genre.lower() if genre in ['F', 'M'] else "",
                     numero_equipe=""
                 )
-                logger.info(f"Ligne {idx}: équipe externe '{equipe1_nom_complet}' créée pour match fixe")
+                logger.info(f"Ligne {ligne_num}: équipe externe '{equipe1_nom_complet}' créée pour match fixe")
             
             if not equipe2:
                 # Créer une équipe temporaire pour les équipes hors championnat
@@ -829,36 +874,26 @@ class DataLoader:
                     genre=genre.lower() if genre in ['F', 'M'] else "",
                     numero_equipe=""
                 )
-                logger.info(f"Ligne {idx}: équipe externe '{equipe2_nom_complet}' créée pour match fixe")
+                logger.info(f"Ligne {ligne_num}: équipe externe '{equipe2_nom_complet}' créée pour match fixe")
             
             semaine = row.get('Semaine')
             if pd.isna(semaine):
-                logger.warning(f"Ligne {idx+2}: semaine manquante pour {equipe1_nom} vs {equipe2_nom}, ligne ignorée")
+                logger.warning(f"Ligne {ligne_num}: semaine manquante pour {equipe1_nom} vs {equipe2_nom}, ligne ignorée")
                 continue
             try:
                 semaine = int(semaine)
             except (ValueError, TypeError):
-                logger.warning(f"Ligne {idx+2}: semaine invalide '{semaine}', ligne ignorée")
-                continue
-            
-            semaine = row.get('Semaine')
-            if pd.isna(semaine):
-                logger.warning(f"Ligne {idx}: semaine manquante pour {equipe1_nom} vs {equipe2_nom}, ligne ignorée")
-                continue
-            try:
-                semaine = int(semaine)
-            except (ValueError, TypeError):
-                logger.warning(f"Ligne {idx}: semaine invalide '{semaine}', ligne ignorée")
+                logger.warning(f"Ligne {ligne_num}: semaine invalide '{semaine}' pour {equipe1_nom} vs {equipe2_nom}, ligne ignorée")
                 continue
             
             horaire = str(row.get('Horaire', '')).strip()
             if not horaire or pd.isna(horaire):
-                logger.warning(f"Ligne {idx}: horaire manquant pour {equipe1_nom} vs {equipe2_nom}, ligne ignorée")
+                logger.warning(f"Ligne {ligne_num}: horaire manquant pour {equipe1_nom} vs {equipe2_nom}, ligne ignorée")
                 continue
             
             gymnase = str(row.get('Gymnase', '')).strip()
             if not gymnase or pd.isna(gymnase):
-                logger.warning(f"Ligne {idx}: gymnase manquant pour {equipe1_nom} vs {equipe2_nom}, ligne ignorée")
+                logger.warning(f"Ligne {ligne_num}: gymnase manquant pour {equipe1_nom} vs {equipe2_nom}, ligne ignorée")
                 continue
             
             # Informations optionnelles

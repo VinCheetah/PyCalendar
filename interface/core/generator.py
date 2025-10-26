@@ -130,6 +130,9 @@ class InterfaceGenerator:
             'styles/components/loading.css',
             'styles/components/tabs.css',
             'styles/components/views.css',
+            'styles/views/agenda-grid.css',  # Styles pour la vue agenda de base
+            'styles/utils/agenda-grid-enhanced.css',  # Styles améliorés pour côte à côte et scroll
+            'styles/views/agenda-grid-v2.css',  # NOUVEAU: Styles pour la vue agenda v2.0
             
             # Theme (last)
             'styles/themes/default-light.css',
@@ -155,6 +158,11 @@ class InterfaceGenerator:
             # Utilities (loaded first, no dependencies)
             'utils/formatters.js',
             'utils/validators.js',
+            'utils/slot-manager.js',  # Gestion des créneaux et organisation des matchs
+            'utils/match-card-renderer.js',  # Rendu optimisé des cartes de matchs
+            'utils/agenda-view-manager.js',  # Gestionnaire des vues (gymnase/semaine)
+            'utils/available-slots-manager.js',  # Gestion des créneaux disponibles
+            'utils/drag-drop-manager.js',  # Drag & drop des matchs
             
             # Core modules (order matters!)
             'core/data-manager.js',
@@ -168,13 +176,13 @@ class InterfaceGenerator:
             'components/edit/edit-modal.js',
             
             # Views (depend on everything else)
+            'views/agenda-grid-v2.js',  # NOUVEAU: Vue agenda v2.0 (remplace agenda-grid.js)
             'views/agenda-view.js',
             'views/pools-view.js',
             'views/cards-view.js',
             
             # Application initialization (loaded last)
             'app.js',
-            # 'core/app.js',  # Main app initialization (last)
         ]
         
         combined_js = []

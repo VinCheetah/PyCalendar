@@ -1,0 +1,937 @@
+/**
+ * Agenda Grid v2.0 - Styles avancés
+ * 
+ * Nouvelles fonctionnalités CSS:
+ * - Colonnes de largeur variable
+ * - Créneaux disponibles (cases vertes)
+ * - Drag & drop avec feedback visuel
+ * - Navigation
+ * - Genres et badges enrichis
+ * - Tooltips riches
+ */
+
+/* ==================== TOOLBAR ==================== */
+
+.agenda-grid-view {
+    position: relative;
+    z-index: 1;
+}
+
+.time-grid {
+    position: relative;
+    z-index: 2;
+}
+
+.agenda-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    background: var(--background-secondary, #f8f9fa);
+    border-bottom: 2px solid var(--border-color, #dee2e6);
+    flex-wrap: wrap;
+    gap: 1rem;
+    position: relative;
+    z-index: 5;
+}
+
+.toolbar-left,
+.toolbar-center,
+.toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.toolbar-group {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* Navigation */
+.toolbar-navigation {
+    padding: 0.25rem 0.75rem;
+    background: white;
+    border: 1px solid var(--border-color, #dee2e6);
+    border-radius: 6px;
+}
+
+.navigation-label {
+    font-weight: 600;
+    color: var(--primary-color, #007bff);
+    min-width: 120px;
+    text-align: center;
+}
+
+.navigation-counter {
+    font-size: 0.875rem;
+    color: var(--text-muted, #6c757d);
+    margin-left: 0.5rem;
+}
+
+/* Statistiques */
+.toolbar-stats {
+    display: flex;
+    gap: 1.5rem;
+    padding: 0.5rem 1rem;
+    background: white;
+    border-radius: 6px;
+    border: 1px solid var(--border-color, #dee2e6);
+}
+
+.stat-item {
+    font-size: 0.875rem;
+    color: var(--text-secondary, #495057);
+}
+
+.stat-item strong {
+    color: var(--primary-color, #007bff);
+    font-size: 1.125rem;
+    margin-right: 0.25rem;
+}
+
+.stat-item.stat-filtered {
+    font-size: 0.8125rem;
+    color: var(--text-muted, #adb5bd);
+    font-style: italic;
+}
+
+/* Filtres rapides */
+.quick-filters {
+    gap: 0.5rem;
+}
+
+.form-select-sm,
+.form-input-sm {
+    padding: 0.375rem 0.75rem;
+    font-size: 0.875rem;
+    border: 1px solid var(--border-color, #ced4da);
+    border-radius: 4px;
+}
+
+.form-select-sm {
+    cursor: pointer;
+}
+
+.form-input-sm {
+    max-width: 150px;
+}
+
+/* Checkbox label */
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    user-select: none;
+}
+
+.checkbox-label input[type="checkbox"] {
+    cursor: pointer;
+}
+
+/* ==================== GRID CONTAINER ==================== */
+
+.grid-container {
+    overflow-x: auto;
+    overflow-y: auto;
+    max-height: calc(100vh - 300px);
+    background: white;
+    border: 1px solid var(--border-color, #dee2e6);
+}
+
+.time-grid {
+    /* IMPORTANT: Ne pas utiliser display:table avec le système de timeline continue */
+    display: block !important; /* Au lieu de table */
+    width: 100%;
+    position: relative;
+}
+
+/* ==================== EN-TÊTE ==================== */
+
+.grid-header {
+    display: flex; /* Au lieu de table-row */
+    flex-direction: row;
+    position: sticky;
+    top: 0;
+    z-index: 100; /* Au-dessus des matchs (qui sont à z-index 50) */
+    background: var(--background-secondary, #f8f9fa);
+    border-bottom: 2px solid var(--border-color, #dee2e6);
+}
+
+.header-cell,
+.column-header {
+    /* Au lieu de table-cell, utiliser flex */
+    flex: 0 0 auto;
+    padding: 1rem;
+    font-weight: 600;
+    text-align: center;
+    border-right: 1px solid var(--border-color, #dee2e6);
+    border-bottom: 2px solid var(--border-color, #dee2e6);
+    background: var(--background-secondary, #f8f9fa);
+    vertical-align: middle;
+}
+
+.time-column {
+    position: sticky;
+    left: 0;
+    z-index: 110; /* Au-dessus de tout dans le header */
+    background: var(--background-secondary, #f8f9fa);
+    min-width: 100px;
+    max-width: 100px;
+}
+
+.column-header {
+    min-width: 240px; /* Base, peut être override en inline */
+}
+
+.column-title {
+    font-size: 1rem;
+    color: var(--text-primary, #212529);
+    margin-bottom: 0.25rem;
+}
+
+.column-subtitle {
+    font-size: 0.75rem;
+    font-weight: 400;
+    color: var(--text-muted, #6c757d);
+    font-style: italic;
+}
+
+.capacity-badge {
+    display: inline-block;
+    padding: 0.25rem 0.5rem;
+    background: var(--primary-color, #007bff);
+    color: white;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    margin-top: 0.25rem;
+}
+
+/* ==================== CORPS DE LA GRILLE - TIMELINE CONTINUE ==================== */
+
+.grid-body-continuous {
+    position: relative;
+    overflow-y: auto;
+    overflow-x: auto;
+    max-height: calc(100vh - 200px);
+    min-height: 600px; /* Hauteur minimale raisonnable */
+    background: var(--background-light, #ffffff);
+}
+
+.time-scale-column {
+    position: sticky;
+    left: 0;
+    width: 100px;
+    background: var(--background-secondary, #f8f9fa);
+    z-index: 90; /* Au-dessus des matchs mais en dessous du header */
+    border-right: 2px solid var(--border-color, #dee2e6);
+}
+
+.time-marker {
+    height: 1px;
+    display: flex;
+    align-items: flex-start;
+}
+
+.time-marker .time-label {
+    position: absolute;
+    left: 0;
+    top: -10px;
+    padding: 0 0.5rem;
+    background: var(--background-secondary, #f8f9fa);
+    font-weight: 600;
+    font-size: 0.875rem;
+    color: var(--text-primary, #212529);
+    z-index: 2;
+}
+
+.time-marker .time-line {
+    position: absolute;
+    left: 100px;
+    right: 0;
+    top: 0;
+    height: 1px;
+    background: var(--border-color, #dee2e6);
+    z-index: 1;
+}
+
+.columns-container {
+    display: flex;
+    flex-direction: row;
+    min-height: 100%;
+}
+
+.column-content {
+    position: relative;
+    flex-shrink: 0;
+    border-right: 1px solid var(--border-color, #dee2e6);
+    background: var(--background-light, #ffffff);
+    min-height: 100%;
+}
+
+/* Debug: rendre les colonnes visibles même vides */
+.column-content:empty::before {
+    content: 'Aucun match';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: #adb5bd;
+    font-size: 0.875rem;
+    font-style: italic;
+}
+
+.match-group {
+    background: rgba(255, 255, 255, 0.95);
+    border: 1px solid var(--border-color, #dee2e6);
+    border-radius: 4px;
+    transition: background-color 0.2s, border-color 0.2s;
+    overflow: hidden; /* Empêcher le débordement */
+    z-index: 50; /* En dessous du header et de la colonne horaire */
+}
+
+.match-group:hover {
+    background: rgba(255, 255, 255, 0.95);
+    border-color: var(--primary-color, #007bff);
+}
+
+.match-group[data-drop-zone="true"].drag-over {
+    background: rgba(16, 185, 129, 0.1);
+    border: 2px dashed #10b981;
+}
+
+.match-group-content {
+    display: flex;
+    flex-direction: row;
+    gap: 8px;
+    align-items: stretch;
+    width: 100%;
+    height: 100%;
+}
+
+.match-group-content .match-card,
+.match-group-content .available-slot-card {
+    flex: 1 1 0;
+    min-width: 120px; /* Largeur minimale raisonnable */
+    height: 100%;
+    overflow: hidden; /* Empêcher le débordement */
+}
+
+/* Rendre les cartes compactes et éviter les débordements */
+.match-group-content .match-card {
+    padding: 0.5rem;
+    font-size: 0.75rem;
+    line-height: 1.2;
+}
+
+.match-group-content .match-card .match-header {
+    margin-bottom: 0.25rem;
+}
+
+.match-group-content .match-card .match-teams {
+    margin-bottom: 0.25rem;
+}
+
+.match-group-content .match-card .team-name {
+    font-size: 0.7rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.match-group-content .match-card .team-institution {
+    font-size: 0.65rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.match-group-content .match-card .match-time {
+    font-size: 0.7rem;
+}
+
+.match-group-content .match-card .match-details {
+    font-size: 0.65rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ==================== ANCIEN SYSTÈME (DÉSACTIVÉ) ==================== */
+
+.grid-body {
+    display: table-row-group;
+}
+
+.time-row {
+    display: table-row;
+}
+
+.time-cell,
+.slot-cell {
+    display: table-cell;
+    border-right: 1px solid var(--border-color, #dee2e6);
+    border-bottom: 1px solid var(--border-color, #dee2e6);
+    vertical-align: top;
+}
+
+.time-cell {
+    background: var(--background-secondary, #f8f9fa);
+    text-align: center;
+    padding: 1rem 0.5rem;
+}
+
+.time-label {
+    font-weight: 600;
+    color: var(--text-primary, #212529);
+    font-size: 0.875rem;
+}
+
+.slot-cell {
+    padding: 0.5rem;
+    min-height: 140px; /* HAUTEUR FIXE pour échelle égale */
+    max-height: 140px;
+    position: relative;
+    transition: background-color 0.2s;
+    overflow: visible; /* Permet aux tooltips de déborder */
+}
+
+/* États des créneaux */
+.slot-empty {
+    background: var(--background-light, #ffffff);
+}
+
+.slot-multi-match {
+    background: var(--background-light, #ffffff); /* Fond blanc comme les autres */
+}
+
+.slot-over-capacity {
+    background: linear-gradient(135deg, #fee2e2 0%, #fef2f2 100%);
+    border-left: 3px solid #dc2626;
+}
+
+.slot-conflict-warning {
+    border-left: 3px solid #f59e0b;
+}
+
+.slot-conflict-critical {
+    border-left: 4px solid #dc2626;
+    box-shadow: inset 0 0 0 1px rgba(220, 38, 38, 0.2);
+}
+
+/* ==================== CRÉNEAUX VIDES ==================== */
+
+.empty-slot-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    min-height: 80px;
+    color: var(--text-muted, #adb5bd);
+    font-size: 0.875rem;
+}
+
+.empty-text {
+    opacity: 0.5;
+}
+
+/* ==================== MATCHS DANS LES CRÉNEAUX ==================== */
+
+.slot-matches-grid {
+    display: flex;
+    flex-direction: row;
+    gap: 0.5rem;
+    width: 100%;
+    height: 100%;
+    align-items: stretch;
+}
+
+.slot-matches-horizontal {
+    /* Layout horizontal uniquement : tous les matchs côte à côte */
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+}
+
+.slot-matches-horizontal .match-card {
+    flex: 1 1 0; /* Largeur égale pour chaque match */
+    min-width: 180px;
+    max-width: none; /* Pas de limite - s'étend pour remplir */
+}
+
+/* ==================== CRÉNEAUX DISPONIBLES ==================== */
+
+/* Les cartes disponibles sont maintenant intégrées dans le flex horizontal */
+.available-slot-card {
+    background: linear-gradient(135deg, #d1fae5 0%, #ecfdf5 100%);
+    border: 2px dashed #10b981;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    flex: 1 1 0; /* Même comportement flex que les cartes de matchs */
+    min-width: 180px;
+}
+
+.available-slot-card:hover {
+    background: linear-gradient(135deg, #a7f3d0 0%, #d1fae5 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
+}
+
+.available-slot-card.drag-over {
+    background: linear-gradient(135deg, #6ee7b7 0%, #a7f3d0 100%);
+    border-color: #059669;
+    border-style: solid;
+    transform: scale(1.02);
+}
+
+.available-slot-icon {
+    font-size: 2rem;
+    color: #10b981;
+    font-weight: bold;
+}
+
+/* ==================== CARTES DE MATCHS ENRICHIES ==================== */
+
+.match-card {
+    background: white;
+    border: 2px solid var(--border-color, #dee2e6);
+    border-radius: 8px;
+    padding: 0.75rem;
+    position: relative;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    overflow: visible; /* Permet au tooltip de dépasser */
+}
+
+.match-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    border-color: var(--primary-color, #007bff);
+}
+
+/* Genres */
+.match-card.match-male {
+    border-left: 4px solid #3b82f6;
+}
+
+.match-card.match-female {
+    border-left: 4px solid #ec4899;
+}
+
+/* Drag & drop */
+.match-card.match-draggable {
+    cursor: move;
+}
+
+.match-card.dragging {
+    opacity: 0.5;
+    cursor: grabbing;
+}
+
+.match-card.drag-over {
+    border-color: var(--success-color, #28a745);
+    background: rgba(40, 167, 69, 0.1);
+    transform: scale(1.02);
+}
+
+/* En-tête de carte */
+.match-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+
+.match-time {
+    font-size: 0.75rem;
+    color: var(--text-muted, #6c757d);
+    font-weight: 600;
+}
+
+.genre-indicator {
+    font-size: 1.25rem;
+}
+
+/* Équipes */
+.match-teams {
+    margin: 0.5rem 0;
+}
+
+.team-info {
+    margin: 0.25rem 0;
+}
+
+.team-name-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.team-num {
+    display: inline-block;
+    background: var(--background-secondary, #f8f9fa);
+    padding: 0.125rem 0.375rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--primary-color, #007bff);
+}
+
+.team-name {
+    font-weight: 600;
+    font-size: 0.875rem;
+}
+
+.team-institution {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--text-muted, #6c757d);
+    margin-top: 0.125rem;
+}
+
+.team-prefs {
+    display: block;
+    font-size: 0.7rem;
+    color: var(--info-color, #17a2b8);
+    margin-top: 0.125rem;
+}
+
+.match-vs {
+    text-align: center;
+    font-size: 0.75rem;
+    color: var(--text-muted, #adb5bd);
+    margin: 0.25rem 0;
+}
+
+/* Détails */
+.match-details {
+    font-size: 0.75rem;
+    color: var(--text-secondary, #495057);
+    margin-top: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--border-color-light, #e9ecef);
+}
+
+.detail-poule,
+.detail-championnat {
+    padding: 0.125rem 0.375rem;
+    background: var(--primary-color, #007bff);
+    color: white;
+    border-radius: 4px;
+    font-weight: 500;
+}
+
+/* Badges */
+.match-badges {
+    display: flex;
+    gap: 0.25rem;
+}
+
+.match-badge {
+    font-size: 1rem;
+}
+
+/* Badge d'avertissement de conflit (coin supérieur droit) */
+.match-conflict-badge {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.875rem;
+    cursor: help;
+    z-index: 100; /* z-index élevé pour être au-dessus */
+    background: white;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+}
+
+.match-conflict-badge .conflict-icon {
+    display: block;
+    line-height: 1;
+}
+
+/* Tooltip du conflit - position absolute simple et efficace */
+.conflict-tooltip {
+    position: absolute;
+    top: calc(100% + 8px); /* Juste en dessous du badge */
+    right: 0;
+    padding: 1rem;
+    background: rgba(0, 0, 0, 0.95);
+    color: white;
+    border-radius: 8px;
+    font-size: 0.8125rem;
+    line-height: 1.5;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    z-index: 10000; /* Très élevé pour être au-dessus de tout */
+    pointer-events: none;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.2s ease, visibility 0.2s ease;
+    min-width: 250px;
+    max-width: 400px;
+    white-space: normal;
+}
+
+.match-conflict-badge:hover .conflict-tooltip {
+    opacity: 1;
+    visibility: visible;
+}
+
+/* Classes de conflits sur les cartes */
+.match-card.match-conflict-critical {
+    border-color: #dc2626;
+    box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.1);
+}
+
+.match-card.match-conflict-warning {
+    border-color: #f59e0b;
+    box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.1);
+}
+
+/* Mode compact */
+.match-card-compact {
+    padding: 0.5rem;
+}
+
+.match-card-compact .team-name {
+    font-size: 0.75rem;
+}
+
+.match-card-compact .match-vs {
+    font-size: 0.625rem;
+    margin: 0.125rem 0;
+}
+
+/* ==================== CRÉNEAUX DISPONIBLES ==================== */
+
+.available-slots-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.available-slot-card {
+    background: linear-gradient(135deg, #d1fae5 0%, #ecfdf5 100%);
+    border: 2px dashed #10b981;
+    border-radius: 8px;
+    padding: 0.75rem;
+    min-width: 100px;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.available-slot-card:hover {
+    background: linear-gradient(135deg, #a7f3d0 0%, #d1fae5 100%);
+    transform: scale(1.05);
+}
+
+.available-slot-card.drag-over {
+    background: linear-gradient(135deg, #6ee7b7 0%, #a7f3d0 100%);
+    border-color: #059669;
+    border-style: solid;
+}
+
+.available-slot-content {
+    text-align: center;
+}
+
+.available-icon {
+    font-size: 1.5rem;
+    color: #10b981;
+    display: block;
+}
+
+.available-text {
+    font-size: 0.75rem;
+    color: #059669;
+    font-weight: 600;
+}
+
+/* ==================== ZONES DE DROP ==================== */
+
+.slot-cell[data-drop-zone="true"] {
+    transition: background-color 0.2s;
+}
+
+.slot-cell[data-drop-zone="true"].drag-over {
+    background: rgba(16, 185, 129, 0.1);
+    border: 2px dashed #10b981;
+}
+
+/* ==================== LÉGENDE ==================== */
+
+.grid-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2rem;
+    padding: 1rem;
+    background: var(--background-secondary, #f8f9fa);
+    border-top: 2px solid var(--border-color, #dee2e6);
+}
+
+.legend-section {
+    flex: 1;
+    min-width: 200px;
+}
+
+.legend-section h4 {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-primary, #212529);
+    margin-bottom: 0.5rem;
+}
+
+.legend-items {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.8125rem;
+}
+
+.legend-badge {
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    display: inline-block;
+}
+
+.legend-badge.match-male {
+    background: #dbeafe;
+    border: 1px solid #3b82f6;
+}
+
+.legend-badge.match-female {
+    background: #fce7f3;
+    border: 1px solid #ec4899;
+}
+
+.legend-badge.penalty-low {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.legend-badge.penalty-medium {
+    background: #fed7aa;
+    color: #9a3412;
+}
+
+.legend-badge.penalty-high {
+    background: #fecaca;
+    color: #991b1b;
+}
+
+.legend-badge.available-slot-card {
+    background: #d1fae5;
+    border: 1px dashed #10b981;
+    color: #059669;
+}
+
+/* ==================== RESPONSIVE ==================== */
+
+@media (max-width: 1400px) {
+    .toolbar-left,
+    .toolbar-center,
+    .toolbar-right {
+        flex: 1 1 100%;
+    }
+    
+    .column-header {
+        min-width: 200px;
+    }
+}
+
+@media (max-width: 1024px) {
+    .toolbar-stats {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+    
+    .legend-section {
+        flex: 1 1 100%;
+    }
+}
+
+/* ==================== SCROLLBAR STYLING ==================== */
+
+.grid-container::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+}
+
+.grid-container::-webkit-scrollbar-track {
+    background: var(--background-light, #f1f3f5);
+}
+
+.grid-container::-webkit-scrollbar-thumb {
+    background: var(--primary-color, #007bff);
+    border-radius: 6px;
+}
+
+.grid-container::-webkit-scrollbar-thumb:hover {
+    background: var(--primary-color-dark, #0056b3);
+}
+
+/* ==================== ÉTATS SPÉCIAUX ==================== */
+
+.empty-state,
+.error-state {
+    padding: 3rem;
+    text-align: center;
+    color: var(--text-muted, #6c757d);
+}
+
+.error-state {
+    background: #fff3cd;
+    border: 2px solid #ffc107;
+    border-radius: 8px;
+    color: #856404;
+}
+
+.error-state h3 {
+    color: #856404;
+    margin-bottom: 1rem;
+}
+
+.error-state button {
+    margin-top: 1rem;
+    padding: 0.5rem 1rem;
+    background: var(--primary-color, #007bff);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.875rem;
+}
+
+.error-state button:hover {
+    background: var(--primary-color-dark, #0056b3);
+}
+
+.empty-state {
+    font-size: 1.125rem;
+    font-weight: 500;
+}

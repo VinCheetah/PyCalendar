@@ -176,10 +176,10 @@ window.Validators = {
                 return false;
             }
             
+            // Format v2.0: les IDs d'équipe sont dans equipe1_id et equipe2_id
             return match.semaine === semaine &&
                    match.horaire === horaire &&
-                   match.equipes &&
-                   match.equipes.includes(equipeId);
+                   (match.equipe1_id === equipeId || match.equipe2_id === equipeId);
         });
         
         return !!conflict;

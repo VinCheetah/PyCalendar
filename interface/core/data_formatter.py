@@ -117,35 +117,40 @@ class DataFormatter:
     ) -> Dict[str, Any]:
         """Format all entities (teams, venues, pools)."""
         
-        # Format teams
+        # Format teams with complete data
         equipes_data = []
         for equipe in equipes:
+            # Normalize genre to uppercase (M/F) or empty string
+            genre = equipe.genre.upper() if equipe.genre else ""
+            if genre not in ["M", "F", ""]:
+                genre = ""  # Invalid genre -> empty
+            
             equipes_data.append({
                 "id": equipe.id_unique,
                 "nom": equipe.nom,
                 "nom_complet": equipe.nom_complet,
                 "institution": equipe.institution,
                 "numero_equipe": equipe.numero_equipe,
-                "genre": equipe.genre,
+                "genre": genre,
                 "poule": equipe.poule,
-                "horaires_preferes": equipe.horaires_preferes,
-                "lieux_preferes": [lieu for lieu in equipe.lieux_preferes if lieu is not None],
+                "horaires_preferes": equipe.horaires_preferes if equipe.horaires_preferes else [],
+                "lieux_preferes": [str(lieu) for lieu in equipe.lieux_preferes if lieu is not None],
                 "semaines_indisponibles": {
-                    str(sem): list(horaires) 
+                    str(sem): sorted(list(horaires)) 
                     for sem, horaires in equipe.semaines_indisponibles.items()
                 },
             })
         
-        # Format venues
+        # Format venues with complete data
         gymnases_data = []
         for gymnase in gymnases:
             gymnases_data.append({
                 "id": gymnase.nom,
                 "nom": gymnase.nom,
                 "capacite": gymnase.capacite,
-                "horaires_disponibles": gymnase.horaires_disponibles,
+                "horaires_disponibles": gymnase.horaires_disponibles if gymnase.horaires_disponibles else [],
                 "semaines_indisponibles": {
-                    str(sem): list(horaires)
+                    str(sem): sorted(list(horaires))
                     for sem, horaires in gymnase.semaines_indisponibles.items()
                 },
                 "capacite_reduite": {
@@ -171,8 +176,11 @@ class DataFormatter:
         # Collect pools from teams
         for equipe in equipes:
             if equipe.poule not in pools:
-                # Determine genre and niveau from pool name
-                genre = equipe.genre
+                # Normalize genre to uppercase (M/F) or empty string
+                genre = equipe.genre.upper() if equipe.genre else ""
+                if genre not in ["M", "F", ""]:
+                    genre = ""  # Invalid genre -> empty
+                
                 # Extract niveau from pool name (e.g., "A1 F" -> "A1")
                 niveau = equipe.poule.replace(" F", "").replace(" M", "").strip()
                 
@@ -231,22 +239,31 @@ class DataFormatter:
     ) -> Dict[str, Any]:
         """Format a single match."""
         
+        # Normalize genres to uppercase
+        equipe1_genre = match.equipe1.genre.upper() if match.equipe1.genre else ""
+        if equipe1_genre not in ["M", "F", ""]:
+            equipe1_genre = ""
+        
+        equipe2_genre = match.equipe2.genre.upper() if match.equipe2.genre else ""
+        if equipe2_genre not in ["M", "F", ""]:
+            equipe2_genre = ""
+        
         match_data = {
             "match_id": f"M_{index:04d}",
             "equipe1_id": match.equipe1.id_unique,
             "equipe1_nom": match.equipe1.nom,
             "equipe1_nom_complet": match.equipe1.nom_complet,
             "equipe1_institution": match.equipe1.institution,
-            "equipe1_genre": match.equipe1.genre,
-            "equipe1_horaires_preferes": match.equipe1.horaires_preferes,
+            "equipe1_genre": equipe1_genre,
+            "equipe1_horaires_preferes": match.equipe1.horaires_preferes if match.equipe1.horaires_preferes else [],
             "equipe2_id": match.equipe2.id_unique,
             "equipe2_nom": match.equipe2.nom,
             "equipe2_nom_complet": match.equipe2.nom_complet,
             "equipe2_institution": match.equipe2.institution,
-            "equipe2_genre": match.equipe2.genre,
-            "equipe2_horaires_preferes": match.equipe2.horaires_preferes,
+            "equipe2_genre": equipe2_genre,
+            "equipe2_horaires_preferes": match.equipe2.horaires_preferes if match.equipe2.horaires_preferes else [],
             "poule": match.poule,
-            "priorite": match.priorite,
+            "priorite": match.priorite,  # Added priority field
         }
         
         if is_scheduled and match.creneau:
@@ -261,16 +278,34 @@ class DataFormatter:
             
             # Add score if available
             score_data = match.metadata.get("score", {})
-            match_data["score"] = {
-                "equipe1": score_data.get("equipe1"),
-                "equipe2": score_data.get("equipe2"),
-                "has_score": score_data.get("equipe1") is not None,
-            }
+            if isinstance(score_data, dict):
+                match_data["score"] = {
+                    "equipe1": score_data.get("equipe1"),
+                    "equipe2": score_data.get("equipe2"),
+                    "has_score": score_data.get("equipe1") is not None,
+                }
+            else:
+                # Handle case where score is stored as a string or other format
+                match_data["score"] = {
+                    "equipe1": None,
+                    "equipe2": None,
+                    "has_score": False,
+                }
             
             # Calculate penalties if config available
             if config:
                 penalties = DataFormatter._calculate_match_penalties(match, config)
                 match_data["penalties"] = penalties
+            else:
+                # Return structure with zeros if no config
+                match_data["penalties"] = {
+                    "total": 0.0,
+                    "horaire_prefere": 0.0,
+                    "espacement": 0.0,
+                    "indisponibilite": 0.0,
+                    "compaction": 0.0,
+                    "overlap": 0.0,
+                }
         else:
             # Unscheduled match
             match_data["reason"] = match.metadata.get("unscheduled_reason", "Aucun créneau disponible")
@@ -280,17 +315,123 @@ class DataFormatter:
     
     @staticmethod
     def _calculate_match_penalties(match: Match, config: Config) -> Dict[str, float]:
-        """Calculate penalties for a scheduled match."""
-        # TODO: Implement actual penalty calculation based on constraints
-        # For now, return placeholder values
-        return {
+        """
+        Calculate penalties for a scheduled match.
+        
+        This method provides the infrastructure for penalty calculation.
+        Each penalty type has its own calculation method for clarity and maintainability.
+        
+        Args:
+            match: The match to calculate penalties for
+            config: Configuration with penalty weights
+            
+        Returns:
+            Dictionary with all penalty types and total
+        """
+        penalties = {
             "total": 0.0,
-            "horaire_prefere": 0.0,
-            "espacement": 0.0,
-            "indisponibilite": 0.0,
-            "compaction": 0.0,
-            "overlap": 0.0,
+            "horaire_prefere": DataFormatter._calculate_horaire_prefere_penalty(match, config),
+            "espacement": DataFormatter._calculate_espacement_penalty(match, config),
+            "indisponibilite": DataFormatter._calculate_indisponibilite_penalty(match, config),
+            "compaction": DataFormatter._calculate_compaction_penalty(match, config),
+            "overlap": DataFormatter._calculate_overlap_penalty(match, config),
         }
+        
+        # Calculate total
+        penalties["total"] = sum(v for k, v in penalties.items() if k != "total")
+        
+        return penalties
+    
+    @staticmethod
+    def _calculate_horaire_prefere_penalty(match: Match, config: Config) -> float:
+        """
+        Calculate penalty for non-preferred time slots.
+        
+        TODO: Implement actual calculation based on:
+        - match.equipe1.horaires_preferes
+        - match.equipe2.horaires_preferes
+        - match.creneau.horaire
+        - config.penalite_horaire_* weights
+        
+        Returns:
+            Penalty value (0.0 = preferred time, higher = worse)
+        """
+        # Placeholder: return 0.0 for now
+        return 0.0
+    
+    @staticmethod
+    def _calculate_espacement_penalty(match: Match, config: Config) -> float:
+        """
+        Calculate penalty for poor spacing between matches for same team.
+        
+        TODO: Implement actual calculation based on:
+        - Time since last match for equipe1 and equipe2
+        - config.penalites_espacement_repos
+        - Minimum rest period requirements
+        
+        Note: This requires access to all matches for the teams, not just current match.
+        Consider passing additional context or pre-calculating in format_solution().
+        
+        Returns:
+            Penalty value (0.0 = good spacing, higher = worse)
+        """
+        # Placeholder: return 0.0 for now
+        return 0.0
+    
+    @staticmethod
+    def _calculate_indisponibilite_penalty(match: Match, config: Config) -> float:
+        """
+        Calculate penalty for scheduling during unavailable periods.
+        
+        TODO: Implement actual calculation based on:
+        - match.equipe1.semaines_indisponibles
+        - match.equipe2.semaines_indisponibles
+        - match.creneau.semaine and horaire
+        - config.poids_indisponibilite
+        
+        Returns:
+            Penalty value (0.0 = available, higher = conflict with unavailability)
+        """
+        # Placeholder: return 0.0 for now
+        return 0.0
+    
+    @staticmethod
+    def _calculate_compaction_penalty(match: Match, config: Config) -> float:
+        """
+        Calculate penalty for spreading matches too much or too little across weeks.
+        
+        TODO: Implement actual calculation based on:
+        - Week distribution for the pool
+        - Target compaction level from config
+        - Distance from ideal distribution
+        
+        Note: This is a global penalty that requires pool-level context.
+        Consider pre-calculating at solution level.
+        
+        Returns:
+            Penalty value (0.0 = good distribution, higher = worse)
+        """
+        # Placeholder: return 0.0 for now
+        return 0.0
+    
+    @staticmethod
+    def _calculate_overlap_penalty(match: Match, config: Config) -> float:
+        """
+        Calculate penalty for institution overlaps (same institution, same time).
+        
+        TODO: Implement actual calculation based on:
+        - Other matches at same semaine/horaire
+        - Institution of teams
+        - Overlap avoidance rules
+        
+        Note: This requires access to all matches at the same time slot.
+        Consider passing additional context or pre-calculating.
+        
+        Returns:
+            Penalty value (0.0 = no overlap, higher = conflicts)
+        """
+        # Placeholder: return 0.0 for now
+        return 0.0
     
     @staticmethod
     def _format_slots(
@@ -299,36 +440,40 @@ class DataFormatter:
     ) -> Dict[str, List[Dict]]:
         """Format slot data (available and occupied)."""
         
-        if creneaux_disponibles is None:
-            return {"available": [], "occupied": []}
-        
-        # Build set of occupied slots
-        occupied_slots: Dict[str, str] = {}  # slot_id -> match_id
+        # Build set of occupied slots from matches
+        occupied_slots: Dict[str, Dict[str, Any]] = {}  # slot_id -> slot_data
         for idx, match in enumerate(solution.matchs_planifies):
             if match.creneau:
                 slot_id = f"S_{match.creneau.gymnase}_{match.creneau.semaine}_{match.creneau.horaire}"
-                occupied_slots[slot_id] = f"M_{idx:04d}"
+                match_id = f"M_{idx:04d}"
+                
+                occupied_slots[slot_id] = {
+                    "slot_id": slot_id,
+                    "gymnase": match.creneau.gymnase,
+                    "semaine": match.creneau.semaine,
+                    "horaire": match.creneau.horaire,
+                    "status": "occupé",
+                    "match_id": match_id,
+                }
         
         available = []
-        occupied = []
+        occupied = list(occupied_slots.values())
         
-        for creneau in creneaux_disponibles:
-            slot_id = f"S_{creneau.gymnase}_{creneau.semaine}_{creneau.horaire}"
-            
-            slot_data = {
-                "slot_id": slot_id,
-                "gymnase": creneau.gymnase,
-                "semaine": creneau.semaine,
-                "horaire": creneau.horaire,
-            }
-            
-            if slot_id in occupied_slots:
-                slot_data["status"] = "occupé"
-                slot_data["match_id"] = occupied_slots[slot_id]
-                occupied.append(slot_data)
-            else:
-                slot_data["status"] = "libre"
-                available.append(slot_data)
+        # Add available slots from creneaux_disponibles
+        if creneaux_disponibles:
+            for creneau in creneaux_disponibles:
+                slot_id = f"S_{creneau.gymnase}_{creneau.semaine}_{creneau.horaire}"
+                
+                # Only add if not already occupied
+                if slot_id not in occupied_slots:
+                    slot_data = {
+                        "slot_id": slot_id,
+                        "gymnase": creneau.gymnase,
+                        "semaine": creneau.semaine,
+                        "horaire": creneau.horaire,
+                        "status": "libre",
+                    }
+                    available.append(slot_data)
         
         return {
             "available": available,
@@ -421,21 +566,54 @@ class DataFormatter:
     @staticmethod
     def _stats_par_gymnase(solution: Solution, gymnases: List[Gymnase]) -> Dict[str, Dict[str, Any]]:
         """Calculate statistics per venue."""
-        stats = defaultdict(lambda: {"nb_matchs": 0, "capacite": 1})
+        from collections import defaultdict
+        
+        stats = defaultdict(lambda: {"nb_matchs": 0, "capacite": 1, "nb_creneaux_disponibles": 0})
         
         # Initialize with venue data
         for gymnase in gymnases:
             stats[gymnase.nom]["capacite"] = gymnase.capacite
         
-        # Count matches
+        # Count matches per venue
         for match in solution.matchs_planifies:
             if match.creneau:
                 stats[match.creneau.gymnase]["nb_matchs"] += 1
         
-        # Calculate occupation rate (simplified - would need total available slots)
+        # Calculate total available slots for each venue
+        # This requires knowing the schedule structure (weeks, time slots)
+        # For accurate calculation, this should be passed from the caller
+        # For now, we estimate based on matches if creneaux_disponibles not available
+        
+        # Extract unique weeks and time slots from scheduled matches
+        semaines = set()
+        horaires = set()
+        for match in solution.matchs_planifies:
+            if match.creneau:
+                semaines.add(match.creneau.semaine)
+                horaires.add(match.creneau.horaire)
+        
+        nb_weeks = len(semaines) if semaines else 1
+        nb_time_slots = len(horaires) if horaires else 1
+        
+        # Calculate occupation rate for each venue
         for gymnase_nom in stats:
-            # This is a placeholder - actual calculation needs total available slots
-            stats[gymnase_nom]["taux_occupation"] = 0.0
+            gymnase = next((g for g in gymnases if g.nom == gymnase_nom), None)
+            if gymnase:
+                # Total theoretical capacity = weeks × time_slots × capacity
+                total_capacity = nb_weeks * nb_time_slots * gymnase.capacite
+                
+                # Actual usage
+                nb_matchs = stats[gymnase_nom]["nb_matchs"]
+                
+                # Occupation rate
+                if total_capacity > 0:
+                    stats[gymnase_nom]["taux_occupation"] = round((nb_matchs / total_capacity) * 100, 1)
+                else:
+                    stats[gymnase_nom]["taux_occupation"] = 0.0
+                
+                stats[gymnase_nom]["nb_creneaux_disponibles"] = total_capacity
+            else:
+                stats[gymnase_nom]["taux_occupation"] = 0.0
         
         return dict(stats)
     

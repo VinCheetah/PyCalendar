@@ -2,12 +2,27 @@
 
 Système modulaire et évolutif pour générer automatiquement des calendriers de compétitions sportives avec **configuration centrale unifiée**.
 
+## ✨ Nouveautés - Version 2.0 (Format Unique)
+
+**PyCalendar utilise maintenant un format de données unique et enrichi** :
+- ✅ Plus de confusion entre formats v1.0/v2.0
+- ✅ Validation automatique intégrée à chaque génération
+- ✅ Interface HTML moderne générée automatiquement
+- ✅ Fichiers dans `solutions/` (unique)
+- ✅ Format JSON complet avec entities, matches, slots, statistics
+
+**Commande unique pour tout générer** :
+```bash
+python main.py configs/config_volley.yaml
+# ➜ Génère : Solution JSON + Excel + Interface HTML
+```
+
+📖 **Guide complet** : `GUIDE_UTILISATION.md`
+
 ## 🎯 Fonctionnalités
 
 - **Configuration centrale** : Un seul fichier Excel contient équipes, gymnases et **toutes les contraintes**
-- **Contraintes institutionnelles** ## 🎓 Exemples
-
-Voir le dossier `exemple/` pour un exemple complet de configuration avec :ppliquez des contraintes à toutes les équipes d'une institution
+- **Contraintes institutionnelles** : Appliquez des contraintes à toutes les équipes d'une institution
 - **Obligations de présence** : Garantissez qu'une institution utilise son propre gymnase
 - **Génération de matchs** : Round-robin automatique pour poules multiples
 - **Contraintes modulaires** : Système flexible de contraintes dures et souples

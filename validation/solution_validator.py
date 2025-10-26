@@ -15,7 +15,7 @@ Vérifie qu'une solution générée respecte toute            # Usage des créne
             etat['matchs_par_equipe_semaine'][(match.equipe2.id_unique, creneau.semaine)] += 1intes.
 """
 
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Set
 from dataclasses import dataclass
 from collections import defaultdict
 
@@ -38,10 +38,12 @@ class SolutionValidator:
     """Valide une solution complète contre toutes les contraintes."""
     
     def __init__(self, config: Config, gymnases: Dict[str, Gymnase], 
-                 obligations_presence: Dict[str, str] = {}):
+                 obligations_presence: Dict[str, str] = {},
+                 groupes_non_simultaneite: Dict[str, Set[str]] = {}):
         self.config = config
         self.gymnases = gymnases
         self.obligations_presence = obligations_presence if obligations_presence else {}
+        self.groupes_non_simultaneite = groupes_non_simultaneite if groupes_non_simultaneite else {}
         self.violations: List[ViolationDetail] = []
     
     def valider_solution(self, solution: Solution) -> Tuple[bool, Dict]:
@@ -415,33 +417,55 @@ class SolutionValidator:
             if equipes_avant == 2:
                 multiplicateur = self.config.penalite_avant_horaire_min_deux
                 stats['nb_violations_avant_2_equipes'] += 1
+                
+                # Ajouter les violations avec pénalité calculée (uniquement hors tolérance)
+                # Utiliser le même calcul que CP-SAT : pénalité sur distance TOTALE (pas seulement l'excédent)
+                diviseur = self.config.penalite_horaire_diviseur
+                
+                for viol in violations_hors_tolerance:
+                    # Calculer la pénalité sur la distance TOTALE (pas distance - tolerance)
+                    penalite = multiplicateur * ((viol['distance_minutes'] / diviseur) ** 2)
+                    stats['penalite_totale'] += penalite
+                    
+                    direction = "avant" if viol['est_avant'] else "après"
+                    
+                    self.violations.append(ViolationDetail(
+                        type_contrainte="Préférence horaire",
+                        severite="SOUPLE",
+                        description=f"{viol['equipe'].nom} préfère {viol['horaire_pref']} mais joue à {horaire} "
+                                    f"({direction}, distance: {viol['distance_heures']:.1f}h, mult: {multiplicateur:.0f})",
+                        match_concerne=f"{match.equipe1.nom} vs {match.equipe2.nom}",
+                        creneau_concerne=f"S{match.creneau.semaine} - {match.creneau.gymnase} - {horaire}",
+                        penalite=penalite
+                    ))
             elif equipes_avant == 1:
-                multiplicateur = self.config.penalite_avant_horaire_min
+                # Ne pas relever de violation si seulement une équipe joue avant son horaire préféré
                 stats['nb_violations_avant_1_equipe'] += 1
+                continue
             else:
+                # Les deux équipes jouent après leur horaire préféré - violation normale
                 multiplicateur = 10.0
                 stats['nb_violations_apres'] += len(violations_equipe)
-            
-            # Ajouter les violations avec pénalité calculée (uniquement hors tolérance)
-            # Utiliser le même calcul que CP-SAT : pénalité sur distance TOTALE (pas seulement l'excédent)
-            diviseur = self.config.penalite_horaire_diviseur
-            
-            for viol in violations_hors_tolerance:
-                # Calculer la pénalité sur la distance TOTALE (pas distance - tolerance)
-                penalite = multiplicateur * ((viol['distance_minutes'] / diviseur) ** 2)
-                stats['penalite_totale'] += penalite
                 
-                direction = "avant" if viol['est_avant'] else "après"
+                # Ajouter les violations avec pénalité calculée (uniquement hors tolérance)
+                diviseur = self.config.penalite_horaire_diviseur
                 
-                self.violations.append(ViolationDetail(
-                    type_contrainte="Préférence horaire",
-                    severite="SOUPLE",
-                    description=f"{viol['equipe'].nom} préfère {viol['horaire_pref']} mais joue à {horaire} "
-                                f"({direction}, distance: {viol['distance_heures']:.1f}h, mult: {multiplicateur:.0f})",
-                    match_concerne=f"{match.equipe1.nom} vs {match.equipe2.nom}",
-                    creneau_concerne=f"S{match.creneau.semaine} - {match.creneau.gymnase} - {horaire}",
-                    penalite=penalite
-                ))
+                for viol in violations_hors_tolerance:
+                    # Calculer la pénalité sur la distance TOTALE (pas distance - tolerance)
+                    penalite = multiplicateur * ((viol['distance_minutes'] / diviseur) ** 2)
+                    stats['penalite_totale'] += penalite
+                    
+                    direction = "avant" if viol['est_avant'] else "après"
+                    
+                    self.violations.append(ViolationDetail(
+                        type_contrainte="Préférence horaire",
+                        severite="SOUPLE",
+                        description=f"{viol['equipe'].nom} préfère {viol['horaire_pref']} mais joue à {horaire} "
+                                    f"({direction}, distance: {viol['distance_heures']:.1f}h, mult: {multiplicateur:.0f})",
+                        match_concerne=f"{match.equipe1.nom} vs {match.equipe2.nom}",
+                        creneau_concerne=f"S{match.creneau.semaine} - {match.creneau.gymnase} - {horaire}",
+                        penalite=penalite
+                    ))
         
         # Stocker les stats pour le rapport
         self._stats_preferences_horaires = stats
@@ -598,26 +622,41 @@ class SolutionValidator:
                     # Vérifier si les institutions se chevauchent
                     overlap_institutions = inst1 & inst2
                     if overlap_institutions:
-                        stats['nb_overlaps'] += 1
-                        stats['penalite_overlaps'] += self.config.overlap_institution_poids
+                        # Vérifier si ces institutions appartiennent au même groupe de non-simultanéité
+                        doit_signaler = False
+                        if self.groupes_non_simultaneite:
+                            # Vérifier si les institutions qui se chevauchent sont dans le même groupe
+                            for groupe, institutions_groupe in self.groupes_non_simultaneite.items():
+                                if any(inst in institutions_groupe for inst in overlap_institutions):
+                                    doit_signaler = True
+                                    break
+                        else:
+                            # Mode legacy: surveiller toutes les institutions
+                            institutions_a_surveiller = self.config.overlap_institution_institutions
+                            if not institutions_a_surveiller or any(inst in institutions_a_surveiller for inst in overlap_institutions):
+                                doit_signaler = True
                         
-                        semaine, horaire, gymnase = key_creneau
-                        overlap_detail = {
-                            'match1': f"{match1.equipe1.nom} vs {match1.equipe2.nom}",
-                            'match2': f"{match2.equipe1.nom} vs {match2.equipe2.nom}",
-                            'institutions_partagees': list(overlap_institutions),
-                            'creneau': f"S{semaine} - {gymnase} - {horaire}"
-                        }
-                        stats['overlaps_details'].append(overlap_detail)
-                        
-                        self.violations.append(ViolationDetail(
-                            type_contrainte="Overlap institution",
-                            severite="SOUPLE",
-                            description=f"Institution(s) {', '.join(overlap_institutions)} avec matchs simultanés",
-                            match_concerne=f"{match1.equipe1.nom} vs {match1.equipe2.nom} ET {match2.equipe1.nom} vs {match2.equipe2.nom}",
-                            creneau_concerne=f"S{semaine} - {gymnase} - {horaire}",
-                            penalite=self.config.overlap_institution_poids
-                        ))
+                        if doit_signaler:
+                            stats['nb_overlaps'] += 1
+                            stats['penalite_overlaps'] += self.config.overlap_institution_poids
+                            
+                            semaine, horaire, gymnase = key_creneau
+                            overlap_detail = {
+                                'match1': f"{match1.equipe1.nom} vs {match1.equipe2.nom}",
+                                'match2': f"{match2.equipe1.nom} vs {match2.equipe2.nom}",
+                                'institutions_partagees': list(overlap_institutions),
+                                'creneau': f"S{semaine} - {gymnase} - {horaire}"
+                            }
+                            stats['overlaps_details'].append(overlap_detail)
+                            
+                            self.violations.append(ViolationDetail(
+                                type_contrainte="Overlap institution",
+                                severite="SOUPLE",
+                                description=f"Institution(s) {', '.join(overlap_institutions)} avec matchs simultanés",
+                                match_concerne=f"{match1.equipe1.nom} vs {match1.equipe2.nom} ET {match2.equipe1.nom} vs {match2.equipe2.nom}",
+                                creneau_concerne=f"S{semaine} - {gymnase} - {horaire}",
+                                penalite=self.config.overlap_institution_poids
+                            ))
         
         return stats
 

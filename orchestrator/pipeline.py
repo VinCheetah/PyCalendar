@@ -432,25 +432,87 @@ class SchedulingPipeline:
                 nb_semaines=self.config.nb_semaines
             )
             
-            # Sauvegarder
-            store.save_solution(
+            # Sauvegarder la solution
+            print(f"  💾 Sauvegarde de la solution...")
+            saved_path = store.save_solution(
                 solution=solution,
                 signature=signature,
+                config=self.config,  # Passer l'objet Config complet
                 config_name=str(self.source.fichier_config),
-                fixed_matches=matchs_fixes
+                fixed_matches=matchs_fixes,
+                equipes=equipes,  # Passer les objets Equipe complets
+                gymnases=gymnases,  # Passer les objets Gymnase complets
+                creneaux=creneaux  # Passer TOUS les créneaux (disponibles + occupés)
             )
+            
+            # Validation automatique après sauvegarde
+            if saved_path:
+                self._validate_solution_json(saved_path)
             
         except Exception as e:
             print(f"  ⚠️  Erreur lors de la sauvegarde de la solution: {e}")
+            import traceback
+            traceback.print_exc()
             # Continue sans sauvegarder (non-bloquant)
     
     def _valider_solution(self, solution: Solution, gymnases: List[Gymnase]):
         """Valide la solution générée contre toutes les contraintes."""
         gymnases_dict = {g.nom: g for g in gymnases}
-        validator = SolutionValidator(self.config, gymnases_dict, self.obligations_presence)
+        validator = SolutionValidator(self.config, gymnases_dict, self.obligations_presence, self.groupes_non_simultaneite)
         est_valide, rapport = validator.valider_solution(solution)
         afficher_rapport_validation(rapport)
         return est_valide
+    
+    def _validate_solution_json(self, solution_path: Path):
+        """
+        Valide le fichier JSON généré.
+        
+        Args:
+            solution_path: Chemin vers le fichier JSON à valider
+        """
+        try:
+            import json
+            from interface.core.validator import SolutionValidator as SolutionValidatorV2
+            
+            print(f"\n🔍 Validation de la solution...")
+            
+            # Charger le JSON
+            with open(solution_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            # Valider
+            validator = SolutionValidatorV2()
+            try:
+                is_valid, issues = validator.validate_full(data)
+            except Exception as e:
+                print(f"  ⚠️  Erreur lors de la validation: {e}")
+                import traceback
+                traceback.print_exc()
+                return
+            
+            # Afficher résumé
+            from interface.core.validator import Severity
+            errors = sum(1 for i in issues if i.severity == Severity.ERROR)
+            warnings = sum(1 for i in issues if i.severity == Severity.WARNING)
+            infos = sum(1 for i in issues if i.severity == Severity.INFO)
+            
+            if errors == 0 and warnings == 0 and infos == 0:
+                print(f"  ✅ Solution valide - aucun problème détecté")
+            else:
+                print(f"  📊 Résumé validation: {errors} erreur(s), {warnings} avertissement(s), {infos} info(s)")
+                
+                if errors > 0 or warnings > 0:
+                    # Afficher rapport détaillé si erreurs ou warnings
+                    report = validator.generate_report(issues)
+                    print(report)
+                else:
+                    # Juste les infos en mode condensé
+                    print(f"     💡 Utilisez: python validate_solution.py {solution_path} --verbose pour plus de détails")
+            
+        except Exception as e:
+            print(f"  ⚠️  Erreur lors de la validation: {e}")
+            import traceback
+            traceback.print_exc()
     
     def _exporter_solution(self, solution: Solution):
         """Export solution to files."""
@@ -458,19 +520,15 @@ class SchedulingPipeline:
         ExcelExporter.export(solution, self.config.fichier_sortie)
         
         # Générer TOUS les créneaux possibles (occupés et libres)
-        # Le visualizer gérera le statut libre/occupé
         gymnases = self.source.charger_gymnases()
         tous_creneaux = DataTransformer.generer_creneaux(gymnases, self.config.nb_semaines, self.config.calendar_manager)
         
-        # Stocker TOUS les créneaux dans metadata (pas seulement les libres)
+        # Stocker TOUS les créneaux dans metadata pour l'interface
         solution.metadata['creneaux_disponibles'] = tous_creneaux
         
+        # Générer l'interface HTML interactive
         html_path = self.config.fichier_sortie.replace('.xlsx', '.html')
-        #html_file = HTMLVisualizer.generate(solution, html_path)
-        #html_file_premium = HTMLVisualizerPremium.generate(solution, html_path.replace('.html', '_premium.html'))
-        html_file_v2 = HTMLVisualizerV2.generate(solution, html_path, self.config)
+        html_file = HTMLVisualizerV2.generate(solution, html_path, self.config)
         
         print(f"\n🌐 Ouvrez le calendrier dans votre navigateur:")
-        #print(f"   file://{html_file} (version classique)")
-        #print(f"   file://{html_file_premium} (version premium)")
-        print(f"   file://{html_file_v2}")
+        print(f"   file://{html_file}")

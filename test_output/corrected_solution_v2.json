@@ -1,0 +1,42 @@
+{
+  "version": "2.0",
+  "generated_at": "2025-10-26T12:35:40.652951",
+  "metadata": {
+    "solution_name": "volley",
+    "solver": "cpsat",
+    "status": "FEASIBLE",
+    "score": 1311901.0,
+    "execution_time_seconds": 0.0,
+    "date": "2025-10-26T12:15:02.830139"
+  },
+  "config": {},
+  "entities": {
+    "equipes": [],
+    "gymnases": [],
+    "poules": []
+  },
+  "matches": {
+    "scheduled": [],
+    "unscheduled": []
+  },
+  "slots": {
+    "available": [],
+    "occupied": []
+  },
+  "statistics": {
+    "global": {
+      "taux_planification": 0.0,
+      "score_total": 1311901.0,
+      "score_moyen_par_match": 0.0,
+      "nb_matchs_total": 0,
+      "nb_matchs_planifies": 0,
+      "nb_matchs_non_planifies": 0,
+      "nb_matchs_fixes": 0,
+      "nb_matchs_auto": 0
+    },
+    "par_semaine": {},
+    "par_poule": {},
+    "par_gymnase": {},
+    "par_equipe": {}
+  }
+}

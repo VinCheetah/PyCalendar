@@ -28,16 +28,24 @@ from typing import Optional
 class SolutionConverterV2:
     """Convertit les solutions au format v2.0 pour l'interface."""
     
-    def __init__(self, solution_path: Path, config_manager: Optional[ConfigManager] = None):
+    def __init__(self, solution_path: Path, config_manager: Optional[ConfigManager] = None,
+                 equipes_list: Optional[List[Equipe]] = None):
         """
         Initialise le convertisseur.
         
         Args:
             solution_path: Chemin vers le fichier JSON de solution
             config_manager: Instance de ConfigManager (optionnel, pour enrichissement)
+            equipes_list: Liste des objets Equipe (optionnel, pour enrichissement complet)
         """
         self.solution_path = solution_path
         self.config_manager = config_manager
+        
+        # Créer un index des équipes par ID pour accès rapide
+        self.equipes_index = {}
+        if equipes_list:
+            for eq in equipes_list:
+                self.equipes_index[eq.id_unique] = eq
         
         # Charger la solution source
         with open(solution_path, 'r', encoding='utf-8') as f:
@@ -61,21 +69,38 @@ class SolutionConverterV2:
                 # Extraire institution et numéro depuis le nom
                 nom = assignment['equipe1_nom']
                 institution, numero = self._parse_equipe_nom(nom)
+                genre = assignment['equipe1_genre']
+                
+                # Créer le nom complet avec le genre
+                nom_complet = f"{nom} ({genre})"
                 
                 # Utiliser la poule depuis l'assignment si disponible (format v1.0 amélioré)
                 poule_from_assignment = assignment.get('poule', '')
                 
+                # Récupérer les données enrichies depuis la liste d'équipes si disponible
+                horaires_preferes = []
+                lieux_preferes = []
+                semaines_indisponibles = {}
+                
+                equipe_obj = self._find_equipe_in_config(eq1_id)
+                if equipe_obj:
+                    horaires_preferes = equipe_obj.horaires_preferes or []
+                    lieux_preferes = [str(lieu) for lieu in (equipe_obj.lieux_preferes or []) if lieu is not None]
+                    semaines_indisponibles = {
+                        str(k): list(v) for k, v in (equipe_obj.semaines_indisponibles or {}).items()
+                    }
+                
                 equipes_dict[eq1_id] = {
                     'id': eq1_id,
                     'nom': nom,
-                    'nom_complet': nom,
+                    'nom_complet': nom_complet,
                     'institution': institution,
                     'numero_equipe': numero,
-                    'genre': assignment['equipe1_genre'],
+                    'genre': genre,
                     'poule': poule_from_assignment,  # Poule depuis assignment si disponible
-                    'horaires_preferes': [],
-                    'lieux_preferes': [],
-                    'semaines_indisponibles': {},
+                    'horaires_preferes': horaires_preferes,
+                    'lieux_preferes': lieux_preferes,
+                    'semaines_indisponibles': semaines_indisponibles,
                     'adversaires': set()  # Pour détecter les poules si non disponibles
                 }
             
@@ -84,19 +109,34 @@ class SolutionConverterV2:
             if eq2_id not in equipes_dict:
                 nom = assignment['equipe2_nom']
                 institution, numero = self._parse_equipe_nom(nom)
+                genre = assignment['equipe2_genre']
+                nom_complet = f"{nom} ({genre})"
                 poule_from_assignment = assignment.get('poule', '')
+                
+                # Récupérer les données enrichies
+                horaires_preferes = []
+                lieux_preferes = []
+                semaines_indisponibles = {}
+                
+                equipe_obj = self._find_equipe_in_config(eq2_id)
+                if equipe_obj:
+                    horaires_preferes = equipe_obj.horaires_preferes or []
+                    lieux_preferes = [str(lieu) for lieu in (equipe_obj.lieux_preferes or []) if lieu is not None]
+                    semaines_indisponibles = {
+                        str(k): list(v) for k, v in (equipe_obj.semaines_indisponibles or {}).items()
+                    }
                 
                 equipes_dict[eq2_id] = {
                     'id': eq2_id,
                     'nom': nom,
-                    'nom_complet': nom,
+                    'nom_complet': nom_complet,
                     'institution': institution,
                     'numero_equipe': numero,
-                    'genre': assignment['equipe2_genre'],
+                    'genre': genre,
                     'poule': poule_from_assignment,
-                    'horaires_preferes': [],
-                    'lieux_preferes': [],
-                    'semaines_indisponibles': {},
+                    'horaires_preferes': horaires_preferes,
+                    'lieux_preferes': lieux_preferes,
+                    'semaines_indisponibles': semaines_indisponibles,
                     'adversaires': set()
                 }
             
@@ -126,11 +166,23 @@ class SolutionConverterV2:
         # Convertir en listes
         equipes_list = sorted(equipes_dict.values(), key=lambda x: x['id'])
         
+        # Charger les capacités réelles depuis le config_manager si disponible
+        gymnases_capacites = {}
+        if self.config_manager:
+            try:
+                from data.data_loader import DataLoader
+                loader = DataLoader(str(self.config_manager.fichier_path))
+                gymnases_obj = loader.charger_gymnases()
+                gymnases_capacites = {g.nom: g.capacite for g in gymnases_obj}
+                print(f"  ✅ Capacités chargées pour {len(gymnases_capacites)} gymnases depuis la config")
+            except Exception as e:
+                print(f"  ⚠️  Impossible de charger les capacités: {e}")
+        
         gymnases_list = [
             {
                 'id': g,
                 'nom': g,
-                'capacite': 2,  # Valeur par défaut
+                'capacite': gymnases_capacites.get(g, 1),  # Capacité réelle ou 1 par défaut
                 'horaires_disponibles': [],
                 'semaines_indisponibles': {},
                 'capacite_reduite': {}
@@ -255,6 +307,18 @@ class SolutionConverterV2:
                 poules[eq1_poule]['nb_matchs_planifies'] += 1
         
         return dict(poules)
+    
+    def _find_equipe_in_config(self, equipe_id: str) -> Optional[Equipe]:
+        """
+        Trouve une équipe dans les données enrichies.
+        
+        Args:
+            equipe_id: ID unique de l'équipe (format: "INSTITUTION (numero)|genre")
+            
+        Returns:
+            Objet Equipe si trouvé, None sinon
+        """
+        return self.equipes_index.get(equipe_id)
     
     def _parse_equipe_nom(self, nom: str) -> Tuple[str, str]:
         """
@@ -521,6 +585,10 @@ class SolutionConverterV2:
         statistics = self._calculate_statistics(entities, matches_scheduled)
         
         # 5. Assembler la solution v2.0
+        # Convertir Infinity en None pour compatibilité JSON
+        raw_score = self.solution_data['metadata']['score']
+        score = None if (isinstance(raw_score, float) and (raw_score == float('inf') or raw_score == float('-inf') or raw_score != raw_score)) else raw_score
+        
         solution_v2 = {
             'version': '2.0',
             'generated_at': datetime.now().isoformat(),
@@ -528,7 +596,7 @@ class SolutionConverterV2:
                 'solution_name': self.solution_data['metadata']['solution_name'],
                 'solver': self.solution_data['metadata'].get('solver', 'cpsat'),
                 'status': self.solution_data['metadata'].get('status', 'FEASIBLE'),
-                'score': self.solution_data['metadata']['score'],
+                'score': score,
                 'execution_time_seconds': 0  # Non disponible dans l'ancien format
             },
             'config': {

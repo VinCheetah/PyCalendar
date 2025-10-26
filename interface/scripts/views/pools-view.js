@@ -359,11 +359,17 @@ class PoolsView {
      * Génère une carte de match compacte
      */
     _generateMatchCard(match, data) {
-        const equipes = this.dataManager.getEquipesByIds(match.equipes);
         const gymnase = this.dataManager.getGymnaseById(match.gymnase);
         
-        const equipe1 = equipes[0] || { nom: 'Équipe 1' };
-        const equipe2 = equipes[1] || { nom: 'Équipe 2' };
+        // Les données d'équipe sont déjà dans le match (format v2.0)
+        const equipe1 = {
+            nom: match.equipe1_nom || 'Équipe 1',
+            nom_complet: match.equipe1_nom_complet || match.equipe1_nom || 'Équipe 1'
+        };
+        const equipe2 = {
+            nom: match.equipe2_nom || 'Équipe 2',
+            nom_complet: match.equipe2_nom_complet || match.equipe2_nom || 'Équipe 2'
+        };
         
         const totalPenalties = Object.values(match.penalties || {}).reduce((sum, p) => sum + p, 0);
         const penaltyClass = totalPenalties > 10 ? 'high' : totalPenalties > 5 ? 'medium' : 'low';
@@ -374,9 +380,9 @@ class PoolsView {
                     ${match.jour || 'N/A'} ${match.horaire}
                 </div>
                 <div class="match-teams-mini">
-                    <span class="team">${equipe1.nom}</span>
+                    <span class="team">${equipe1.nom_complet || equipe1.nom}</span>
                     <span class="vs">-</span>
-                    <span class="team">${equipe2.nom}</span>
+                    <span class="team">${equipe2.nom_complet || equipe2.nom}</span>
                 </div>
                 <div class="match-venue-mini">
                     📍 ${gymnase?.nom || 'N/A'}

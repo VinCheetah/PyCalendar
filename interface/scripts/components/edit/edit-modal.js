@@ -44,6 +44,11 @@ window.EditModal = class EditModal {
                             <span class="badge" id="edit-pool">-</span>
                             <span class="badge" id="edit-gender">-</span>
                         </div>
+                        <!-- Préférences des équipes -->
+                        <div class="teams-preferences" id="edit-preferences" style="display: none; margin-top: 10px; font-size: 0.9em; color: #666;">
+                            <div id="edit-team1-prefs"></div>
+                            <div id="edit-team2-prefs"></div>
+                        </div>
                     </div>
                     
                     <!-- Formulaire d'édition -->
@@ -148,16 +153,37 @@ window.EditModal = class EditModal {
     open(match) {
         this.currentMatch = match;
         
-        // Remplir les infos
+        // Remplir les infos - Les données sont déjà dans le match (format v2.0)
         const data = this.dataManager.getData();
-        const equipe1 = data.entities.equipes.find(e => e.id === match.equipes[0]);
-        const equipe2 = data.entities.equipes.find(e => e.id === match.equipes[1]);
-        const poule = data.entities.poules.find(p => p.id === equipe1?.poule);
+        const equipe1 = {
+            id: match.equipe1_id,
+            nom: match.equipe1_nom,
+            nom_complet: match.equipe1_nom_complet || match.equipe1_nom,
+            institution: match.equipe1_institution,
+            genre: match.equipe1_genre,
+            horaires_preferes: match.equipe1_horaires_preferes || [],
+            lieux_preferes: match.equipe1_lieux_preferes || [],
+            poule: match.poule
+        };
+        const equipe2 = {
+            id: match.equipe2_id,
+            nom: match.equipe2_nom,
+            nom_complet: match.equipe2_nom_complet || match.equipe2_nom,
+            institution: match.equipe2_institution,
+            genre: match.equipe2_genre,
+            horaires_preferes: match.equipe2_horaires_preferes || [],
+            lieux_preferes: match.equipe2_lieux_preferes || [],
+            poule: match.poule
+        };
+        const poule = data.entities.poules.find(p => p.id === match.poule);
         
-        document.getElementById('edit-team1').textContent = equipe1?.nom || '-';
-        document.getElementById('edit-team2').textContent = equipe2?.nom || '-';
+        document.getElementById('edit-team1').textContent = equipe1?.nom_complet || equipe1?.nom || '-';
+        document.getElementById('edit-team2').textContent = equipe2?.nom_complet || equipe2?.nom || '-';
         document.getElementById('edit-pool').textContent = poule?.nom || '-';
         document.getElementById('edit-gender').textContent = window.Formatters.formatGender(equipe1?.genre);
+        
+        // Afficher les préférences des équipes
+        this._showTeamPreferences(equipe1, equipe2);
         
         // Remplir les valeurs actuelles
         this._populateForm(match, data);
@@ -167,6 +193,48 @@ window.EditModal = class EditModal {
         
         // Afficher le modal
         this.modal.classList.remove('hidden');
+    }
+    
+    /**
+     * Affiche les préférences des équipes (horaires et lieux préférés)
+     */
+    _showTeamPreferences(equipe1, equipe2) {
+        const prefsContainer = document.getElementById('edit-preferences');
+        const team1Prefs = document.getElementById('edit-team1-prefs');
+        const team2Prefs = document.getElementById('edit-team2-prefs');
+        
+        let hasPreferences = false;
+        
+        // Préférences équipe 1
+        let prefs1 = [];
+        if (equipe1?.horaires_preferes && equipe1.horaires_preferes.length > 0) {
+            prefs1.push(`⏰ ${equipe1.horaires_preferes.join(', ')}`);
+            hasPreferences = true;
+        }
+        if (equipe1?.lieux_preferes && equipe1.lieux_preferes.length > 0) {
+            prefs1.push(`📍 ${equipe1.lieux_preferes.join(', ')}`);
+            hasPreferences = true;
+        }
+        team1Prefs.innerHTML = prefs1.length > 0 
+            ? `<strong>${equipe1.nom}:</strong> ${prefs1.join(' • ')}` 
+            : '';
+        
+        // Préférences équipe 2
+        let prefs2 = [];
+        if (equipe2?.horaires_preferes && equipe2.horaires_preferes.length > 0) {
+            prefs2.push(`⏰ ${equipe2.horaires_preferes.join(', ')}`);
+            hasPreferences = true;
+        }
+        if (equipe2?.lieux_preferes && equipe2.lieux_preferes.length > 0) {
+            prefs2.push(`📍 ${equipe2.lieux_preferes.join(', ')}`);
+            hasPreferences = true;
+        }
+        team2Prefs.innerHTML = prefs2.length > 0 
+            ? `<strong>${equipe2.nom}:</strong> ${prefs2.join(' • ')}` 
+            : '';
+        
+        // Afficher/masquer le conteneur selon s'il y a des préférences
+        prefsContainer.style.display = hasPreferences ? 'block' : 'none';
     }
     
     /**
@@ -281,14 +349,14 @@ window.EditModal = class EditModal {
         
         // Vérifier conflits d'équipes
         const equipe1Conflict = window.Validators.hasTeamConflict(
-            this.currentMatch.equipes[0], 
+            this.currentMatch.equipe1_id, 
             newSlot, 
             data.matches.scheduled,
             this.currentMatch.match_id
         );
         
         const equipe2Conflict = window.Validators.hasTeamConflict(
-            this.currentMatch.equipes[1], 
+            this.currentMatch.equipe2_id, 
             newSlot, 
             data.matches.scheduled,
             this.currentMatch.match_id
@@ -296,8 +364,8 @@ window.EditModal = class EditModal {
         
         if (equipe1Conflict || equipe2Conflict) {
             const conflictTeams = [];
-            if (equipe1Conflict) conflictTeams.push(data.entities.equipes.find(e => e.id === this.currentMatch.equipes[0])?.nom);
-            if (equipe2Conflict) conflictTeams.push(data.entities.equipes.find(e => e.id === this.currentMatch.equipes[1])?.nom);
+            if (equipe1Conflict) conflictTeams.push(this.currentMatch.equipe1_nom);
+            if (equipe2Conflict) conflictTeams.push(this.currentMatch.equipe2_nom);
             
             this._showConflictAlert(`Conflit d'horaire pour: ${conflictTeams.join(', ')}`);
             return false;

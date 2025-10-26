@@ -174,14 +174,89 @@ class SolutionStore:
         )
     
     def save_solution(self, solution: Solution, signature: ConfigSignature,
-                     config: Optional[Config] = None, config_name: str = "unknown", 
-                     fixed_matches: Optional[List] = None,
-                     equipes: Optional[List] = None, gymnases: Optional[List] = None, 
-                     creneaux: Optional[List] = None) -> Path:
+                     config_name: str = "unknown", fixed_matches: List = None) -> Path:
         """
-        Sauvegarde une solution au format JSON enrichi.
+        Sauvegarde une solution avec sa signature de configuration (format v1.0).
         
-        Le format inclut:
+        Args:
+            solution: La solution à sauvegarder
+            signature: Signature de la configuration utilisée
+            config_name: Nom de la configuration (pour traçabilité)
+            fixed_matches: Liste des matchs fixes originaux (pour marquer is_fixed)
+            
+        Returns:
+            Path du fichier sauvegardé
+        """
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+        filename = self.v1_dir / f"solution_{self.solution_name}_{timestamp}.json"
+        
+        # Créer un index des matchs fixes pour une recherche rapide
+        fixed_matches_index = set()
+        if fixed_matches:
+            for match in fixed_matches:
+                # Clé unique basée sur les noms d'équipes et la semaine
+                key = f"{match.equipe1.nom}|{match.equipe2.nom}|{match.metadata.get('semaine', '')}"
+                fixed_matches_index.add(key)
+        
+        # Convertir Infinity/NaN en None pour compatibilité JSON
+        raw_score = float(solution.score)
+        score = None if (raw_score == float('inf') or raw_score == float('-inf') or raw_score != raw_score) else raw_score
+        
+        data = {
+            "metadata": {
+                "date": datetime.now().isoformat(),
+                "solution_name": self.solution_name,
+                "config_name": config_name,
+                "solver": solution.metadata.get("solver", "unknown"),
+                "status": solution.metadata.get("status", "unknown"),
+                "score": score,
+                "matchs_planifies": len(solution.matchs_planifies),
+                "matchs_non_planifies": len(solution.matchs_non_planifies),
+                "matchs_fixes": len(fixed_matches) if fixed_matches else 0,
+            },
+            "config_signature": signature.to_dict(),
+            "assignments": [
+                {
+                    "match_id": i,
+                    "equipe1_nom": match.equipe1.nom,
+                    "equipe1_genre": match.equipe1.genre,
+                    "equipe1_id": match.equipe1.id_unique,
+                    "equipe2_nom": match.equipe2.nom,
+                    "equipe2_genre": match.equipe2.genre,
+                    "equipe2_id": match.equipe2.id_unique,
+                    "poule": match.poule,  # Ajout du champ poule
+                    "semaine": match.creneau.semaine,
+                    "horaire": match.creneau.horaire,
+                    "gymnase": match.creneau.gymnase,
+                    "is_fixed": f"{match.equipe1.nom}|{match.equipe2.nom}|{match.creneau.semaine}" in fixed_matches_index,
+                }
+                for i, match in enumerate(solution.matchs_planifies)
+            ]
+        }
+        
+        # Sauver le fichier daté
+        with open(filename, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        
+        # Mettre à jour "latest.json"
+        with open(self.latest_file, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        
+        print(f"  💾 Solution sauvegardée: {filename.name}")
+        print(f"     Configuration: {self.solution_name}")
+        print(f"     Score: {solution.score}, Matchs planifiés: {len(solution.matchs_planifies)}")
+        
+        return filename
+    
+    def save_solution_v2(self, solution: Solution, signature: ConfigSignature,
+                        config: Config = None, config_name: str = "unknown", 
+                        fixed_matches: List = None,
+                        equipes: List = None, gymnases: List = None, 
+                        creneaux: List = None) -> Path:
+        """
+        Sauvegarde une solution au format v2.0 (enrichi pour l'interface).
+        
+        Format v2.0 inclut:
         - Entities (equipes, gymnases, poules)
         - Matches enrichis avec toutes les infos
         - Slots (disponibles et occupés)
@@ -200,21 +275,21 @@ class SolutionStore:
         Returns:
             Path du fichier sauvegardé
         """
-        print(f"  💾 Sauvegarde de la solution...")
+        print(f"  💾 Sauvegarde au format v2.0 (enrichi)...")
         
         # Import DataFormatter
         try:
             import sys
             from pathlib import Path as P
-            # Ajouter le répertoire racine du projet au sys.path pour que les imports core.* fonctionnent
-            project_root = P(__file__).parent.parent
-            if str(project_root) not in sys.path:
-                sys.path.insert(0, str(project_root))
+            interface_path = P(__file__).parent.parent / 'interface'
+            if str(interface_path) not in sys.path:
+                sys.path.insert(0, str(interface_path))
             
-            from interface.core.data_formatter import DataFormatter
+            from core.data_formatter import DataFormatter
         except ImportError as e:
             print(f"  ❌ Impossible d'importer DataFormatter: {e}")
-            raise ImportError(f"DataFormatter requis pour la sauvegarde: {e}")
+            print(f"  ⚠️  Retour à la méthode save_solution() classique")
+            return self.save_solution(solution, signature, config_name, fixed_matches)
         
         # Marquer les matchs fixes dans les metadata
         if fixed_matches:
@@ -228,54 +303,61 @@ class SolutionStore:
                 if key in fixed_keys:
                     match.metadata["is_fixed"] = True
         
-        # Utiliser DataFormatter pour générer le JSON
-        data = DataFormatter.format_solution(
-            solution=solution,
-            config=config,
-            equipes=equipes,
-            gymnases=gymnases,
-            creneaux_disponibles=creneaux
-        )
-        
-        # Ajouter la signature de configuration
-        data["config_signature"] = signature.to_dict()
-        
-        # Sauvegarder
-        timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
-        filename = self.solutions_dir / f"solution_{self.solution_name}_{timestamp}.json"
-        latest = self.latest_file
-        
-        with open(filename, 'w', encoding='utf-8') as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
-        
-        with open(latest, 'w', encoding='utf-8') as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
-        
-        file_size = filename.stat().st_size / 1024  # KB
-        
-        # Validation optionnelle
+        # Utiliser DataFormatter pour générer le JSON v2.0
         try:
-            from interface.core.validator import SolutionValidator
-            validator = SolutionValidator()
-            is_valid, errors = validator.validate(data)
+            v2_data = DataFormatter.format_solution(
+                solution=solution,
+                config=config,
+                equipes=equipes,
+                gymnases=gymnases,
+                creneaux_disponibles=creneaux
+            )
             
-            if is_valid:
-                print(f"  ✅ Solution sauvegardée et validée: {filename.name}")
-            else:
-                print(f"  ⚠️  Solution sauvegardée mais validation échouée ({len(errors)} erreurs)")
-                if errors:
+            # Ajouter la signature de configuration
+            v2_data["config_signature"] = signature.to_dict()
+            
+            # Sauvegarder la version v2.0 dans le dossier v2.0/
+            timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+            v2_filename = self.v2_dir / f"solution_{self.solution_name}_{timestamp}.json"
+            v2_latest = self.latest_file_v2
+            
+            with open(v2_filename, 'w', encoding='utf-8') as f:
+                json.dump(v2_data, f, indent=2, ensure_ascii=False)
+            
+            with open(v2_latest, 'w', encoding='utf-8') as f:
+                json.dump(v2_data, f, indent=2, ensure_ascii=False)
+            
+            file_size = v2_filename.stat().st_size / 1024  # KB
+            
+            # Validation optionnelle
+            try:
+                from interface.core.validator import SolutionValidator
+                validator = SolutionValidator()
+                is_valid, errors = validator.validate(v2_data)
+                
+                if is_valid:
+                    print(f"  ✅ Solution v2.0 sauvegardée et validée: {v2_filename.name}")
+                else:
+                    print(f"  ⚠️  Solution v2.0 sauvegardée mais validation échouée ({len(errors)} erreurs)")
                     print(f"     Première erreur: {errors[0]}")
-        except ImportError:
-            print(f"  ✅ Solution sauvegardée (validation non disponible): {filename.name}")
+            except ImportError:
+                print(f"  ✅ Solution v2.0 sauvegardée (validation non disponible): {v2_filename.name}")
+            except Exception as e:
+                print(f"  ⚠️  Erreur de validation: {e}")
+                print(f"  ✅ Solution v2.0 sauvegardée: {v2_filename.name}")
+            
+            print(f"     Taille: {file_size:.1f} KB")
+            print(f"     Poules: {len(v2_data.get('entities', {}).get('poules', []))}")
+            print(f"     Matchs: {len(v2_data.get('matches', {}).get('scheduled', []))}")
+            
+            return v2_filename
+            
         except Exception as e:
-            print(f"  ⚠️  Erreur de validation: {e}")
-            print(f"  ✅ Solution sauvegardée: {filename.name}")
-        
-        print(f"     Taille: {file_size:.1f} KB")
-        print(f"     Poules: {len(data.get('entities', {}).get('poules', []))}")
-        print(f"     Matchs: {len(data.get('matches', {}).get('scheduled', []))}")
-        
-        return filename
+            print(f"  ❌ Erreur lors de la génération v2.0: {e}")
+            import traceback
+            traceback.print_exc()
+            print(f"  ⚠️  Retour à la méthode save_solution() classique")
+            return self.save_solution(solution, signature, config_name, fixed_matches)
     
     def load_latest(self) -> Optional[dict]:
         """
