@@ -4,8 +4,8 @@
 
 # Fichiers
 fichiers:
-  donnees: "data_volley/config_volley.xlsx"
-  sortie: "data_volley/calendrier_volley.xlsx"
+  donnees: "examples/volleyball/config_volley.xlsx"
+  sortie: "examples/volleyball/calendrier_volley.xlsx"
 
 # Paramètres de planification (seulement valeurs différentes des défauts)
 planification:

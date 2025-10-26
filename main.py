@@ -19,8 +19,12 @@ Le système génère automatiquement :
 
 import sys
 from pathlib import Path
-from core.config import Config
-from orchestrator.pipeline import SchedulingPipeline
+
+# Add src to Python path for imports
+sys.path.insert(0, str(Path(__file__).parent / "src"))
+
+from pycalendar.core.config import Config
+from pycalendar.orchestrator.pipeline import SchedulingPipeline
 
 
 def print_banner():

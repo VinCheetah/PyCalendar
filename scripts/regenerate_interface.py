@@ -10,10 +10,10 @@ Usage:
 import sys
 from pathlib import Path
 
-# Ajouter le répertoire parent au path pour imports
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# Ajouter le répertoire src au path pour les imports
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'src'))
 
-from interface.core.generator import InterfaceGenerator
+from pycalendar.interface.core.generator import InterfaceGenerator
 
 
 def main():

@@ -20,8 +20,8 @@ from typing import Dict, List, Set, Tuple
 # Ajouter le répertoire parent au path pour imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from core.config_manager import ConfigManager
-from core.models import Equipe
+from pycalendar.core.config_manager import ConfigManager
+from pycalendar.core.models import Equipe
 from typing import Optional
 
 
@@ -170,7 +170,7 @@ class SolutionConverterV2:
         gymnases_capacites = {}
         if self.config_manager:
             try:
-                from data.data_loader import DataLoader
+                from pycalendar.data.data_loader import DataLoader
                 loader = DataLoader(str(self.config_manager.fichier_path))
                 gymnases_obj = loader.charger_gymnases()
                 gymnases_capacites = {g.nom: g.capacite for g in gymnases_obj}
@@ -660,7 +660,7 @@ Exemples:
   python scripts/convert_solution_to_v2.py solutions/latest_volley.json -o output_v2.json
   
   # Avec enrichissement depuis la config
-  python scripts/convert_solution_to_v2.py solutions/latest_volley.json -c data_volley/config_volley.xlsx
+  python scripts/convert_solution_to_v2.py solutions/latest_volley.json -c examples/volleyball/config_volley.xlsx
         """
     )
     

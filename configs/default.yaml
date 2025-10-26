@@ -7,10 +7,10 @@
 # Pour créer une config personnalisée, copiez ce fichier et ne gardez que les valeurs
 # que vous souhaitez modifier. Les autres seront automatiquement héritées des défauts.
 
-# Fichiers d'entrée/sortie
+# Fichiers d'entrée et de sortie
 fichiers:
-  donnees: "exemple/config_exemple.xlsx"
-  sortie: "exemple/calendrier.xlsx"
+  donnees: "examples/basic/config_exemple.xlsx"
+  sortie: "examples/basic/calendrier.xlsx"
 
 # Paramètres de planification
 planification:
@@ -106,8 +106,8 @@ calendrier:
 # Configuration par défaut pour PyCalendar
 
 fichiers:
-  donnees: "exemple/config_exemple.xlsx"
-  sortie: "exemple/calendrier.xlsx"
+  donnees: "examples/basic/config_exemple.xlsx"
+  sortie: "examples/basic/calendrier.xlsx"
 
 # Paramètres de planification
 planification:

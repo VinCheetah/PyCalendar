@@ -1,0 +1,100 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pycalendar"
+version = "2.0.0"
+description = "Système de planification automatique de calendriers sportifs"
+readme = "README.md"
+authors = [
+    {name = "VinCheetah"}
+]
+license = {text = "MIT"}
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Education",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: MIT License",
+]
+requires-python = ">=3.8"
+dependencies = [
+    "pandas>=2.0.0",
+    "openpyxl>=3.1.0",
+    "pyyaml>=6.0",
+    "ortools>=9.7.0",
+    "streamlit>=1.28.0",
+    "plotly>=5.17.0",
+    "jsonschema>=4.19.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "black>=23.0.0",
+    "flake8>=6.0.0",
+    "mypy>=1.5.0",
+    "isort>=5.12.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/VinCheetah/PyCalendar"
+Repository = "https://github.com/VinCheetah/PyCalendar"
+Documentation = "https://github.com/VinCheetah/PyCalendar/blob/main/README.md"
+
+[project.scripts]
+pycalendar = "pycalendar.__main__:main"
+pycalendar-config = "pycalendar.cli.config_tools:main"
+pycalendar-extract = "pycalendar.cli.pool_extractor:main"
+pycalendar-sheet = "pycalendar.cli.match_sheet_generator:main"
+pycalendar-import = "pycalendar.cli.external_importer:main"
+pycalendar-validate = "pycalendar.cli.solution_validator:main"
+pycalendar-check = "pycalendar.cli.quality_checker:main"
+pycalendar-interface = "pycalendar.cli.interface_regenerator:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.black]
+line-length = 100
+target-version = ['py38', 'py39', 'py310', 'py311', 'py312']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+line_length = 100
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --cov=pycalendar --cov-report=term-missing"

@@ -76,12 +76,12 @@ Créez ou utilisez un fichier de configuration centrale Excel avec 7 feuilles :
 **💡 Configuration en cascade** : Toutes les valeurs par défaut sont dans `configs/default.yaml`.  
 Vous ne spécifiez que ce que vous voulez **modifier**. Configuration ultra-simple !
 
-**Exemple minimal** `exemple/config.yaml` :
+**Exemple minimal** `examples/basic/config.yaml` :
 
 ```yaml
 fichiers:
-  donnees: "exemple/config_exemple.xlsx"
-  sortie: "exemple/calendrier_exemple.xlsx"
+  donnees: "examples/basic/config_exemple.xlsx"
+  sortie: "examples/basic/calendrier_exemple.xlsx"
 
 planification:
   strategie: "cpsat"  # Le reste vient de default.yaml
@@ -91,8 +91,8 @@ planification:
 
 ```yaml
 fichiers:
-  donnees: "exemple/config_exemple.xlsx"
-  sortie: "exemple/calendrier_exemple.xlsx"
+  donnees: "examples/basic/config_exemple.xlsx"
+  sortie: "examples/basic/calendrier_exemple.xlsx"
 
 planification:
   nb_semaines: 26
@@ -107,7 +107,7 @@ contraintes:
 ### 3. Lancez la planification
 
 ```bash
-python main.py exemple/config.yaml
+python main.py examples/basic/config.yaml
 ```
 
 ### 4. Résultats
@@ -242,7 +242,7 @@ Permet de définir des indisponibilités qui s'appliquent à **toutes les équip
 Valide et complète automatiquement un fichier de configuration :
 
 ```bash
-python actualiser_config.py exemple/config_exemple.xlsx
+python actualiser_config.py examples/basic/config_exemple.xlsx
 ```
 
 **Actions automatiques** :
@@ -283,8 +283,10 @@ PyCalendar/
 │   └── statistics.py
 ├── configs/                    # Configurations YAML
 │   └── default.yaml
-├── exemple/                    # Fichiers d'exemple
-│   └── config_exemple.xlsx    # Configuration centrale d'exemple
+├── examples/                   # Fichiers d'exemple
+│   ├── basic/                 # Exemple simple
+│   ├── volleyball/            # Exemple complet volleyball
+│   └── handball/              # Exemple complet handball
 ├── main.py                     # Point d'entrée principal
 └── actualiser_config.py        # Outil de validation/correction
 ```
@@ -346,7 +348,7 @@ Si tous les matchs ne sont pas planifiés :
 
 ```bash
 # Valider et corriger automatiquement
-python actualiser_config.py exemple/config_exemple.xlsx
+python actualiser_config.py examples/basic/config_exemple.xlsx
 ```
 
 ## 📚 Documentation complète

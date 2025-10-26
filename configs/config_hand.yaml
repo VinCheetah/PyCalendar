@@ -4,8 +4,8 @@
 
 # Fichiers
 fichiers:
-  donnees: "data_hand/config_handball.xlsx"
-  sortie: "data_hand/calendrier_handball_cpsat.xlsx"
+  donnees: "examples/handball/config_handball.xlsx"
+  sortie: "examples/handball/calendrier_handball_cpsat.xlsx"
 
 # Paramètres de planification (seulement valeurs différentes des défauts)
 planification:

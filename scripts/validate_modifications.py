@@ -10,7 +10,7 @@ Usage:
     
 Example:
     python scripts/validate_modifications.py \\
-        data_volley/calendrier_volley.xlsx \\
+        examples/volleyball/calendrier_volley.xlsx \\
         modifications_2025-01-16.json \\
         configs/config_volley.yaml
 """

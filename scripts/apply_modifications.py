@@ -11,7 +11,7 @@ Usage:
     
 Example:
     python scripts/apply_modifications.py \\
-        data_volley/calendrier_volley.xlsx \\
+        examples/volleyball/calendrier_volley.xlsx \\
         modifications_2025-01-16.json \\
         configs/config_volley.yaml
 """
@@ -27,10 +27,10 @@ from dataclasses import dataclass
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from core.config import Config
-from core.models import Creneau, Gymnase, Match
-from visualization.html_visualizer_v2 import HTMLVisualizerV2
-from data.data_source import DataSource
+from pycalendar.core.config import Config
+from pycalendar.core.models import Creneau, Gymnase, Match
+from pycalendar.interface.core.generator import InterfaceGenerator
+from pycalendar.data.data_source import DataSource
 
 
 @dataclass
@@ -282,7 +282,8 @@ class ModificationApplier:
             solution = ds.create_solution()
             
             html_path = str(self.excel_file).replace('.xlsx', '.html')
-            HTMLVisualizerV2.generate(solution, html_path, self.config)
+            generator = InterfaceGenerator()
+            generator.generate(solution, html_path, self.config)
             
             print(f"✅ HTML regenerated: {html_path}")
             return html_path

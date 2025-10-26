@@ -21,7 +21,7 @@ from typing import Optional
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from scripts.convert_solution_to_v2 import SolutionConverterV2
-from interface.core.generator import InterfaceGenerator
+from pycalendar.interface.core.generator import InterfaceGenerator
 
 
 def process_solution(
