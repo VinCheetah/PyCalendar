@@ -25,10 +25,42 @@ class ModificationManager {
             past: [],
             future: []
         };
+        this.listeners = []; // Pour les abonnements
         
         this._loadFromStorage();
     }
     
+    // ==================== GESTION DES ÉCOUTEURS ====================
+
+    /**
+     * S'abonner aux changements.
+     * @param {function} listener - La fonction à appeler lors d'un changement.
+     */
+    subscribe(listener) {
+        this.listeners.push(listener);
+    }
+
+    /**
+     * Se désabonner.
+     * @param {function} listener - La fonction à retirer.
+     */
+    unsubscribe(listener) {
+        this.listeners = this.listeners.filter(l => l !== listener);
+    }
+
+    /**
+     * Notifie tous les écouteurs d'un changement.
+     */
+    _notify() {
+        this.listeners.forEach(listener => {
+            try {
+                listener();
+            } catch (error) {
+                console.error("Erreur dans un écouteur de ModificationManager:", error);
+            }
+        });
+    }
+
     // ==================== MODIFICATION MANAGEMENT ====================
     
     /**
@@ -59,6 +91,9 @@ class ModificationManager {
         // Save to storage
         this._saveToStorage();
         
+        // Notifier les écouteurs
+        this._notify();
+
         return true;
     }
     
@@ -71,6 +106,7 @@ class ModificationManager {
         if (index >= 0) {
             const removed = this.modifications.splice(index, 1)[0];
             this._saveToStorage();
+            this._notify(); // Notifier
             return removed;
         }
         
@@ -112,6 +148,7 @@ class ModificationManager {
         this.modifications = [];
         this.history = { past: [], future: [] };
         this._saveToStorage();
+        this._notify(); // Notifier
     }
     
     // ==================== UNDO/REDO ====================
@@ -129,6 +166,7 @@ class ModificationManager {
         this.history.future.push(lastModification);
         
         this._saveToStorage();
+        this._notify(); // Notifier
         
         return lastModification;
     }
@@ -146,6 +184,7 @@ class ModificationManager {
         this.history.past.push([...this.modifications]);
         
         this._saveToStorage();
+        this._notify(); // Notifier
         
         return modification;
     }

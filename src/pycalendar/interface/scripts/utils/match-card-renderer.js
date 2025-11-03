@@ -100,17 +100,26 @@ class MatchCardRenderer {
     renderTeam(nom, num, institution, equipeData, isCompact) {
         const displayName = isCompact ? this.shortenName(nom) : nom;
         const displayNum = num ? `#${num}` : '';
+        const fullTitle = `${nom} ${displayNum}${institution ? ` (${institution})` : ''}`;
         
         return `
-            <div class="team-info" title="${nom} ${displayNum}${institution ? ` (${institution})` : ''}">
+            <div class="team-info" title="${fullTitle}">
                 <div class="team-name-row">
                     ${displayNum ? `<span class="team-num">${displayNum}</span>` : ''}
                     <span class="team-name">${displayName}</span>
                 </div>
-                ${!isCompact && institution ? `<span class="team-institution">${institution}</span>` : ''}
-                ${!isCompact && equipeData ? this.renderTeamPreferences(equipeData) : ''}
+                ${!isCompact && institution ? `<span class="team-institution">${this.shortenInstitution(institution)}</span>` : ''}
             </div>
         `;
+    }
+    
+    /**
+     * Raccourcit le nom d'une institution
+     */
+    shortenInstitution(institution) {
+        if (!institution) return '';
+        if (institution.length <= 25) return institution;
+        return institution.substring(0, 22) + '...';
     }
     
     /**

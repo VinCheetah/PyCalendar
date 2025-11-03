@@ -1,0 +1,1548 @@
+/**
+ * ============================================================================
+ * POOLS VIEW - Vue Poules Élégante et Fonctionnelle
+ * ============================================================================
+ * 
+ * Design inspiré de l'agenda avec :
+ * - Organisation claire par genre et niveau
+ * - Affichage en colonnes responsive
+ * - Animations fluides et transitions élégantes
+ * - Informations détaillées et interactives
+ * - Code de haute qualité utilisant les variables CSS existantes
+ */
+
+/* ============================================================================
+   CONTAINER PRINCIPAL - FOND CLAIR ET MODERNE
+   ============================================================================ */
+
+.pools-view {
+    background: linear-gradient(
+        to bottom,
+        rgba(248, 250, 252, 0.6) 0%,
+        rgba(255, 255, 255, 0.9) 100%
+    );
+    border-radius: var(--radius-lg);
+    padding: 1.5rem;
+    min-height: calc(100vh - 200px);
+    animation: fadeIn var(--transition-base);
+}
+
+/* ============================================================================
+   EN-TÊTE ET RÉSUMÉ - STATISTIQUES GLOBALES
+   ============================================================================ */
+
+.pools-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1.25rem;
+    margin-bottom: 2rem;
+    padding: 1.5rem;
+    background: linear-gradient(
+        to right,
+        rgba(248, 250, 252, 1) 0%,
+        rgba(255, 255, 255, 1) 50%,
+        rgba(248, 250, 252, 1) 100%
+    );
+    border-radius: var(--radius-lg);
+    border: 2px solid rgba(0, 85, 164, 0.08);
+    position: relative;
+    overflow: hidden;
+}
+
+/* Accent tricolore subtil */
+.pools-summary::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(
+        90deg,
+        var(--accent-violet) 0%,
+        var(--accent-pink) 25%,
+        var(--accent-orange) 50%,
+        var(--accent-teal) 75%,
+        var(--accent-indigo) 100%
+    );
+    box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);
+}
+
+.summary-card {
+    text-align: center;
+    padding: 1.25rem;
+    background: white;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-color);
+    transition: all var(--transition-base);
+    box-shadow: var(--shadow-xs);
+}
+
+.summary-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+    border-color: var(--primary);
+}
+
+.summary-value {
+    font-size: 2.5rem;
+    font-weight: 700;
+    background: var(--primary-gradient);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    line-height: 1.2;
+    margin-bottom: 0.5rem;
+}
+
+.summary-label {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* ============================================================================
+   ORGANISATION PAR GENRE - COLONNES PRINCIPALES
+   ============================================================================ */
+
+.pools-by-gender {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+    gap: 2rem;
+    margin-bottom: 2rem;
+}
+
+.gender-section {
+    animation: slideInLeft var(--transition-slow);
+}
+
+.gender-section:nth-child(2) {
+    animation: slideInRight var(--transition-slow);
+}
+
+.gender-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1.25rem;
+    background: linear-gradient(
+        135deg,
+        rgba(255, 255, 255, 0.95) 0%,
+        rgba(248, 250, 252, 0.95) 100%
+    );
+    border-radius: var(--radius-lg);
+    margin-bottom: 1.5rem;
+    border: 2px solid var(--border-color);
+    transition: all var(--transition-base);
+}
+
+.gender-section.male .gender-header {
+    border-left: 5px solid var(--male);
+    background: linear-gradient(
+        135deg,
+        rgba(59, 130, 246, 0.05) 0%,
+        rgba(255, 255, 255, 0.95) 100%
+    );
+}
+
+.gender-section.female .gender-header {
+    border-left: 5px solid var(--female);
+    background: linear-gradient(
+        135deg,
+        rgba(236, 72, 153, 0.05) 0%,
+        rgba(255, 255, 255, 0.95) 100%
+    );
+}
+
+.gender-icon {
+    font-size: 2rem;
+    width: 50px;
+    height: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-lg);
+    background: white;
+    box-shadow: var(--shadow-sm);
+}
+
+.gender-section.male .gender-icon {
+    background: var(--male-light);
+    color: var(--male);
+}
+
+.gender-section.female .gender-icon {
+    background: var(--female-light);
+    color: var(--female);
+}
+
+.gender-title {
+    flex: 1;
+}
+
+.gender-title h2 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin: 0 0 0.25rem 0;
+    color: var(--text-primary);
+}
+
+.gender-subtitle {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+/* ============================================================================
+   CARTES DE POULES - DESIGN ÉLÉGANT ET MODERNE
+   ============================================================================ */
+
+.pools-list {
+    display: grid;
+    gap: 1.25rem;
+}
+
+/* Styles pour le format 'list' */
+.pools-list.list {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    background-color: white;
+}
+
+.pool-list-row {
+    display: grid;
+    grid-template-columns: 3fr 1fr 1fr 1fr 1fr 1fr 50px;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--border-color);
+    transition: background-color var(--transition-fast);
+    cursor: pointer;
+}
+
+.pool-list-row:hover {
+    background-color: var(--bg-secondary);
+}
+
+.pool-list-row:last-child {
+    border-bottom: none;
+}
+
+.pool-list-cell {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    padding: 0 0.5rem;
+    text-align: center;
+}
+
+.pool-list-cell.name {
+    text-align: left;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.pool-list-cell.expand {
+    padding: 0;
+}
+
+/* Styles pour le format 'compact' */
+.pools-list.compact {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1rem;
+}
+
+.pool-compact {
+    display: flex;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    background-color: white;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all var(--transition-base);
+    box-shadow: var(--shadow-xs);
+}
+
+.pool-compact:hover {
+    border-color: var(--primary);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-sm);
+}
+
+.pool-compact.male { border-left: 3px solid var(--male); }
+.pool-compact.female { border-left: 3px solid var(--female); }
+
+.pool-compact-main {
+    flex-grow: 1;
+}
+
+.pool-compact-name {
+    font-weight: 600;
+    color: var(--text-primary);
+    display: block;
+}
+
+.pool-compact-level {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.pool-compact-stats {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-right: 1rem;
+}
+
+.pool-compact-teams,
+.pool-compact-matches {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.pool-compact-progress {
+    width: 50px;
+    height: 6px;
+    background-color: var(--border-color);
+    border-radius: var(--radius-full);
+    overflow: hidden;
+}
+
+.pool-compact-progress .progress-bar {
+    height: 100%;
+    background-color: var(--success);
+    border-radius: var(--radius-full);
+}
+
+.pool-compact .expand-btn {
+    width: 28px;
+    height: 28px;
+    font-size: 0.8rem;
+}
+
+.pool-card {
+    background: white;
+    border-radius: var(--radius-lg);
+    border: 2px solid var(--border-color);
+    overflow: hidden;
+    transition: all var(--transition-base);
+    box-shadow: var(--shadow-sm);
+}
+
+.pool-card:hover {
+    box-shadow: var(--shadow-md);
+    border-color: var(--primary-light);
+    transform: translateY(-2px);
+}
+
+.pool-card.expanded {
+    border-color: var(--primary);
+    box-shadow: var(--shadow-lg);
+}
+
+/* Accent coloré selon le genre */
+.pool-card.male {
+    border-left: 4px solid var(--male);
+}
+
+.pool-card.female {
+    border-left: 4px solid var(--female);
+}
+
+/* ============================================================================
+   EN-TÊTE DE POULE - INFORMATION PRINCIPALE
+   ============================================================================ */
+
+.pool-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1.25rem 1.5rem;
+    background: linear-gradient(
+        to right,
+        rgba(248, 250, 252, 0.5) 0%,
+        rgba(255, 255, 255, 1) 100%
+    );
+    cursor: pointer;
+    transition: all var(--transition-base);
+}
+
+.pool-header:hover {
+    background: linear-gradient(
+        to right,
+        rgba(239, 246, 255, 0.6) 0%,
+        rgba(255, 255, 255, 1) 100%
+    );
+}
+
+.pool-title {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex: 1;
+}
+
+.pool-title h3 {
+    font-size: 1.25rem;
+    font-weight: 700;
+    margin: 0;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.pool-info {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.pool-level,
+.pool-teams,
+.pool-matches {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.4rem 0.75rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    border-radius: var(--radius-full);
+    background: white;
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    transition: all var(--transition-fast);
+}
+
+.pool-level {
+    background: linear-gradient(135deg, var(--primary-light) 0%, var(--accent-light) 100%);
+    color: var(--primary);
+    border-color: var(--primary);
+    font-weight: 700;
+}
+
+.pool-teams {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(34, 197, 94, 0.1) 100%);
+    border-color: rgba(16, 185, 129, 0.3);
+}
+
+.pool-teams:hover {
+    background: var(--success-light);
+    border-color: var(--success);
+    color: var(--success-dark);
+    transform: translateY(-1px);
+}
+
+.pool-matches {
+    background: linear-gradient(135deg, rgba(249, 115, 22, 0.1) 0%, rgba(251, 146, 60, 0.1) 100%);
+    border-color: rgba(249, 115, 22, 0.3);
+}
+
+.pool-matches:hover {
+    background: rgba(249, 115, 22, 0.15);
+    border-color: #f97316;
+    color: #ea580c;
+    transform: translateY(-1px);
+}
+
+.expand-btn {
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: white;
+    color: var(--primary);
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all var(--transition-base);
+    flex-shrink: 0;
+}
+
+.expand-btn:hover {
+    background: var(--primary);
+    color: white;
+    border-color: var(--primary);
+    transform: scale(1.1);
+}
+
+.expand-btn.expanded {
+    background: var(--primary);
+    color: white;
+    border-color: var(--primary);
+    transform: rotate(180deg);
+}
+
+/* ============================================================================
+   CONTENU DÉTAILLÉ DE LA POULE - DESIGN REVU ET AMÉLIORÉ
+   ============================================================================ */
+
+.pool-content {
+    padding: 0;
+    border-top: 2px solid var(--border-color);
+    background: linear-gradient(
+        to bottom,
+        rgba(248, 250, 252, 0.5) 0%,
+        rgba(255, 255, 255, 1) 100%
+    );
+    animation: slideDown var(--transition-base);
+}
+
+.pool-content-section {
+    padding: 1.5rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.pool-content-section:last-child {
+    border-bottom: none;
+}
+
+.pool-content-section-title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0 0 1rem 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 2px solid var(--border-color);
+}
+
+/* ============================================================================
+   STATISTIQUES DE LA POULE - DESIGN AMÉLIORÉ
+   ============================================================================ */
+
+.pool-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 0.75rem;
+}
+
+.stat-item {
+    text-align: center;
+    padding: 0.875rem 0.75rem;
+    background: white;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-color);
+    transition: all var(--transition-base);
+    position: relative;
+    overflow: hidden;
+}
+
+.stat-item::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--primary-gradient);
+    opacity: 0;
+    transition: opacity var(--transition-base);
+}
+
+.stat-item:hover {
+    border-color: var(--primary);
+    box-shadow: var(--shadow-sm);
+    transform: translateY(-2px);
+}
+
+.stat-item:hover::before {
+    opacity: 1;
+}
+
+.stat-item:nth-child(1) .stat-item-value {
+    color: var(--success);
+}
+
+.stat-item:nth-child(2) .stat-item-value {
+    color: var(--info);
+}
+
+.stat-item:nth-child(3) .stat-item-value {
+    color: var(--warning);
+}
+
+.stat-item:nth-child(4) .stat-item-value {
+    color: var(--accent);
+}
+
+.stat-item-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-bottom: 0.25rem;
+    line-height: 1;
+}
+
+.stat-item-label {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* ============================================================================
+   CLASSEMENT - TABLE ÉLÉGANTE
+   ============================================================================ */
+
+.pool-standings h4 {
+    font-size: 1.125rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0 0 1rem 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.standings-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    background: white;
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+}
+
+.standings-table thead {
+    background: linear-gradient(
+        135deg,
+        var(--primary) 0%,
+        var(--primary-hover) 100%
+    );
+}
+
+.standings-table th {
+    padding: 0.875rem 1rem;
+    text-align: left;
+    font-size: 0.8125rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: white;
+}
+
+.standings-table th:first-child {
+    text-align: center;
+    width: 50px;
+}
+
+.standings-table tbody tr {
+    transition: all var(--transition-fast);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.standings-table tbody tr:hover {
+    background: var(--bg-secondary);
+}
+
+.standings-table tbody tr:last-child {
+    border-bottom: none;
+}
+
+.standings-table td {
+    padding: 0.875rem 1rem;
+    font-size: 0.9375rem;
+    color: var(--text-primary);
+}
+
+.standings-table td:first-child {
+    text-align: center;
+    font-weight: 700;
+    color: var(--text-secondary);
+}
+
+.team-name {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.points {
+    font-weight: 700;
+    color: var(--primary);
+    text-align: center;
+}
+
+/* Podium visuel */
+.standings-table tbody tr:nth-child(1) td:first-child {
+    background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+    color: white;
+    border-radius: var(--radius-sm);
+}
+
+.standings-table tbody tr:nth-child(2) td:first-child {
+    background: linear-gradient(135deg, #C0C0C0 0%, #A8A8A8 100%);
+    color: white;
+    border-radius: var(--radius-sm);
+}
+
+.standings-table tbody tr:nth-child(3) td:first-child {
+    background: linear-gradient(135deg, #CD7F32 0%, #B8860B 100%);
+    color: white;
+    border-radius: var(--radius-sm);
+}
+
+/* ============================================================================
+   MATCHS - ORGANISATION PAR STATUT
+   ============================================================================ */
+
+.pool-matches {
+    margin-top: 2rem;
+}
+
+.pool-matches h4 {
+    font-size: 1.125rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0 0 1rem 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.matches-tabs {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+    border-bottom: 2px solid var(--border-color);
+}
+
+.match-tab {
+    padding: 0.75rem 1.5rem;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    font-weight: 600;
+    font-size: 0.9375rem;
+    cursor: pointer;
+    position: relative;
+    transition: all var(--transition-base);
+    border-radius: var(--radius-md) var(--radius-md) 0 0;
+}
+
+.match-tab:hover {
+    background: var(--bg-secondary);
+    color: var(--primary);
+}
+
+.match-tab.active {
+    color: var(--primary);
+    background: white;
+}
+
+.match-tab.active::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--primary-gradient);
+    border-radius: var(--radius-full);
+}
+
+.match-tab-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 24px;
+    height: 24px;
+    padding: 0 0.5rem;
+    margin-left: 0.5rem;
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-full);
+    font-size: 0.75rem;
+    font-weight: 700;
+    transition: all var(--transition-fast);
+}
+
+.match-tab:nth-child(1) .match-tab-count {
+    background: rgba(59, 130, 246, 0.15);
+    color: var(--info-dark);
+}
+
+.match-tab:nth-child(2) .match-tab-count {
+    background: rgba(16, 185, 129, 0.15);
+    color: var(--success-dark);
+}
+
+.match-tab:nth-child(3) .match-tab-count {
+    background: rgba(139, 92, 246, 0.15);
+    color: var(--accent-dark);
+}
+
+.match-tab.active .match-tab-count {
+    background: var(--primary);
+    color: white;
+}
+
+.matches-content {
+    display: none;
+}
+
+.matches-content.active {
+    display: block;
+    animation: fadeIn var(--transition-base);
+}
+
+/* ============================================================================
+   GROUPES DE MATCHS PAR SEMAINE
+   ============================================================================ */
+
+.week-group {
+    margin-bottom: 2rem;
+}
+
+.week-group:last-child {
+    margin-bottom: 0;
+}
+
+.week-group h5 {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0 0 1rem 0;
+    padding: 0.75rem 1rem;
+    background: linear-gradient(
+        to right,
+        var(--primary-light) 0%,
+        rgba(139, 92, 246, 0.1) 50%,
+        rgba(255, 255, 255, 0) 100%
+    );
+    border-left: 4px solid var(--primary);
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.matches-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 1rem;
+}
+
+/* ============================================================================
+   CARTES DE MATCH - DESIGN COMPACT ET INFORMATIONNEL
+   ============================================================================ */
+
+.match-card {
+    background: linear-gradient(135deg, white 0%, var(--bg-secondary) 100%);
+    border: 2px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: 1.25rem;
+    transition: all var(--transition-base);
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+}
+
+.match-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 5px;
+    height: 100%;
+    background: var(--primary-gradient);
+    opacity: 0;
+    transition: all var(--transition-base);
+}
+
+.match-card::after {
+    content: '';
+    position: absolute;
+    top: -50%;
+    right: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle, rgba(0, 85, 164, 0.03) 0%, transparent 70%);
+    opacity: 0;
+    transition: opacity var(--transition-base);
+}
+
+.match-card:hover {
+    border-color: var(--primary);
+    box-shadow: var(--shadow-primary-lg);
+    transform: translateY(-4px) scale(1.01);
+}
+
+.match-card:hover::before {
+    opacity: 1;
+    width: 6px;
+}
+
+.match-card:hover::after {
+    opacity: 1;
+}
+
+.match-card.played {
+    background: linear-gradient(
+        135deg,
+        rgba(16, 185, 129, 0.08) 0%,
+        rgba(255, 255, 255, 1) 100%
+    );
+    border-left: 4px solid var(--success);
+    box-shadow: var(--shadow-success);
+}
+
+.match-card.played::before {
+    background: linear-gradient(180deg, var(--success) 0%, var(--success-dark) 100%);
+}
+
+.match-card.upcoming {
+    background: linear-gradient(
+        135deg,
+        rgba(59, 130, 246, 0.08) 0%,
+        rgba(255, 255, 255, 1) 100%
+    );
+    border-left: 4px solid var(--info);
+    box-shadow: var(--shadow-info);
+}
+
+.match-card.upcoming::before {
+    background: linear-gradient(180deg, var(--info) 0%, var(--info-dark) 100%);
+}
+
+.match-time {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.match-time::before {
+    content: '🕒';
+    font-size: 1rem;
+}
+
+.match-teams {
+    margin-bottom: 0.75rem;
+}
+
+.match-teams-mini {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+    font-size: 0.9375rem;
+}
+
+.team {
+    flex: 1;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.vs {
+    font-weight: 700;
+    color: var(--text-tertiary);
+    font-size: 0.75rem;
+}
+
+.match-score {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    padding: 0.75rem;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-md);
+    margin-bottom: 0.75rem;
+}
+
+.team-score {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.score-value {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: var(--primary);
+}
+
+.score-team {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.score-separator {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--text-tertiary);
+}
+
+.match-venue,
+.match-venue-mini {
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.match-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border-color);
+}
+
+.match-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.3rem 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    border-radius: var(--radius-full);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.match-status.played {
+    background: var(--success-light);
+    color: var(--success-dark);
+}
+
+.match-status.upcoming {
+    background: var(--info-light);
+    color: var(--info-dark);
+}
+
+.match-status.unscheduled {
+    background: var(--warning-light);
+    color: var(--warning-dark);
+}
+
+.match-penalty-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 36px;
+    padding: 0.3rem 0.6rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    border-radius: var(--radius-full);
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+}
+
+.match-penalty-badge.penalty-low {
+    background: var(--success-light);
+    color: var(--success-dark);
+}
+
+.match-penalty-badge.penalty-medium {
+    background: var(--warning-light);
+    color: var(--warning-dark);
+}
+
+.match-penalty-badge.penalty-high {
+    background: var(--danger-light);
+    color: var(--danger-dark);
+}
+
+/* ============================================================================
+   NOUVEAU DESIGN DES CARTES DE MATCH - MODERNE ET CLAIR
+   ============================================================================ */
+
+.match-card-new {
+    background: white;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    transition: all var(--transition-base);
+    box-shadow: var(--shadow-sm);
+    cursor: pointer;
+}
+
+.match-card-new:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-md);
+    border-color: var(--primary);
+}
+
+.match-card-new.played {
+    border-left: 4px solid var(--success);
+}
+
+.match-card-new.upcoming {
+    border-left: 4px solid var(--info);
+}
+
+/* --- Header --- */
+.match-card-new-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.match-card-new-status {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-weight: 600;
+}
+
+.match-card-new.played .match-card-new-status {
+    color: var(--success-dark);
+}
+.match-card-new.upcoming .match-card-new-status {
+    color: var(--info-dark);
+}
+
+.match-card-new-week {
+    padding: 0.2rem 0.6rem;
+    background-color: var(--bg-secondary);
+    border-radius: var(--radius-full);
+    font-weight: 600;
+}
+
+/* --- Body --- */
+.match-card-new-body {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.team-info {
+    flex: 1;
+    text-align: center;
+}
+
+.team-info .team-name {
+    font-weight: 700;
+    font-size: 1rem;
+    color: var(--text-primary);
+}
+
+.team-info-right {
+    text-align: center;
+}
+
+.match-center .vs-circle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--primary-light), var(--accent-light));
+    color: var(--primary);
+    font-weight: 700;
+    font-size: 0.9rem;
+    border: 2px solid white;
+    box-shadow: 0 0 0 2px var(--primary);
+}
+
+/* --- Footer --- */
+.match-card-new-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border-color);
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.footer-info {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.footer-icon {
+    font-size: 1rem;
+}
+
+.footer-info.penalty {
+    padding: 0.2rem 0.6rem;
+    border-radius: var(--radius-full);
+    font-weight: 600;
+}
+
+.footer-info.penalty-low { background-color: var(--success-light); color: var(--success-dark); }
+.footer-info.penalty-medium { background-color: var(--warning-light); color: var(--warning-dark); }
+.footer-info.penalty-high { background-color: var(--danger-light); color: var(--danger-dark); }
+
+
+/* ============================================================================
+   ÉTATS VIDES
+   ============================================================================ */
+
+.empty-state,
+.no-matches {
+    text-align: center;
+    padding: 3rem 2rem;
+    color: var(--text-secondary);
+}
+
+.empty-state-icon {
+    font-size: 4rem;
+    margin-bottom: 1rem;
+    opacity: 0.6;
+}
+
+.empty-state-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0 0 0.5rem 0;
+}
+
+.empty-state-message {
+    font-size: 0.9375rem;
+    color: var(--text-secondary);
+    margin: 0;
+}
+
+.no-matches {
+    padding: 2rem;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-md);
+    border: 2px dashed var(--border-color);
+    font-size: 0.9375rem;
+    font-weight: 500;
+}
+
+/* ============================================================================
+   RESPONSIVE DESIGN
+   ============================================================================ */
+
+@media (max-width: 1200px) {
+    .pools-by-gender {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 768px) {
+    .pools-view {
+        padding: 1rem;
+    }
+
+    .pools-summary {
+        grid-template-columns: 1fr;
+        gap: 0.75rem;
+    }
+
+    .pool-header {
+        flex-wrap: wrap;
+        gap: 0.75rem;
+    }
+
+    .pool-info {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .matches-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .standings-table {
+        font-size: 0.875rem;
+    }
+
+    .standings-table th,
+    .standings-table td {
+        padding: 0.5rem 0.75rem;
+    }
+}
+
+/* ============================================================================
+   ANIMATIONS ET INTERACTIONS AVANCÉES
+   ============================================================================ */
+
+@keyframes poolCardAppear {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.pool-card {
+    animation: poolCardAppear var(--transition-slow) ease-out;
+    animation-fill-mode: both;
+}
+
+.pool-card:nth-child(1) { animation-delay: 0ms; }
+.pool-card:nth-child(2) { animation-delay: 50ms; }
+.pool-card:nth-child(3) { animation-delay: 100ms; }
+.pool-card:nth-child(4) { animation-delay: 150ms; }
+.pool-card:nth-child(5) { animation-delay: 200ms; }
+.pool-card:nth-child(6) { animation-delay: 250ms; }
+
+/* Effet de brillance au survol */
+@keyframes shine {
+    0% {
+        left: -100%;
+    }
+    100% {
+        left: 100%;
+    }
+}
+
+/* ============================================================================
+   LISTE DES ÉQUIPES DANS UNE POULE
+   ============================================================================ */
+
+.pool-teams-list {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.team-item {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.875rem 1rem;
+    background: white;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    transition: all var(--transition-base);
+}
+
+.team-item:hover {
+    border-color: var(--primary);
+    box-shadow: var(--shadow-sm);
+    transform: translateX(4px);
+}
+
+.team-item-icon {
+    font-size: 1.5rem;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--primary-light);
+    border-radius: var(--radius-md);
+    flex-shrink: 0;
+}
+
+.team-item-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.team-item-name {
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 0.25rem;
+}
+
+.team-item-details {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+}
+
+.team-detail-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+}
+
+.team-detail-icon {
+    font-size: 0.875rem;
+}
+
+/* ============================================================================
+   SÉPARATIONS DE NIVEAU
+   ============================================================================ */
+
+.level-separator {
+    margin: 2rem 0 1.5rem 0;
+    padding: 1rem 1.5rem;
+    background: linear-gradient(
+        to right,
+        rgba(0, 85, 164, 0.08) 0%,
+        rgba(139, 92, 246, 0.05) 50%,
+        rgba(0, 85, 164, 0.08) 100%
+    );
+    border-left: 4px solid var(--primary);
+    border-right: 4px solid var(--accent);
+    border-radius: var(--radius-lg);
+    position: relative;
+}
+
+.level-separator-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--primary);
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.level-separator-stats {
+    margin-top: 0.5rem;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+/* ============================================================================
+   OPTIONS D'AFFICHAGE
+   ============================================================================ */
+
+.pools-display-options {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem 1.5rem;
+    background: white;
+    border: 2px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.display-option-group {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.display-option-label {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.display-option-btn {
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    border: 2px solid var(--border-color);
+    background: white;
+    color: var(--text-secondary);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.display-option-btn:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+    transform: translateY(-1px);
+}
+
+.display-option-btn.active {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: white;
+    box-shadow: var(--shadow-primary);
+}
+
+.display-option-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    cursor: pointer;
+    user-select: none;
+}
+
+.display-option-checkbox input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+}
+
+.display-option-checkbox label {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text-primary);
+    cursor: pointer;
+}
+
+.pool-card:hover::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 50%;
+    height: 100%;
+    background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(255, 255, 255, 0.3),
+        transparent
+    );
+    animation: shine 0.8s;
+    pointer-events: none;
+}
+
+/* ============================================================================
+   THÈME SOMBRE - ADAPTATIONS
+   ============================================================================ */
+
+[data-theme="dark"] .pools-view {
+    background: linear-gradient(
+        to bottom,
+        rgba(30, 41, 59, 0.6) 0%,
+        rgba(15, 23, 42, 0.9) 100%
+    );
+}
+
+[data-theme="dark"] .pool-card,
+[data-theme="dark"] .summary-card,
+[data-theme="dark"] .stat-item,
+[data-theme="dark"] .standings-table,
+[data-theme="dark"] .match-card {
+    background: var(--bg-secondary);
+    border-color: var(--border-color);
+}
+
+[data-theme="dark"] .pool-header,
+[data-theme="dark"] .gender-header {
+    background: var(--bg-tertiary);
+}
+
+[data-theme="dark"] .pool-content {
+    background: rgba(30, 41, 59, 0.3);
+}

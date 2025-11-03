@@ -1,194 +1,449 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="fr" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PyCalendar - Interface de Gestion</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <title>PyCalendar FFSU - Gestion de Calendriers Sportifs</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     
     <!-- CSS_PLACEHOLDER -->
 </head>
 <body>
-    <div class="app-container">
-        <!-- ==================== HEADER ==================== -->
-        <header class="header">
-            <h1 class="header-title">📅 PyCalendar</h1>
-            <p class="header-subtitle">Interface de Gestion de Calendriers Sportifs</p>
-            
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <div class="stat-value" id="stat-scheduled">-</div>
-                    <div class="stat-label">Matchs planifiés</div>
+    <div class="app-wrapper">
+        <!-- ==================== HEADER PRINCIPAL ==================== -->
+        <header class="main-header">
+            <div class="header-content">
+                <div class="header-left">
+                    <div class="header-logo">
+                        <div class="logo-icon">🏐</div>
+                        <div class="logo-text">
+                            <h1 class="logo-title">PyCalendar FFSU</h1>
+                            <p class="logo-subtitle">Fédération Française du Sport Universitaire</p>
+                        </div>
+                    </div>
                 </div>
-                <div class="stat-card">
-                    <div class="stat-value" id="stat-unscheduled">-</div>
-                    <div class="stat-label">Non planifiés</div>
+                
+                <div class="header-center">
+                    <div class="header-stats">
+                        <div class="header-stat">
+                            <span class="stat-icon">📋</span>
+                            <span class="stat-value" id="stat-scheduled">-</span>
+                            <span class="stat-label">Planifiés</span>
+                        </div>
+                        <div class="header-stat">
+                            <span class="stat-icon">⚠️</span>
+                            <span class="stat-value" id="stat-unscheduled">-</span>
+                            <span class="stat-label">À planifier</span>
+                        </div>
+                        <div class="header-stat">
+                            <span class="stat-icon">🏟️</span>
+                            <span class="stat-value" id="stat-venues">-</span>
+                            <span class="stat-label">Gymnases</span>
+                        </div>
+                        <div class="header-stat">
+                            <span class="stat-icon">✏️</span>
+                            <span class="stat-value warning" id="stat-modifications">0</span>
+                            <span class="stat-label">Modifications</span>
+                        </div>
+                    </div>
                 </div>
-                <div class="stat-card">
-                    <div class="stat-value" id="stat-weeks">-</div>
-                    <div class="stat-label">Semaines</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value" id="stat-pools">-</div>
-                    <div class="stat-label">Poules</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value" id="stat-venues">-</div>
-                    <div class="stat-label">Gymnases</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value" id="stat-modifications">0</div>
-                    <div class="stat-label">Modifications</div>
+                
+                <div class="header-right">
+                    <div class="theme-selector">
+                        <button class="theme-btn" data-theme="light" title="Thème Clair">
+                            <span class="theme-icon">☀️</span>
+                        </button>
+                        <button class="theme-btn" data-theme="dark" title="Thème Sombre">
+                            <span class="theme-icon">🌙</span>
+                        </button>
+                        <button class="theme-btn active" data-theme="tricolore" title="Thème France">
+                            <span class="theme-icon">🇫🇷</span>
+                        </button>
+                    </div>
+                    <button class="btn-icon" id="btn-help" title="Aide">
+                        <span>❓</span>
+                    </button>
                 </div>
             </div>
         </header>
         
-        <!-- ==================== CONTROLS ==================== -->
-        <section class="controls-section">
-            <!-- Filtres principaux -->
-            <div class="control-group">
-                <h3 class="control-group-title">
-                    <span>🔍 Filtres</span>
-                </h3>
-                <div class="filters-container">
-                    <div class="filter-group">
-                        <label class="filter-label">Genre</label>
-                        <select class="filter-select" id="filter-gender">
-                            <option value="">Tous</option>
-                            <option value="M">Masculin</option>
-                            <option value="F">Féminin</option>
-                        </select>
+        <!-- ==================== LAYOUT PRINCIPAL (3 COLONNES) ==================== -->
+        <div class="main-layout">
+            
+            <!-- Bouton pour réafficher la sidebar gauche quand elle est masquée -->
+            <button class="btn-show-sidebar btn-show-left" id="btn-show-left" title="Afficher les options">
+                <span>▶</span>
+            </button>
+            
+            <!-- ==================== SIDEBAR GAUCHE - OPTIONS D'AFFICHAGE ==================== -->
+            <aside class="sidebar sidebar-left">
+                <div class="sidebar-header">
+                    <h2 class="sidebar-title">
+                        <span class="sidebar-icon">⚙️</span>
+                        Affichage
+                    </h2>
+                    <button class="btn-collapse" id="btn-collapse-left" title="Réduire">
+                        <span>◀</span>
+                    </button>
+                </div>
+                
+                <div class="sidebar-content">
+                    <!-- Section Vue -->
+                    <div class="control-section">
+                        <h3 class="control-section-title">Vue</h3>
+                        <div class="view-selector">
+                            <button class="view-btn active" data-view="agenda">
+                                <span class="view-icon">📋</span>
+                                <span class="view-name">Agenda</span>
+                            </button>
+                            <button class="view-btn" data-view="pools">
+                                <span class="view-icon">🎯</span>
+                                <span class="view-name">Poules</span>
+                            </button>
+                            <button class="view-btn" data-view="cards">
+                                <span class="view-icon">🃏</span>
+                                <span class="view-name">Cartes</span>
+                            </button>
+                            <button class="view-btn" data-view="calendar">
+                                <span class="view-icon">�</span>
+                                <span class="view-name">Calendrier</span>
+                            </button>
+                            <button class="view-btn" data-view="stats">
+                                <span class="view-icon">📊</span>
+                                <span class="view-name">Statistiques</span>
+                            </button>
+                        </div>
                     </div>
                     
-                    <div class="filter-group">
-                        <label class="filter-label">Institution</label>
-                        <select class="filter-select" id="filter-institution">
-                            <option value="">Toutes</option>
-                        </select>
+                    <!-- Conteneur dynamique pour les options spécifiques à chaque vue -->
+                    <div id="view-options-container"></div>
+                    
+                    <!-- Section Options Agenda -->
+                    <div class="control-section" id="agenda-options-section" style="display: none;">
+                        <h3 class="control-section-title">Options Agenda</h3>
+                        <div class="option-group">
+                            <!-- Mode d'affichage -->
+                            <div class="option-item">
+                                <label class="option-label-full">Mode d'affichage</label>
+                                <select id="agenda-display-mode" class="form-select-sidebar">
+                                    <option value="venues">🏟️ Par gymnase</option>
+                                    <option value="weeks">📅 Par semaine</option>
+                                </select>
+                            </div>
+                            
+                            <!-- Créneaux disponibles -->
+                            <label class="option-item">
+                                <input type="checkbox" id="agenda-show-available">
+                                <span class="option-label">Créneaux disponibles</span>
+                            </label>
+                            
+                            <!-- Filtre genre -->
+                            <div class="option-item">
+                                <label class="option-label-full">Genre</label>
+                                <select id="agenda-filter-gender" class="form-select-sidebar">
+                                    <option value="">Tous</option>
+                                    <option value="M">♂️ Masculin</option>
+                                    <option value="F">♀️ Féminin</option>
+                                </select>
+                            </div>
+                            
+                            <!-- Recherche équipe -->
+                            <div class="option-item">
+                                <label class="option-label-full">Rechercher équipe</label>
+                                <input type="text" id="agenda-filter-team" 
+                                       class="form-input-sidebar" 
+                                       placeholder="Nom d'équipe...">
+                            </div>
+                        </div>
                     </div>
                     
-                    <div class="filter-group">
-                        <label class="filter-label">Poule</label>
-                        <select class="filter-select" id="filter-pool">
-                            <option value="">Toutes</option>
-                        </select>
+                    <!-- Section Options d'affichage -->
+                    <div class="control-section">
+                        <h3 class="control-section-title">Options</h3>
+                        <div class="option-group">
+                            <label class="option-item">
+                                <input type="checkbox" id="opt-show-conflicts" checked>
+                                <span class="option-label">Afficher les conflits</span>
+                            </label>
+                            <label class="option-item">
+                                <input type="checkbox" id="opt-show-unscheduled">
+                                <span class="option-label">Inclure non planifiés</span>
+                            </label>
+                            <label class="option-item">
+                                <input type="checkbox" id="opt-show-details" checked>
+                                <span class="option-label">Détails complets</span>
+                            </label>
+                            <label class="option-item">
+                                <input type="checkbox" id="opt-compact-mode">
+                                <span class="option-label">Mode compact</span>
+                            </label>
+                            <label class="option-item">
+                                <input type="checkbox" id="opt-animations" checked>
+                                <span class="option-label">Animations</span>
+                            </label>
+                        </div>
                     </div>
                     
-                    <div class="filter-group">
-                        <label class="filter-label">Gymnase</label>
-                        <select class="filter-select" id="filter-venue">
-                            <option value="">Tous</option>
-                        </select>
+                    <!-- Section Actions -->
+                    <div class="control-section">
+                        <h3 class="control-section-title">Actions</h3>
+                        <div class="action-buttons">
+                            <button class="btn btn-primary" id="btn-export-modifications">
+                                <span class="btn-icon">💾</span>
+                                <span class="btn-text">Exporter</span>
+                            </button>
+                            <button class="btn btn-secondary" id="btn-reset-modifications">
+                                <span class="btn-icon">🔄</span>
+                                <span class="btn-text">Réinitialiser</span>
+                            </button>
+                            <button class="btn btn-secondary" id="btn-print">
+                                <span class="btn-icon">🖨️</span>
+                                <span class="btn-text">Imprimer</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+            
+            <!-- Poignée de redimensionnement gauche -->
+            <div class="resize-handle resize-handle-left" id="resize-handle-left"></div>
+            
+            <!-- ==================== CONTENU CENTRAL - VUES ==================== -->
+            <main class="main-content">
+                <div class="content-views">
+                    <!-- Vue Agenda -->
+                    <div class="view-container active" data-view-content="agenda">
+                        <div id="agenda-view">
+                            <!-- Content will be generated by agenda-view.js -->
+                        </div>
                     </div>
                     
-                    <div class="filter-group">
-                        <label class="filter-label">Semaine</label>
+                    <!-- Vue Poules -->
+                    <div class="view-container" data-view-content="pools">
+                        <div id="pools-view">
+                            <!-- Content will be generated by pools-view.js -->
+                        </div>
+                    </div>
+                    
+                    <!-- Vue Cartes -->
+                    <div class="view-container" data-view-content="cards">
+                        <div id="cards-view">
+                            <!-- Content will be generated by cards-view.js -->
+                        </div>
+                    </div>
+                    
+                    <!-- Vue Calendrier -->
+                    <div class="view-container" data-view-content="calendar">
+                        <div id="calendar-view">
+                            <div class="empty-state">
+                                <div class="empty-state-icon">📅</div>
+                                <h3 class="empty-state-title">Vue Calendrier</h3>
+                                <p class="empty-state-message">Vue en développement</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Vue Statistiques -->
+                    <div class="view-container" data-view-content="stats">
+                        <div id="stats-view">
+                            <div class="empty-state">
+                                <div class="empty-state-icon">📊</div>
+                                <h3 class="empty-state-title">Statistiques</h3>
+                                <p class="empty-state-message">Vue en développement</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+            
+            <!-- Poignée de redimensionnement droite -->
+            <div class="resize-handle resize-handle-right" id="resize-handle-right"></div>
+            
+            <!-- ==================== SIDEBAR DROITE - FILTRES ==================== -->
+            <aside class="sidebar sidebar-right">
+                <div class="sidebar-header">
+                    <button class="btn-collapse" id="btn-collapse-right" title="Réduire">
+                        <span>▶</span>
+                    </button>
+                    <h2 class="sidebar-title">
+                        <span class="sidebar-icon">🔍</span>
+                        Filtres
+                    </h2>
+                </div>
+                
+                <div class="sidebar-content">
+                    <!-- Résumé des filtres actifs -->
+                    <div class="filter-summary" id="filter-summary">
+                        <div class="summary-header">
+                            <span class="summary-title">Filtres actifs</span>
+                            <button class="btn-clear-filters" id="btn-clear-filters">Effacer tout</button>
+                        </div>
+                        <div class="summary-tags" id="summary-tags">
+                            <!-- Les tags de filtres actifs seront ajoutés ici -->
+                        </div>
+                    </div>
+                    
+                    <!-- Filtre Genre -->
+                    <div class="filter-section">
+                        <h3 class="filter-section-title">Genre</h3>
+                        <div class="filter-options">
+                            <label class="filter-option">
+                                <input type="radio" name="filter-gender" value="" checked>
+                                <span class="filter-option-label">
+                                    <span class="option-icon">⚪</span>
+                                    <span>Tous</span>
+                                </span>
+                            </label>
+                            <label class="filter-option">
+                                <input type="radio" name="filter-gender" value="M">
+                                <span class="filter-option-label">
+                                    <span class="option-icon">🔵</span>
+                                    <span>Masculin</span>
+                                </span>
+                            </label>
+                            <label class="filter-option">
+                                <input type="radio" name="filter-gender" value="F">
+                                <span class="filter-option-label">
+                                    <span class="option-icon">🔴</span>
+                                    <span>Féminin</span>
+                                </span>
+                            </label>
+                            <label class="filter-option">
+                                <input type="radio" name="filter-gender" value="X">
+                                <span class="filter-option-label">
+                                    <span class="option-icon">�</span>
+                                    <span>Mixte</span>
+                                </span>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <!-- Filtre Semaine -->
+                    <div class="filter-section">
+                        <h3 class="filter-section-title">Semaine</h3>
                         <select class="filter-select" id="filter-week">
-                            <option value="">Toutes</option>
+                            <option value="">Toutes les semaines</option>
+                            <!-- Options will be populated by JS -->
                         </select>
                     </div>
+                    
+                    <!-- Filtre Poule -->
+                    <div class="filter-section">
+                        <h3 class="filter-section-title">Poule</h3>
+                        <select class="filter-select" id="filter-pool">
+                            <option value="">Toutes les poules</option>
+                            <!-- Options will be populated by JS -->
+                        </select>
+                    </div>
+                    
+                    <!-- Filtre Institution -->
+                    <div class="filter-section">
+                        <h3 class="filter-section-title">Institution</h3>
+                        <select class="filter-select" id="filter-institution">
+                            <option value="">Toutes les institutions</option>
+                            <!-- Options will be populated by JS -->
+                        </select>
+                    </div>
+                    
+                    <!-- Filtre Gymnase -->
+                    <div class="filter-section">
+                        <h3 class="filter-section-title">Gymnase</h3>
+                        <select class="filter-select" id="filter-venue">
+                            <option value="">Tous les gymnases</option>
+                            <!-- Options will be populated by JS -->
+                        </select>
+                    </div>
+                    
+                    <!-- Filtre Jour de la semaine -->
+                    <div class="filter-section">
+                        <h3 class="filter-section-title">Jour</h3>
+                        <div class="filter-days">
+                            <label class="day-option">
+                                <input type="checkbox" name="filter-day" value="1">
+                                <span class="day-label">L</span>
+                            </label>
+                            <label class="day-option">
+                                <input type="checkbox" name="filter-day" value="2">
+                                <span class="day-label">M</span>
+                            </label>
+                            <label class="day-option">
+                                <input type="checkbox" name="filter-day" value="3">
+                                <span class="day-label">M</span>
+                            </label>
+                            <label class="day-option">
+                                <input type="checkbox" name="filter-day" value="4">
+                                <span class="day-label">J</span>
+                            </label>
+                            <label class="day-option">
+                                <input type="checkbox" name="filter-day" value="5">
+                                <span class="day-label">V</span>
+                            </label>
+                            <label class="day-option">
+                                <input type="checkbox" name="filter-day" value="6">
+                                <span class="day-label">S</span>
+                            </label>
+                            <label class="day-option">
+                                <input type="checkbox" name="filter-day" value="0">
+                                <span class="day-label">D</span>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <!-- Filtre Heure -->
+                    <div class="filter-section">
+                        <h3 class="filter-section-title">Horaires</h3>
+                        <div class="time-range-filter">
+                            <div class="time-input-group">
+                                <label class="time-label">De</label>
+                                <input type="time" class="time-input" id="filter-time-start" value="08:00">
+                            </div>
+                            <div class="time-input-group">
+                                <label class="time-label">À</label>
+                                <input type="time" class="time-input" id="filter-time-end" value="20:00">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Filtre Conflits -->
+                    <div class="filter-section">
+                        <h3 class="filter-section-title">État</h3>
+                        <div class="filter-options">
+                            <label class="filter-option">
+                                <input type="checkbox" name="filter-state" value="conflict">
+                                <span class="filter-option-label">
+                                    <span class="option-icon">⚠️</span>
+                                    <span>Avec conflits</span>
+                                </span>
+                            </label>
+                            <label class="filter-option">
+                                <input type="checkbox" name="filter-state" value="modified">
+                                <span class="filter-option-label">
+                                    <span class="option-icon">✏️</span>
+                                    <span>Modifiés</span>
+                                </span>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <!-- Recherche textuelle -->
+                    <div class="filter-section">
+                        <h3 class="filter-section-title">Recherche</h3>
+                        <div class="search-box">
+                            <input type="text" class="search-input" id="filter-search" placeholder="Rechercher...">
+                            <span class="search-icon">🔍</span>
+                        </div>
+                    </div>
                 </div>
-            </div>
+            </aside>
             
-            <!-- Actions -->
-            <div class="control-group">
-                <h3 class="control-group-title">
-                    <span>⚙️ Actions</span>
-                </h3>
-                <div class="flex gap-2">
-                    <button class="modal-btn modal-btn-primary" id="btn-export-modifications">
-                        💾 Exporter les modifications
-                    </button>
-                    <button class="modal-btn modal-btn-secondary" id="btn-reset-modifications">
-                        🔄 Réinitialiser
-                    </button>
-                </div>
-            </div>
-        </section>
-        
-        <!-- ==================== TABS NAVIGATION ==================== -->
-        <div class="tabs-container">
-            <nav class="tabs-nav">
-                <button class="tab-button active" data-tab="agenda">
-                    <span class="tab-icon">📋</span> Agenda
-                </button>
-                <button class="tab-button" data-tab="pools">
-                    <span class="tab-icon">🎯</span> Poules
-                </button>
-                <button class="tab-button" data-tab="cards">
-                    <span class="tab-icon">🃏</span> Cartes
-                </button>
-                <button class="tab-button" data-tab="unscheduled">
-                    <span class="tab-icon">⚠️</span> Non Planifiés
-                </button>
-                <button class="tab-button" data-tab="penalties">
-                    <span class="tab-icon">📊</span> Pénalités
-                </button>
-                <button class="tab-button" data-tab="stats">
-                    <span class="tab-icon">📈</span> Statistiques
-                </button>
-            </nav>
-            
-            <div class="tab-content">
-                <!-- Vue Agenda -->
-                <div class="tab-pane active" id="tab-agenda">
-                    <div id="agenda-view">
-                        <!-- Content will be generated by agenda-view.js -->
-                    </div>
-                </div>
-                
-                <!-- Vue Poules -->
-                <div class="tab-pane" id="tab-pools">
-                    <div id="pools-view">
-                        <!-- Content will be generated by pools-view.js -->
-                    </div>
-                </div>
-                
-                <!-- Vue Cartes -->
-                <div class="tab-pane" id="tab-cards">
-                    <div id="cards-view">
-                        <!-- Content will be generated by cards-view.js -->
-                    </div>
-                </div>
-                
-                <!-- Vue Non Planifiés -->
-                <div class="tab-pane" id="tab-unscheduled">
-                    <div id="unscheduled-view">
-                        <!-- Content will be generated by unscheduled-view.js (TODO) -->
-                        <div class="empty-state">
-                            <div class="empty-state-icon">⚠️</div>
-                            <h3 class="empty-state-title">Matchs Non Planifiés</h3>
-                            <p class="empty-state-message">Vue en développement</p>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Vue Pénalités -->
-                <div class="tab-pane" id="tab-penalties">
-                    <div id="penalties-view">
-                        <!-- Content will be generated by penalties-view.js (TODO) -->
-                        <div class="empty-state">
-                            <div class="empty-state-icon">📊</div>
-                            <h3 class="empty-state-title">Vue Pénalités</h3>
-                            <p class="empty-state-message">Vue en développement</p>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Vue Statistiques -->
-                <div class="tab-pane" id="tab-stats">
-                    <div id="stats-view">
-                        <!-- Content will be generated by stats-view.js (TODO) -->
-                        <div class="empty-state">
-                            <div class="empty-state-icon">📈</div>
-                            <h3 class="empty-state-title">Vue Statistiques</h3>
-                            <p class="empty-state-message">Vue en développement</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
+            <!-- Bouton pour réafficher la sidebar droite quand elle est masquée -->
+            <button class="btn-show-sidebar btn-show-right" id="btn-show-right" title="Afficher les filtres">
+                <span>◀</span>
+            </button>
         </div>
     </div>
+    
+    <!-- ==================== MODALS ==================== -->
     
     <!-- Modal d'export -->
     <div class="modal-overlay hidden" id="modal-export">
@@ -199,14 +454,71 @@
             </div>
             <div class="modal-body">
                 <p>Exporter <strong id="export-count">0</strong> modification(s) au format JSON.</p>
-                <div class="filter-group mt-3">
-                    <label class="filter-label">Nom du fichier</label>
-                    <input type="text" class="filter-input" id="export-filename" placeholder="modifications_2025-10-24.json">
+                <div class="input-group">
+                    <label class="input-label">Nom du fichier</label>
+                    <input type="text" class="input-field" id="export-filename" placeholder="modifications_2025-10-27.json">
                 </div>
             </div>
             <div class="modal-footer">
-                <button class="modal-btn modal-btn-secondary" onclick="closeExportModal()">Annuler</button>
-                <button class="modal-btn modal-btn-primary" onclick="exportModifications()">Télécharger</button>
+                <button class="btn btn-secondary" onclick="closeExportModal()">Annuler</button>
+                <button class="btn btn-primary" onclick="exportModifications()">Télécharger</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Modal d'aide -->
+    <div class="modal-overlay hidden" id="modal-help">
+        <div class="modal modal-lg">
+            <div class="modal-header">
+                <h2 class="modal-title">❓ Aide - PyCalendar FFSU</h2>
+                <button class="modal-close" onclick="closeHelpModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="help-content">
+                    <section class="help-section">
+                        <h3>🎯 Interface</h3>
+                        <p>L'interface est divisée en 3 zones principales :</p>
+                        <ul>
+                            <li><strong>Sidebar gauche</strong> : Options d'affichage et actions</li>
+                            <li><strong>Zone centrale</strong> : Visualisation des matchs</li>
+                            <li><strong>Sidebar droite</strong> : Filtres avancés</li>
+                        </ul>
+                    </section>
+                    
+                    <section class="help-section">
+                        <h3>🎨 Thèmes</h3>
+                        <p>Trois thèmes sont disponibles :</p>
+                        <ul>
+                            <li><strong>Clair ☀️</strong> : Thème par défaut, optimal pour la journée</li>
+                            <li><strong>Sombre 🌙</strong> : Réduit la fatigue oculaire</li>
+                            <li><strong>France 🇫🇷</strong> : Couleurs tricolores (bleu, blanc, rouge)</li>
+                        </ul>
+                    </section>
+                    
+                    <section class="help-section">
+                        <h3>📋 Vues</h3>
+                        <ul>
+                            <li><strong>Agenda</strong> : Vue chronologique par semaine</li>
+                            <li><strong>Poules</strong> : Organisation par poules</li>
+                            <li><strong>Cartes</strong> : Vue en grille de cartes</li>
+                        </ul>
+                    </section>
+                    
+                    <section class="help-section">
+                        <h3>🔍 Filtres</h3>
+                        <p>Utilisez les filtres pour affiner l'affichage :</p>
+                        <ul>
+                            <li>Genre (M/F/Mixte)</li>
+                            <li>Semaine et jour</li>
+                            <li>Institution et gymnase</li>
+                            <li>Horaires</li>
+                            <li>Recherche textuelle</li>
+                        </ul>
+                    </section>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" onclick="closeHelpModal()">Fermer</button>
             </div>
         </div>
     </div>
@@ -215,215 +527,5 @@
     
     <!-- JS_PLACEHOLDER -->
     
-    <!-- Basic tab switching functionality -->
-    <script>
-        // Global variables for views
-        let agendaView = null;
-        let poolsView = null;
-        let cardsView = null;
-        let currentView = 'agenda';
-        
-        // Initialize views after data is loaded
-        function initializeViews() {
-            if (!window.dataManager) {
-                console.error('DataManager not initialized');
-                return;
-            }
-            
-            // Initialize each view
-            const agendaContainer = document.getElementById('agenda-view');
-            const poolsContainer = document.getElementById('pools-view');
-            const cardsContainer = document.getElementById('cards-view');
-            
-            if (window.AgendaView && agendaContainer) {
-                agendaView = new window.AgendaView(window.dataManager, agendaContainer);
-                agendaView.init();
-            }
-            
-            if (window.PoolsView && poolsContainer) {
-                poolsView = new window.PoolsView(window.dataManager, poolsContainer);
-                poolsView.init();
-            }
-            
-            if (window.CardsView && cardsContainer) {
-                cardsView = new window.CardsView(window.dataManager, cardsContainer);
-                cardsView.init();
-            }
-            
-            // Update stats display
-            updateStatsDisplay();
-        }
-        
-        // Update stats in header
-        function updateStatsDisplay() {
-            if (!window.dataManager) return;
-            
-            const data = window.dataManager.getData();
-            if (!data) return;
-            
-            const scheduled = data.matches?.scheduled?.length || 0;
-            const unscheduled = data.matches?.unscheduled?.length || 0;
-            const weeks = data.statistics?.by_week ? Object.keys(data.statistics.by_week).length : 0;
-            const pools = data.entities?.poules?.length || 0;
-            const venues = data.entities?.gymnases?.length || 0;
-            const modifications = window.modificationManager ? window.modificationManager.getModificationCount() : 0;
-            
-            document.getElementById('stat-scheduled').textContent = scheduled;
-            document.getElementById('stat-unscheduled').textContent = unscheduled;
-            document.getElementById('stat-weeks').textContent = weeks;
-            document.getElementById('stat-pools').textContent = pools;
-            document.getElementById('stat-venues').textContent = venues;
-            document.getElementById('stat-modifications').textContent = modifications;
-        }
-        
-        // Apply filters to all views
-        function applyFilters() {
-            const filters = {
-                gender: document.getElementById('filter-gender')?.value || '',
-                institution: document.getElementById('filter-institution')?.value || '',
-                pool: document.getElementById('filter-pool')?.value || '',
-                venue: document.getElementById('filter-venue')?.value || '',
-                week: document.getElementById('filter-week')?.value || ''
-            };
-            
-            // Remove empty filters
-            Object.keys(filters).forEach(key => {
-                if (!filters[key]) delete filters[key];
-            });
-            
-            // Apply to all views
-            if (agendaView) agendaView.setFilters(filters);
-            if (poolsView) poolsView.setFilters(filters);
-            if (cardsView) cardsView.setFilters(filters);
-        }
-        
-        // Populate filter options
-        function populateFilters() {
-            if (!window.dataManager) return;
-            
-            const data = window.dataManager.getData();
-            if (!data) return;
-            
-            // Institutions
-            const institutions = new Set();
-            data.entities?.equipes?.forEach(e => {
-                if (e.institution) institutions.add(e.institution);
-            });
-            
-            const institutionSelect = document.getElementById('filter-institution');
-            if (institutionSelect) {
-                institutions.forEach(inst => {
-                    const option = document.createElement('option');
-                    option.value = inst;
-                    option.textContent = inst;
-                    institutionSelect.appendChild(option);
-                });
-            }
-            
-            // Poules
-            const poolSelect = document.getElementById('filter-pool');
-            if (poolSelect && data.entities?.poules) {
-                data.entities.poules.forEach(pool => {
-                    const option = document.createElement('option');
-                    option.value = pool.id;
-                    option.textContent = pool.nom;
-                    poolSelect.appendChild(option);
-                });
-            }
-            
-            // Gymnases
-            const venueSelect = document.getElementById('filter-venue');
-            if (venueSelect && data.entities?.gymnases) {
-                data.entities.gymnases.forEach(gym => {
-                    const option = document.createElement('option');
-                    option.value = gym.id;
-                    option.textContent = gym.nom;
-                    venueSelect.appendChild(option);
-                });
-            }
-            
-            // Semaines
-            const weekSelect = document.getElementById('filter-week');
-            if (weekSelect && data.statistics?.by_week) {
-                Object.keys(data.statistics.by_week).sort((a, b) => a - b).forEach(week => {
-                    const option = document.createElement('option');
-                    option.value = week;
-                    option.textContent = `Semaine ${week}`;
-                    weekSelect.appendChild(option);
-                });
-            }
-        }
-        
-        // Tab switching
-        document.querySelectorAll('.tab-button').forEach(button => {
-            button.addEventListener('click', () => {
-                const tabName = button.dataset.tab;
-                currentView = tabName;
-                
-                // Update buttons
-                document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
-                button.classList.add('active');
-                
-                // Update panes
-                document.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('active'));
-                document.getElementById(`tab-${tabName}`).classList.add('active');
-            });
-        });
-        
-        // Filter change handlers
-        document.querySelectorAll('.filter-select').forEach(select => {
-            select.addEventListener('change', applyFilters);
-        });
-        
-        // Export modal
-        function openExportModal() {
-            const modal = document.getElementById('modal-export');
-            const count = window.modificationManager ? window.modificationManager.getModificationCount() : 0;
-            document.getElementById('export-count').textContent = count;
-            
-            // Generate default filename
-            const date = new Date().toISOString().split('T')[0];
-            document.getElementById('export-filename').value = `pycalendar_modifications_${date}.json`;
-            
-            modal.classList.remove('hidden');
-        }
-        
-        function closeExportModal() {
-            document.getElementById('modal-export').classList.add('hidden');
-        }
-        
-        function exportModifications() {
-            if (window.modificationManager) {
-                const filename = document.getElementById('export-filename').value || null;
-                window.modificationManager.exportAndDownload(filename);
-                closeExportModal();
-            }
-        }
-        
-        // Button handlers
-        document.getElementById('btn-export-modifications')?.addEventListener('click', openExportModal);
-        
-        document.getElementById('btn-reset-modifications')?.addEventListener('click', () => {
-            if (confirm('Réinitialiser toutes les modifications ?')) {
-                if (window.modificationManager) {
-                    window.modificationManager.clearAll();
-                }
-                if (window.dataManager) {
-                    window.dataManager.revertAllModifications();
-                }
-                updateStatsDisplay();
-                
-                // Re-render current view
-                if (currentView === 'agenda' && agendaView) agendaView.render();
-                if (currentView === 'pools' && poolsView) poolsView.render();
-                if (currentView === 'cards' && cardsView) cardsView.render();
-            }
-        });
-        
-        // Initialize after DOM is ready
-        document.addEventListener('DOMContentLoaded', () => {
-            // Views will be initialized after data is loaded by the main initialization script
-        });
-    </script>
 </body>
 </html>

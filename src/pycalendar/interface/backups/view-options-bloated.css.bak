@@ -1,0 +1,411 @@
+/* src/pycalendar/interface/assets/styles/components/view-options.css */
+
+.view-options-container {
+    padding: 1.5rem;
+    background-color: var(--sidebar-bg);
+    border-radius: var(--border-radius-lg);
+    box-shadow: var(--shadow-sm);
+    transition: all 0.3s ease;
+    height: 100%;
+}
+
+.view-options-container:empty {
+    display: none;
+}
+
+.view-options-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border-color);
+    color: var(--text-color-light);
+}
+
+.view-options-icon {
+    font-size: 1.5rem;
+    color: var(--accent-color);
+}
+
+.view-options-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+}
+
+.options-group {
+    margin-bottom: 1.75rem;
+}
+
+.options-group-title {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-color-light);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.options-group-title .icon {
+    font-size: 1.1rem;
+}
+
+.option-item {
+    margin-bottom: 0.75rem;
+}
+
+/* --- Boutons de format --- */
+.format-buttons {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+    gap: 0.5rem;
+}
+
+.format-btn {
+    background-color: var(--background-color);
+    color: var(--text-color);
+    border: 1px solid var(--border-color);
+    padding: 0.5rem 0.75rem;
+    border-radius: var(--border-radius-md);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 0.85rem;
+    text-align: center;
+}
+
+.format-btn:hover {
+    background-color: var(--primary-color-light);
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+}
+
+.format-btn.active {
+    background-color: var(--primary-color);
+    color: #fff;
+    border-color: var(--primary-color);
+    font-weight: 600;
+    box-shadow: var(--shadow-sm);
+}
+
+/* --- Cases à cocher --- */
+.checkbox-option {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    background-color: var(--background-color);
+    padding: 0.75rem;
+    border-radius: var(--border-radius-md);
+    border: 1px solid var(--border-color);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.checkbox-option:hover {
+    border-color: var(--accent-color);
+    background-color: var(--accent-color-light-translucent);
+}
+
+.checkbox-option input[type="checkbox"] {
+    appearance: none;
+    width: 1.25rem;
+    height: 1.25rem;
+    border: 2px solid var(--border-color-dark);
+    border-radius: var(--border-radius-sm);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+}
+
+.checkbox-option input[type="checkbox"]:checked {
+    background-color: var(--accent-color);
+    border-color: var(--accent-color);
+}
+
+.checkbox-option input[type="checkbox"]:checked::before {
+    content: '✔';
+    color: #fff;
+    font-size: 0.8rem;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+.checkbox-option .option-label {
+    font-size: 0.9rem;
+    color: var(--text-color);
+    flex-grow: 1;
+}
+
+/* --- Thème sombre --- */
+.dark-theme .view-options-container {
+    background-color: var(--dark-sidebar-bg);
+}
+
+.dark-theme .view-options-header {
+    border-bottom-color: var(--dark-border-color);
+    color: var(--dark-text-color-light);
+}
+
+.dark-theme .options-group-title {
+    color: var(--dark-text-color-light);
+}
+
+.dark-theme .format-btn {
+    background-color: var(--dark-background-color);
+    color: var(--dark-text-color);
+    border-color: var(--dark-border-color);
+}
+
+.dark-theme .format-btn:hover {
+    background-color: var(--primary-color-dark);
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+}
+
+.dark-theme .format-btn.active {
+    background-color: var(--primary-color);
+    color: #fff;
+}
+
+.dark-theme .checkbox-option {
+    background-color: var(--dark-background-color);
+    border-color: var(--dark-border-color);
+}
+
+.dark-theme .checkbox-option:hover {
+    border-color: var(--accent-color);
+    background-color: var(--accent-color-dark-translucent);
+}
+
+.dark-theme .checkbox-option input[type="checkbox"] {
+    border-color: var(--dark-border-color-dark);
+}
+
+.dark-theme .checkbox-option input[type="checkbox"]:checked {
+    background-color: var(--accent-color);
+    border-color: var(--accent-color);
+}
+
+.dark-theme .checkbox-option .option-label {
+    color: var(--dark-text-color);
+}
+
+/* ==================== CARD SIZE VARIANTS ==================== */
+
+/* Extra Small Cards */
+[data-card-size="xs"] .match-card,
+[data-card-size="xs"] .match-card-new {
+    font-size: 0.7rem;
+    padding: 0.4rem;
+    min-height: 40px;
+}
+
+[data-card-size="xs"] .match-card-header {
+    font-size: 0.65rem;
+    padding: 0.25rem;
+}
+
+[data-card-size="xs"] .match-card-body {
+    padding: 0.25rem;
+}
+
+/* Small Cards */
+[data-card-size="sm"] .match-card,
+[data-card-size="sm"] .match-card-new {
+    font-size: 0.8rem;
+    padding: 0.5rem;
+    min-height: 50px;
+}
+
+[data-card-size="sm"] .match-card-header {
+    font-size: 0.75rem;
+    padding: 0.3rem;
+}
+
+[data-card-size="sm"] .match-card-body {
+    padding: 0.3rem;
+}
+
+/* Medium Cards (default) */
+[data-card-size="md"] .match-card,
+[data-card-size="md"] .match-card-new {
+    font-size: 0.9rem;
+    padding: 0.75rem;
+    min-height: 70px;
+}
+
+/* Large Cards */
+[data-card-size="lg"] .match-card,
+[data-card-size="lg"] .match-card-new {
+    font-size: 1rem;
+    padding: 1rem;
+    min-height: 90px;
+}
+
+[data-card-size="lg"] .match-card-header {
+    font-size: 1.1rem;
+    padding: 0.75rem;
+}
+
+[data-card-size="lg"] .match-card-body {
+    padding: 0.75rem;
+}
+
+/* Extra Large Cards */
+[data-card-size="xl"] .match-card,
+[data-card-size="xl"] .match-card-new {
+    font-size: 1.1rem;
+    padding: 1.25rem;
+    min-height: 110px;
+}
+
+[data-card-size="xl"] .match-card-header {
+    font-size: 1.2rem;
+    padding: 1rem;
+}
+
+[data-card-size="xl"] .match-card-body {
+    padding: 1rem;
+}
+
+/* ==================== NO ANIMATIONS MODE ==================== */
+
+.no-animations * {
+    animation: none !important;
+    transition: none !important;
+}
+
+/* ==================== COMPACT MODE ==================== */
+
+.compact-mode .match-card,
+.compact-mode .match-card-new {
+    margin: 0.25rem 0;
+    padding: 0.5rem;
+}
+
+.compact-mode .pools-view {
+    gap: 0.5rem;
+}
+
+.compact-mode .pool-card {
+    padding: 0.75rem;
+}
+
+.compact-mode .agenda-grid {
+    gap: 0.5rem;
+}
+
+.compact-mode .time-slot {
+    padding: 0.25rem;
+    min-height: 30px;
+}
+
+/* ==================== GRID DISPLAY ==================== */
+
+.show-grid .agenda-grid {
+    border: 1px solid var(--border-color);
+}
+
+.show-grid .time-slot {
+    border: 1px solid var(--border-color-light);
+}
+
+.show-grid .agenda-column {
+    border-right: 1px solid var(--border-color);
+}
+
+/* ==================== HIGHLIGHT WEEKENDS ==================== */
+
+.highlight-weekends .agenda-column[data-day="6"],
+.highlight-weekends .agenda-column[data-day="0"] {
+    background-color: rgba(var(--accent-color-rgb), 0.05);
+}
+
+.highlight-weekends .time-slot[data-weekend="true"] {
+    background-color: rgba(var(--accent-color-rgb), 0.03);
+}
+
+/* ==================== MATCH COLORATION SCHEMES ==================== */
+
+/* By Status */
+[data-color-scheme="by-status"] .match-card[data-status="scheduled"] {
+    border-left: 4px solid #10b981;
+}
+
+[data-color-scheme="by-status"] .match-card[data-status="unscheduled"] {
+    border-left: 4px solid #f59e0b;
+}
+
+[data-color-scheme="by-status"] .match-card[data-status="conflict"] {
+    border-left: 4px solid #ef4444;
+}
+
+/* By Venue (use different hues) */
+[data-color-scheme="by-venue"] .match-card[data-venue-index="0"] {
+    border-left: 4px solid #3b82f6;
+}
+
+[data-color-scheme="by-venue"] .match-card[data-venue-index="1"] {
+    border-left: 4px solid #8b5cf6;
+}
+
+[data-color-scheme="by-venue"] .match-card[data-venue-index="2"] {
+    border-left: 4px solid #ec4899;
+}
+
+[data-color-scheme="by-venue"] .match-card[data-venue-index="3"] {
+    border-left: 4px solid #f59e0b;
+}
+
+[data-color-scheme="by-venue"] .match-card[data-venue-index="4"] {
+    border-left: 4px solid #10b981;
+}
+
+[data-color-scheme="by-venue"] .match-card[data-venue-index="5"] {
+    border-left: 4px solid #06b6d4;
+}
+
+/* By Gender */
+[data-color-scheme="by-gender"] .match-card[data-gender="F"] {
+    border-left: 4px solid #ec4899;
+    background: linear-gradient(135deg, rgba(236, 72, 153, 0.05) 0%, transparent 100%);
+}
+
+[data-color-scheme="by-gender"] .match-card[data-gender="M"] {
+    border-left: 4px solid #3b82f6;
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.05) 0%, transparent 100%);
+}
+
+/* By Week */
+[data-color-scheme="by-week"] .match-card[data-week-index="0"] {
+    border-left: 4px solid #84cc16;
+}
+
+[data-color-scheme="by-week"] .match-card[data-week-index="1"] {
+    border-left: 4px solid #eab308;
+}
+
+[data-color-scheme="by-week"] .match-card[data-week-index="2"] {
+    border-left: 4px solid #f97316;
+}
+
+[data-color-scheme="by-week"] .match-card[data-week-index="3"] {
+    border-left: 4px solid #ef4444;
+}
+
+/* By Conflict */
+[data-color-scheme="by-conflict"] .match-card[data-has-conflict="true"] {
+    border: 2px solid #ef4444;
+    background-color: rgba(239, 68, 68, 0.1);
+    animation: pulse-conflict 2s ease-in-out infinite;
+}
+
+@keyframes pulse-conflict {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.8; }
+}
+

@@ -19,7 +19,7 @@ greedy:
 
 # Configuration CP-SAT (OR-Tools)
 cpsat:
-  temps_max_secondes: 30    # Minimum ~45-60s needed to find feasible solution for 267 matches
+  temps_max_secondes: 600    # Minimum ~45-60s needed to find feasible solution for 267 matches
   warm_start: false  # Disabled: causes issues with solver status
   warm_start_file: "volley"  # Solutions spécifiques au volley
 

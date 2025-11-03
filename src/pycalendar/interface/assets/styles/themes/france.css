@@ -1,0 +1,202 @@
+/**
+ * PyCalendar Interface - Thème France
+ * Styles spécifiques pour le thème tricolore français
+ */
+
+[data-theme="tricolore"] {
+    /* ==================== DRAPEAU FRANÇAIS ==================== */
+    
+    /* Gradient tricolore pour les headers */
+    .header-france-gradient {
+        background: linear-gradient(
+            to right,
+            #0055A4 0%,
+            #0055A4 33.33%,
+            #FFFFFF 33.33%,
+            #FFFFFF 66.66%,
+            #EF4135 66.66%,
+            #EF4135 100%
+        );
+        height: 4px;
+        width: 100%;
+    }
+    
+    /* Bordure tricolore */
+    .border-france {
+        border-top: 3px solid #0055A4;
+        border-right: 3px solid #FFFFFF;
+        border-bottom: 3px solid #EF4135;
+    }
+    
+    /* Cards avec accent tricolore */
+    .stat-card {
+        border-left: 4px solid #0055A4;
+        background: linear-gradient(135deg, rgba(0, 85, 164, 0.05) 0%, rgba(255, 255, 255, 1) 100%);
+    }
+    
+    .stat-card:nth-child(2n) {
+        border-left: 4px solid #EF4135;
+        background: linear-gradient(135deg, rgba(239, 65, 53, 0.05) 0%, rgba(255, 255, 255, 1) 100%);
+    }
+    
+    /* Buttons avec style tricolore */
+    .btn-primary {
+        background: linear-gradient(135deg, #0055A4 0%, #002654 100%);
+        border: none;
+        color: white;
+        box-shadow: 0 4px 14px 0 rgba(0, 85, 164, 0.35);
+    }
+    
+    .btn-primary:hover {
+        background: linear-gradient(135deg, #002654 0%, #0055A4 100%);
+        box-shadow: 0 6px 20px 0 rgba(0, 85, 164, 0.45);
+    }
+    
+    .btn-danger {
+        background: linear-gradient(135deg, #EF4135 0%, #C1172C 100%);
+        border: none;
+        color: white;
+        box-shadow: 0 4px 14px 0 rgba(239, 65, 53, 0.35);
+    }
+    
+    .btn-danger:hover {
+        background: linear-gradient(135deg, #C1172C 0%, #EF4135 100%);
+        box-shadow: 0 6px 20px 0 rgba(239, 65, 53, 0.45);
+    }
+    
+    /* Tabs avec style tricolore */
+    .tab-button.active {
+        background: linear-gradient(135deg, #0055A4 0%, #4A90E2 100%);
+        color: white;
+        border-bottom: 3px solid #EF4135;
+    }
+    
+    /* Header avec touches tricolores */
+    .header {
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .header::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(
+            to right,
+            #0055A4 0%,
+            #0055A4 33.33%,
+            #FFFFFF 33.33%,
+            #FFFFFF 66.66%,
+            #EF4135 66.66%,
+            #EF4135 100%
+        );
+    }
+    
+    /* Sidebar avec accent bleu France */
+    .sidebar-left,
+    .sidebar-right {
+        border-top: 3px solid #0055A4;
+    }
+    
+    /* Match cards avec bordures tricolores selon l'état */
+    .match-card {
+        border-left: 4px solid #0055A4;
+    }
+    
+    .match-card.conflict-warning {
+        border-left: 4px solid #F59E0B;
+        border-top: 2px solid #EF4135;
+    }
+    
+    .match-card.conflict-critical {
+        border-left: 4px solid #EF4135;
+        border-top: 2px solid #EF4135;
+        background: linear-gradient(135deg, rgba(239, 65, 53, 0.08) 0%, rgba(255, 255, 255, 1) 100%);
+    }
+    
+    /* Liens avec style France */
+    a {
+        color: #0055A4;
+        transition: color var(--transition-base);
+    }
+    
+    a:hover {
+        color: #EF4135;
+    }
+    
+    /* Badges et tags */
+    .badge-primary {
+        background: #0055A4;
+        color: white;
+    }
+    
+    .badge-danger {
+        background: #EF4135;
+        color: white;
+    }
+    
+    /* Focus states avec couleurs France */
+    *:focus-visible {
+        outline: 2px solid #0055A4;
+        outline-offset: 2px;
+    }
+    
+    button:focus-visible,
+    .btn:focus-visible {
+        outline: 2px solid #EF4135;
+    }
+    
+    /* Scrollbar personnalisée (Chrome/Edge) */
+    ::-webkit-scrollbar {
+        width: 10px;
+        height: 10px;
+    }
+    
+    ::-webkit-scrollbar-track {
+        background: rgba(0, 85, 164, 0.05);
+    }
+    
+    ::-webkit-scrollbar-thumb {
+        background: linear-gradient(135deg, #0055A4 0%, #EF4135 100%);
+        border-radius: 5px;
+    }
+    
+    ::-webkit-scrollbar-thumb:hover {
+        background: linear-gradient(135deg, #002654 0%, #C1172C 100%);
+    }
+    
+    /* Loading spinner tricolore */
+    .spinner::after {
+        border: 3px solid rgba(0, 85, 164, 0.2);
+        border-top-color: #0055A4;
+        border-right-color: #FFFFFF;
+        border-bottom-color: #EF4135;
+    }
+    
+    /* Tooltips */
+    .tooltip {
+        background: linear-gradient(135deg, #0055A4 0%, #002654 100%);
+        color: white;
+        border: 1px solid #EF4135;
+    }
+    
+    /* Modal headers */
+    .modal-header {
+        border-bottom: 3px solid transparent;
+        border-image: linear-gradient(to right, #0055A4, #EF4135) 1;
+    }
+    
+    /* Progress bars */
+    .progress-bar {
+        background: linear-gradient(to right, #0055A4, #FFFFFF, #EF4135);
+    }
+    
+    /* Selection */
+    ::selection {
+        background: rgba(0, 85, 164, 0.3);
+        color: #002654;
+    }
+}

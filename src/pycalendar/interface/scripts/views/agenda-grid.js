@@ -13,6 +13,13 @@ class AgendaGridView {
         this.slotManager = new SlotManager();
         this.cardRenderer = new MatchCardRenderer(dataManager);
         this.availableSlotsManager = new AvailableSlotsManager();
+        this.dragDropManager = new DragDropManager(
+            dataManager,
+            window.modificationManager
+        );
+        
+        // Callbacks du drag & drop
+        this.dragDropManager.onModification = () => this.render();
         
         // Filtres actifs
         this.filters = {
@@ -21,6 +28,22 @@ class AgendaGridView {
             venue: '',
             team: '',
             gender: ''
+        };
+        
+        // Options d'affichage
+        this.displayOptions = {
+            matchColor: 'by-venue',
+            cardSize: 'md',
+            showVenues: true,
+            showTimes: true,
+            showPools: true,
+            showTeams: true,
+            showConflicts: false,
+            compactMode: false,
+            highlightWeekends: true,
+            animations: true,
+            gridDensity: 'normal',
+            timeFormat: '24h'
         };
         
     }
@@ -111,43 +134,34 @@ class AgendaGridView {
      */
     render() {
         try {
-            console.log('[AgendaGridView] Début du rendu...');
             const data = this.dataManager.getData();
             if (!data || !data.matches) {
-                console.warn('[AgendaGridView] Aucune donnée de match disponible. Affichage de l\'état vide.');
                 this.container.innerHTML = '<div class="empty-state">Aucune donnée disponible</div>';
                 return;
             }
             
-            console.log('[AgendaGridView] Données chargées, filtrage des matchs...');
             const allMatches = data.matches.scheduled || [];
             const filteredMatches = this.filterMatches(allMatches);
             
             // Calculer la plage horaire dynamique
-            console.log('[AgendaGridView] Calcul de la plage horaire...');
             this.viewManager.calculateTimeRange(filteredMatches);
             
             // Obtenir les colonnes selon le mode d'affichage
-            console.log('[AgendaGridView] Récupération des colonnes...');
             const columns = this.viewManager.getColumns(filteredMatches);
             
             // Calculer le max de slots simultanés par colonne
-            console.log('[AgendaGridView] Calcul des slots simultanés maximum...');
             this.maxSlotsPerColumn = this.calculateMaxSimultaneousSlotsPerColumn(columns, filteredMatches);
             
             // Générer le HTML
-            console.log('[AgendaGridView] Génération du HTML...');
-            const html = this.generateHTML(filteredMatches, columns, data);
-            this.container.innerHTML = html;
+            this.container.innerHTML = this.generateHTML(filteredMatches, columns, data);
+            
+            // Initialiser le drag & drop
+            this.dragDropManager.initializeDragDrop(this.container);
             
             // Attacher les événements
-            console.log('[AgendaGridView] Attachement des événements...');
             this.attachEvents();
             
-            console.log('[AgendaGridView] Rendu terminé avec succès.');
-            
         } catch (error) {
-            console.error('[AgendaGridView] Erreur critique pendant le rendu:', error);
             this.container.innerHTML = `
                 <div class="error-state">
                     <h3>⚠️ Erreur d'affichage</h3>
@@ -166,7 +180,6 @@ class AgendaGridView {
             <div class="agenda-grid-view">
                 ${this.generateToolbar(matches, columns, data)}
                 ${this.generateGrid(matches, columns)}
-                ${this.generateLegend()}
             </div>
         `;
     }
@@ -181,33 +194,22 @@ class AgendaGridView {
         return `
             <div class="agenda-toolbar">
                 <div class="toolbar-left">
-                    <!-- Sélecteur de vue -->
-                    <div class="toolbar-group">
-                        <label for="grid-display-mode">Vue:</label>
-                        <select id="grid-display-mode" class="form-select">
-                            <option value="venues" ${this.viewManager.displayMode === 'venues' ? 'selected' : ''}>
-                                Par gymnase
-                            </option>
-                            <option value="weeks" ${this.viewManager.displayMode === 'weeks' ? 'selected' : ''}>
-                                Par semaine
-                            </option>
-                        </select>
-                    </div>
-                    
-                    <!-- Navigation -->
+                    <!-- Navigation semaine (mode gymnase uniquement) -->
                     ${navData.mode === 'venues' ? `
                     <div class="toolbar-group toolbar-navigation">
                         <button id="grid-prev-week" 
-                                class="btn btn-sm btn-secondary" 
+                                class="btn btn-icon btn-secondary" 
                                 ${!navData.hasPrevious ? 'disabled' : ''}
-                                title="Semaine précédente">
+                                title="Semaine précédente"
+                                aria-label="Semaine précédente">
                             ◄
                         </button>
                         <span class="navigation-label">${navData.currentLabel}</span>
                         <button id="grid-next-week" 
-                                class="btn btn-sm btn-secondary"
+                                class="btn btn-icon btn-secondary"
                                 ${!navData.hasNext ? 'disabled' : ''}
-                                title="Semaine suivante">
+                                title="Semaine suivante"
+                                aria-label="Semaine suivante">
                             ►
                         </button>
                         <span class="navigation-counter">(${navData.index}/${navData.total})</span>
@@ -219,73 +221,47 @@ class AgendaGridView {
                     <!-- Statistiques -->
                     <div class="toolbar-stats">
                         <span class="stat-item">
-                            <strong>${stats.visibleMatches}</strong> match${stats.visibleMatches > 1 ? 's' : ''} affiché${stats.visibleMatches > 1 ? 's' : ''}
+                            <span class="stat-icon">🎯</span>
+                            <strong>${stats.visibleMatches}</strong> match${stats.visibleMatches > 1 ? 's' : ''}
                         </span>
+                        <span class="stat-separator">•</span>
                         <span class="stat-item">
+                            <span class="stat-icon">${this.viewManager.displayMode === 'venues' ? '🏟️' : '📅'}</span>
                             <strong>${stats.totalColumns}</strong> ${this.viewManager.displayMode === 'venues' ? 'gymnase' : 'semaine'}${stats.totalColumns > 1 ? 's' : ''}
                         </span>
+                        <span class="stat-separator">•</span>
                         <span class="stat-item">
+                            <span class="stat-icon">🕒</span>
                             ${stats.timeRange}
                         </span>
                         ${stats.totalMatches !== stats.visibleMatches ? `
+                        <span class="stat-separator">•</span>
                         <span class="stat-item stat-filtered">
-                            (sur ${stats.totalMatches} total)
+                            (${stats.totalMatches} total)
                         </span>
                         ` : ''}
                     </div>
                 </div>
                 
                 <div class="toolbar-right">
-                    <!-- Options d'affichage -->
-                    <div class="toolbar-group">
-                        <label class="checkbox-label">
-                            <input type="checkbox" 
-                                   id="grid-show-available" 
-                                   ${this.availableSlotsManager.showAvailableSlots ? 'checked' : ''}>
-                            <span>Créneaux disponibles</span>
-                        </label>
-                    </div>
-                    
-                    <!-- Filtres rapides -->
-                    ${this.generateQuickFilters(data)}
+                    <!-- Toolbar simplifiée - les options sont dans le panneau latéral -->
                 </div>
             </div>
         `;
     }
     
     /**
-     * Génère les filtres rapides
-     */
-    generateQuickFilters(data) {
-        return `
-            <div class="toolbar-group quick-filters">
-                <select id="filter-gender" class="form-select form-select-sm">
-                    <option value="">Tous genres</option>
-                    <option value="M" ${this.filters.gender === 'M' ? 'selected' : ''}>♂️ Masculin</option>
-                    <option value="F" ${this.filters.gender === 'F' ? 'selected' : ''}>♀️ Féminin</option>
-                </select>
-                
-                <input type="text" 
-                       id="filter-team" 
-                       class="form-input form-input-sm" 
-                       placeholder="🔍 Équipe..."
-                       value="${this.filters.team}">
-            </div>
-        `;
-    }
-    
-    /**
-     * Génère la grille principale avec échelle horaire continue
+     * Génère la grille complète avec les colonnes
      */
     generateGrid(matches, columns) {
-        // Calculer la largeur minimale de colonne selon la capacité
-        const minColWidth = 150; // Base réduite pour plus de flexibilité
-        const colWidthIncrement = 120; // Augmentation par slot supplémentaire
+        // Calculer la largeur de colonne optimisée
+        const minColWidth = 180; // Largeur minimale augmentée pour éviter les coupures
+        const colWidthIncrement = 160; // Augmentation par slot supplémentaire
         
         // Paramètres de l'échelle horaire
         const minHour = this.viewManager.minHour; // ex: 8
         const maxHour = this.viewManager.maxHour; // ex: 23
-        const pixelsPerHour = 80; // Hauteur en pixels pour 1 heure
+        const pixelsPerHour = 100; // Hauteur augmentée pour plus d'espace vertical
         const totalHeight = (maxHour - minHour) * pixelsPerHour;
 
         return `
@@ -414,9 +390,9 @@ class AgendaGridView {
         const fractionalHour = hours + (minutes / 60);
         const topPosition = (fractionalHour - minHour) * pixelsPerHour;
         
-        // Calculer la hauteur (supposer 2h par défaut, peut être ajusté)
+        // Calculer la hauteur avec plus d'espace
         const matchDuration = 2; // heures
-        const matchHeight = matchDuration * pixelsPerHour;
+        const matchHeight = matchDuration * pixelsPerHour - 8; // Marge entre les groupes
         
         // Détecter les conflits
         const conflicts = this.slotManager.detectConflicts(matches, capacity);
@@ -456,17 +432,9 @@ class AgendaGridView {
                      left: 0;
                      right: 0;
                      height: ${matchHeight}px;
-                     padding: 4px;
+                     padding: 0.25rem;
                  ">
-                <div class="match-group-content"
-                     style="
-                         display: flex;
-                         flex-direction: row;
-                         gap: 8px;
-                         align-items: stretch;
-                         width: 100%;
-                         height: 100%;
-                     ">
+                <div class="match-group-content">
                     ${matchCards}
                     ${availableCards}
                 </div>
@@ -492,102 +460,9 @@ class AgendaGridView {
     }
     
     /**
-     * Génère la légende
-     */
-    generateLegend() {
-        const venues = this.dataManager.getGymnases() || [];
-
-        return `
-            <div class="grid-legend">
-                <div class="legend-section" data-section-id="gymnases">
-                    <h4>Gymnases</h4>
-                    <div class="legend-items">
-                        ${venues.map(v => `
-                            <div class="legend-item">
-                                <span class="legend-badge" style="background: ${v.color || '#ccc'}; color: white;">${v.id}</span>
-                                <span>${v.nom}</span>
-                            </div>
-                        `).join('')}
-                    </div>
-                </div>
-                <div class="legend-section">
-                    <h4>Genres</h4>
-                    <div class="legend-items">
-                        <div class="legend-item">
-                            <span class="legend-badge match-male">♂️</span>
-                            <span>Masculin</span>
-                        </div>
-                        <div class="legend-item">
-                            <span class="legend-badge match-female">♀️</span>
-                            <span>Féminin</span>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="legend-section">
-                    <h4>Badges</h4>
-                    <div class="legend-items">
-                        <div class="legend-item">
-                            <span class="legend-badge">📌</span>
-                            <span>Match fixé</span>
-                        </div>
-                        <div class="legend-item">
-                            <span class="legend-badge">🔗</span>
-                            <span>Match externe</span>
-                        </div>
-                        <div class="legend-item">
-                            <span class="legend-badge">🤝</span>
-                            <span>Entente</span>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="legend-section">
-                    <h4>Pénalités</h4>
-                    <div class="legend-items">
-                        <div class="legend-item">
-                            <span class="legend-badge penalty-low">⚡ 0-5</span>
-                            <span>Faible</span>
-                        </div>
-                        <div class="legend-item">
-                            <span class="legend-badge penalty-medium">⚡ 5-10</span>
-                            <span>Moyenne</span>
-                        </div>
-                        <div class="legend-item">
-                            <span class="legend-badge penalty-high">⚡ 10+</span>
-                            <span>Élevée</span>
-                        </div>
-                    </div>
-                </div>
-                
-                ${this.availableSlotsManager.showAvailableSlots ? `
-                <div class="legend-section">
-                    <h4>Disponibilité</h4>
-                    <div class="legend-items">
-                        <div class="legend-item">
-                            <span class="legend-badge available-slot-card">✓</span>
-                            <span>Terrain libre</span>
-                        </div>
-                    </div>
-                </div>
-                ` : ''}
-            </div>
-        `;
-    }
-    
-    /**
      * Attache les événements
      */
     attachEvents() {
-        // Sélecteur de vue
-        const modeSelect = this.container.querySelector('#grid-display-mode');
-        if (modeSelect) {
-            modeSelect.addEventListener('change', (e) => {
-                this.viewManager.setDisplayMode(e.target.value);
-                this.render();
-            });
-        }
-        
         // Navigation semaine
         const prevWeekBtn = this.container.querySelector('#grid-prev-week');
         if (prevWeekBtn) {
@@ -604,32 +479,6 @@ class AgendaGridView {
                 if (this.viewManager.nextWeek()) {
                     this.render();
                 }
-            });
-        }
-        
-        // Toggle créneaux disponibles
-        const showAvailableCheckbox = this.container.querySelector('#grid-show-available');
-        if (showAvailableCheckbox) {
-            showAvailableCheckbox.addEventListener('change', (e) => {
-                this.availableSlotsManager.setShow(e.target.checked);
-                this.render();
-            });
-        }
-        
-        // Filtres rapides
-        const genderFilter = this.container.querySelector('#filter-gender');
-        if (genderFilter) {
-            genderFilter.addEventListener('change', (e) => {
-                this.filters.gender = e.target.value;
-                this.render();
-            });
-        }
-        
-        const teamFilter = this.container.querySelector('#filter-team');
-        if (teamFilter) {
-            teamFilter.addEventListener('input', (e) => {
-                this.filters.team = e.target.value;
-                this.render();
             });
         }
         
@@ -651,10 +500,102 @@ class AgendaGridView {
     }
     
     /**
-     * Met à jour les filtres externes
+     * Met à jour les filtres externes depuis le panneau latéral
      */
     updateFilters(filters) {
         this.filters = { ...this.filters, ...filters };
+        this.render();
+    }
+    
+    /**
+     * Retourne la configuration des options d'affichage pour cette vue.
+     * Options réellement fonctionnelles et utiles pour la vue Agenda.
+     */
+    getDisplayOptions() {
+        return {
+            title: "Options - Vue Agenda",
+            options: [
+                // Mode d'affichage (gymnase vs semaine) - FONCTIONNEL
+                {
+                    type: 'button-group',
+                    id: 'agenda-display-mode',
+                    label: '📊 Organiser par',
+                    values: [
+                        { value: 'venue', text: 'Gymnase' },
+                        { value: 'week', text: 'Semaine' }
+                    ],
+                    default: this.viewManager.displayMode || 'venue',
+                    action: (value) => {
+                        this.setDisplayMode(value);
+                    }
+                },
+                
+                // Coloration des matchs - NOUVEAU
+                {
+                    type: 'select',
+                    id: 'agenda-color-scheme',
+                    label: '🎨 Coloration des matchs',
+                    values: [
+                        { value: 'none', text: 'Aucune' },
+                        { value: 'by-status', text: 'Par statut' },
+                        { value: 'by-venue', text: 'Par lieu' },
+                        { value: 'by-gender', text: 'Par genre' },
+                        { value: 'by-level', text: 'Par niveau' }
+                    ],
+                    default: this.colorScheme || 'none',
+                    action: (value) => {
+                        this.applyColorScheme(value);
+                    }
+                },
+                
+                // Afficher les créneaux disponibles - FONCTIONNEL
+                {
+                    type: 'checkbox',
+                    id: 'agenda-show-available',
+                    label: '🆓 Afficher créneaux libres',
+                    default: this.availableSlotsManager.showAvailableSlots !== false,
+                    action: (checked) => {
+                        this.setShowAvailableSlots(checked);
+                    }
+                }
+            ]
+        };
+    }
+    
+    /**
+     * Applique un schéma de couleurs aux matchs
+     * @param {string} scheme - Le schéma à appliquer ('none', 'by-status', 'by-venue', etc.)
+     */
+    applyColorScheme(scheme) {
+        this.colorScheme = scheme;
+        
+        // Appliquer l'attribut data-color-scheme sur le conteneur
+        if (scheme === 'none') {
+            this.container.removeAttribute('data-color-scheme');
+        } else {
+            this.container.setAttribute('data-color-scheme', scheme);
+        }
+        
+        // Sauvegarder la préférence
+        localStorage.setItem('agenda-color-scheme', scheme);
+        
+        // Re-render pour appliquer les changements
+        this.render();
+    }
+    
+    /**
+     * Met à jour le mode d'affichage depuis le panneau latéral
+     */
+    setDisplayMode(mode) {
+        this.viewManager.setDisplayMode(mode);
+        this.render();
+    }
+    
+    /**
+     * Met à jour l'affichage des créneaux disponibles depuis le panneau latéral
+     */
+    setShowAvailableSlots(show) {
+        this.availableSlotsManager.setShow(show);
         this.render();
     }
 }

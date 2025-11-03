@@ -1,0 +1,1098 @@
+/**/**
+
+ * PyCalendar Interface - Filters Complete * PyCalendar Interface - Filters Component
+
+ * Styles complets pour les filtres avec support du thème français * Styles for filter panels and controls
+
+ *  */
+
+ * Fusion intelligente de:
+
+ * - filters.css (base fonctionnelle)/* ==================== FILTER PANEL ==================== */
+
+ * - filters-enhanced.css (enrichissement thématique français)
+
+ */.filters-container {
+
+    display: grid;
+
+/* ==================== VARIABLES SUPPLÉMENTAIRES POUR THÈME FRANÇAIS ==================== */    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+
+    gap: var(--spacing-md);
+
+:root {}
+
+    /* Gradients français renforcés */
+
+    --gradient-tricolore-h: linear-gradient(90deg, .filter-group {
+
+        var(--france-blue) 0%, var(--france-blue) 33.33%,     display: flex;
+
+        var(--france-white) 33.33%, var(--france-white) 66.66%,     flex-direction: column;
+
+        var(--france-red) 66.66%, var(--france-red) 100%);    gap: var(--spacing-xs);
+
+    }
+
+    --gradient-tricolore-v: linear-gradient(180deg, 
+
+        var(--france-blue) 0%, var(--france-blue) 33.33%, .filter-label {
+
+        var(--france-white) 33.33%, var(--france-white) 66.66%,     font-size: var(--text-sm);
+
+        var(--france-red) 66.66%, var(--france-red) 100%);    font-weight: 600;
+
+        color: var(--dark);
+
+    --gradient-france-soft: linear-gradient(135deg,     margin-bottom: var(--spacing-xs);
+
+        rgba(0, 85, 164, 0.05) 0%, }
+
+        rgba(255, 255, 255, 0.05) 50%, 
+
+        rgba(239, 65, 53, 0.05) 100%);.filter-select,
+
+    .filter-input {
+
+    /* Patterns français subtils */    padding: var(--spacing-sm) var(--spacing-md);
+
+    --pattern-stripes: repeating-linear-gradient(    border: 1px solid var(--border);
+
+        45deg,    border-radius: var(--radius-md);
+
+        transparent,    font-size: var(--text-sm);
+
+        transparent 10px,    background: var(--white);
+
+        rgba(0, 85, 164, 0.03) 10px,    transition: var(--transition-base);
+
+        rgba(0, 85, 164, 0.03) 20px}
+
+    );
+
+    .filter-select:focus,
+
+    --pattern-dots: radial-gradient(.filter-input:focus {
+
+        circle at 2px 2px,    outline: none;
+
+        rgba(0, 85, 164, 0.08) 1px,    border-color: var(--primary);
+
+        transparent 1px    box-shadow: 0 0 0 3px var(--primary-light);
+
+    );}
+
+}
+
+.filter-select:hover,
+
+/* ==================== SIDEBAR DROITE - FILTRES ==================== */.filter-input:hover {
+
+    border-color: var(--primary);
+
+.sidebar-right {}
+
+    position: relative;
+
+    background: var(--gradient-france-soft), var(--bg-primary);/* ==================== CHECKBOX FILTERS ==================== */
+
+    box-shadow: -4px 0 20px rgba(0, 85, 164, 0.08);
+
+}.filter-checkboxes {
+
+    display: flex;
+
+.sidebar-right::before {    flex-wrap: wrap;
+
+    content: '';    gap: var(--spacing-sm);
+
+    position: absolute;}
+
+    top: 0;
+
+    left: 0;.filter-checkbox-label {
+
+    width: 4px;    display: flex;
+
+    height: 100%;    align-items: center;
+
+    background: var(--gradient-tricolore-v);    gap: var(--spacing-xs);
+
+    z-index: 10;    padding: var(--spacing-xs) var(--spacing-sm);
+
+}    border: 1px solid var(--border);
+
+    border-radius: var(--radius-md);
+
+.sidebar-right .sidebar-content {    cursor: pointer;
+
+    background: var(--pattern-dots);    transition: var(--transition-base);
+
+    background-size: 20px 20px;    font-size: var(--text-sm);
+
+}}
+
+
+
+/* ==================== FILTER PANEL (BASE) ==================== */.filter-checkbox-label:hover {
+
+    background: var(--primary-lighter);
+
+.filters-container {    border-color: var(--primary);
+
+    display: grid;}
+
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+
+    gap: var(--spacing-md);.filter-checkbox-label input[type="checkbox"] {
+
+}    cursor: pointer;
+
+}
+
+.filter-group {
+
+    display: flex;.filter-checkbox-label input[type="checkbox"]:checked + span {
+
+    flex-direction: column;    font-weight: 600;
+
+    gap: var(--spacing-xs);    color: var(--primary);
+
+}}
+
+
+
+.filter-label {/* ==================== QUICK FILTERS ==================== */
+
+    font-size: var(--text-sm);
+
+    font-weight: 600;.quick-filters {
+
+    color: var(--dark);    display: flex;
+
+    margin-bottom: var(--spacing-xs);    flex-wrap: wrap;
+
+}    gap: var(--spacing-sm);
+
+    margin-bottom: var(--spacing-lg);
+
+/* ==================== FILTER SUMMARY (ENHANCED) ==================== */}
+
+
+
+.filter-summary {.quick-filter-btn {
+
+    position: relative;    padding: var(--spacing-sm) var(--spacing-lg);
+
+    background: linear-gradient(135deg,     border: 2px solid var(--border);
+
+        rgba(0, 85, 164, 0.08) 0%,     border-radius: var(--radius-full);
+
+        rgba(239, 65, 53, 0.08) 100%);    background: var(--white);
+
+    border-radius: var(--radius-lg);    font-size: var(--text-sm);
+
+    padding: var(--spacing-lg);    font-weight: 600;
+
+    margin-bottom: var(--spacing-xl);    color: var(--gray);
+
+    border: 2px solid transparent;    cursor: pointer;
+
+    background-clip: padding-box;    transition: var(--transition-base);
+
+}}
+
+
+
+.filter-summary::before {.quick-filter-btn:hover {
+
+    content: '';    background: var(--primary-lighter);
+
+    position: absolute;    border-color: var(--primary);
+
+    inset: -2px;    color: var(--primary);
+
+    border-radius: var(--radius-lg);}
+
+    padding: 2px;
+
+    background: var(--gradient-blue-to-red);.quick-filter-btn.active {
+
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);    background: var(--primary);
+
+    -webkit-mask-composite: xor;    border-color: var(--primary);
+
+    mask-composite: exclude;    color: var(--white);
+
+    pointer-events: none;}
+
+}
+
+/* ==================== FILTER ACTIONS ==================== */
+
+.summary-header {
+
+    display: flex;.filter-actions {
+
+    justify-content: space-between;    display: flex;
+
+    align-items: center;    gap: var(--spacing-sm);
+
+    margin-bottom: var(--spacing-md);    margin-top: var(--spacing-md);
+
+}}
+
+
+
+.summary-title {.filter-btn-apply {
+
+    font-size: var(--text-base);    flex: 1;
+
+    font-weight: 700;    padding: var(--spacing-sm) var(--spacing-lg);
+
+    color: var(--text-primary);    background: var(--primary);
+
+    display: flex;    color: var(--white);
+
+    align-items: center;    border-radius: var(--radius-md);
+
+    gap: var(--spacing-sm);    font-weight: 600;
+
+}    transition: var(--transition-base);
+
+}
+
+.summary-title::before {
+
+    content: '🇫🇷';.filter-btn-apply:hover {
+
+    font-size: 1.2rem;    background: var(--primary-hover);
+
+    animation: float 3s ease-in-out infinite;    transform: translateY(-1px);
+
+}    box-shadow: var(--shadow);
+
+}
+
+.btn-clear-filters {
+
+    padding: var(--spacing-xs) var(--spacing-md);.filter-btn-reset {
+
+    background: var(--gradient-blue-to-red);    padding: var(--spacing-sm) var(--spacing-lg);
+
+    color: white;    background: var(--light);
+
+    border: none;    color: var(--gray);
+
+    border-radius: var(--radius-md);    border-radius: var(--radius-md);
+
+    font-size: var(--text-sm);    font-weight: 600;
+
+    font-weight: 600;    transition: var(--transition-base);
+
+    cursor: pointer;}
+
+    transition: all var(--transition-base);
+
+    position: relative;.filter-btn-reset:hover {
+
+    overflow: hidden;    background: var(--danger-light);
+
+}    color: var(--danger);
+
+}
+
+.btn-clear-filters::before {
+
+    content: '';/* ==================== ACTIVE FILTERS DISPLAY ==================== */
+
+    position: absolute;
+
+    top: 50%;.active-filters {
+
+    left: 50%;    display: flex;
+
+    width: 0;    flex-wrap: wrap;
+
+    height: 0;    gap: var(--spacing-sm);
+
+    border-radius: 50%;    padding: var(--spacing-md);
+
+    background: rgba(255, 255, 255, 0.3);    background: var(--primary-lighter);
+
+    transform: translate(-50%, -50%);    border-radius: var(--radius-md);
+
+    transition: width 0.6s, height 0.6s;    margin-bottom: var(--spacing-md);
+
+}}
+
+
+
+.btn-clear-filters:hover {.active-filter-tag {
+
+    transform: scale(1.05);    display: inline-flex;
+
+    box-shadow: 0 4px 12px rgba(0, 85, 164, 0.3);    align-items: center;
+
+}    gap: var(--spacing-xs);
+
+    padding: var(--spacing-xs) var(--spacing-sm);
+
+.btn-clear-filters:active::before {    background: var(--white);
+
+    width: 300px;    border-radius: var(--radius-full);
+
+    height: 300px;    font-size: var(--text-xs);
+
+}    font-weight: 600;
+
+    color: var(--primary);
+
+.summary-tags {}
+
+    display: flex;
+
+    flex-wrap: wrap;.active-filter-remove {
+
+    gap: var(--spacing-sm);    display: flex;
+
+    min-height: 32px;    align-items: center;
+
+}    justify-content: center;
+
+    width: 16px;
+
+.filter-tag {    height: 16px;
+
+    display: inline-flex;    border-radius: var(--radius-full);
+
+    align-items: center;    background: var(--danger);
+
+    gap: var(--spacing-xs);    color: var(--white);
+
+    padding: var(--spacing-xs) var(--spacing-md);    font-size: 12px;
+
+    background: linear-gradient(135deg,     cursor: pointer;
+
+        var(--france-blue) 0%,     transition: var(--transition-fast);
+
+        var(--france-blue-dark) 100%);}
+
+    color: white;
+
+    border-radius: var(--radius-full);.active-filter-remove:hover {
+
+    font-size: var(--text-sm);    background: var(--danger-dark);
+
+    font-weight: 600;    transform: scale(1.1);
+
+    animation: slideInRight 0.3s ease-out;}
+
+    box-shadow: 0 2px 8px rgba(0, 85, 164, 0.3);
+
+    position: relative;/* ==================== FILTER COUNT ==================== */
+
+    overflow: hidden;
+
+}.filter-count {
+
+    display: inline-flex;
+
+.filter-tag::before {    align-items: center;
+
+    content: '';    justify-content: center;
+
+    position: absolute;    min-width: 24px;
+
+    top: 0;    height: 24px;
+
+    left: -100%;    padding: 0 var(--spacing-xs);
+
+    width: 100%;    background: var(--primary);
+
+    height: 100%;    color: var(--white);
+
+    background: linear-gradient(90deg,     border-radius: var(--radius-full);
+
+        transparent,     font-size: var(--text-xs);
+
+        rgba(255, 255, 255, 0.3),     font-weight: 700;
+
+        transparent);}
+
+    transition: left 0.5s;
+}
+
+.filter-tag:hover::before {
+    left: 100%;
+}
+
+.filter-tag::after {
+    content: '×';
+    margin-left: var(--spacing-xs);
+    cursor: pointer;
+    opacity: 0.7;
+    transition: opacity var(--transition-base);
+}
+
+.filter-tag:hover::after {
+    opacity: 1;
+}
+
+.no-filters {
+    color: var(--text-secondary);
+    font-style: italic;
+    font-size: var(--text-sm);
+}
+
+/* ==================== FILTER SECTIONS (ENHANCED) ==================== */
+
+.filter-section {
+    margin-bottom: var(--spacing-xl);
+    position: relative;
+    transition: all var(--transition-base);
+}
+
+.filter-section:hover {
+    transform: translateX(4px);
+}
+
+.filter-section::before {
+    content: '';
+    position: absolute;
+    left: -var(--spacing-lg);
+    top: 0;
+    width: 3px;
+    height: 100%;
+    background: var(--gradient-tricolore-v);
+    opacity: 0;
+    transition: opacity var(--transition-base);
+    border-radius: 2px;
+}
+
+.filter-section:hover::before {
+    opacity: 1;
+}
+
+.filter-section-title {
+    font-size: var(--text-base);
+    font-weight: 700;
+    color: var(--france-blue);
+    margin-bottom: var(--spacing-md);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    position: relative;
+    padding-left: var(--spacing-md);
+}
+
+.filter-section-title::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 4px;
+    height: 60%;
+    background: var(--gradient-blue-to-red);
+    border-radius: 2px;
+}
+
+.filter-section-title::after {
+    content: '';
+    flex: 1;
+    height: 2px;
+    background: linear-gradient(90deg, 
+        var(--france-blue) 0%, 
+        transparent 100%);
+    margin-left: var(--spacing-sm);
+}
+
+/* ==================== FILTER OPTIONS (ENHANCED) ==================== */
+
+.filter-options {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+}
+
+.filter-option {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-sm) var(--spacing-md);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all var(--transition-base);
+    position: relative;
+    background: transparent;
+}
+
+.filter-option::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--gradient-france-soft);
+    border-radius: var(--radius-md);
+    opacity: 0;
+    transition: opacity var(--transition-base);
+}
+
+.filter-option:hover::before {
+    opacity: 1;
+}
+
+.filter-option:hover {
+    transform: translateX(4px);
+}
+
+/* ==================== CHECKBOXES (BASE + ENHANCED) ==================== */
+
+.filter-checkboxes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--spacing-sm);
+}
+
+.filter-checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    padding: var(--spacing-xs) var(--spacing-sm);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: var(--transition-base);
+    font-size: var(--text-sm);
+}
+
+.filter-checkbox-label:hover {
+    background: var(--primary-lighter);
+    border-color: var(--primary);
+}
+
+.filter-checkbox-label input[type="checkbox"] {
+    cursor: pointer;
+}
+
+.filter-checkbox-label input[type="checkbox"]:checked + span {
+    font-weight: 600;
+    color: var(--primary);
+}
+
+/* Radio buttons personnalisés (ENHANCED) */
+.filter-option input[type="radio"] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 20px;
+    height: 20px;
+    border: 2px solid var(--france-blue);
+    border-radius: 50%;
+    position: relative;
+    cursor: pointer;
+    transition: all var(--transition-base);
+    flex-shrink: 0;
+    background: white;
+}
+
+.filter-option input[type="radio"]:hover {
+    border-color: var(--france-blue-dark);
+    box-shadow: 0 0 0 4px rgba(0, 85, 164, 0.1);
+}
+
+.filter-option input[type="radio"]:checked {
+    background: var(--gradient-blue-to-red);
+    border-color: var(--france-blue-dark);
+    box-shadow: 0 0 0 4px rgba(0, 85, 164, 0.2);
+}
+
+.filter-option input[type="radio"]:checked::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 8px;
+    height: 8px;
+    background: white;
+    border-radius: 50%;
+    animation: bounce 0.3s ease-out;
+}
+
+/* Checkboxes personnalisés (ENHANCED) */
+.filter-option input[type="checkbox"] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 20px;
+    height: 20px;
+    border: 2px solid var(--france-blue);
+    border-radius: var(--radius-sm);
+    position: relative;
+    cursor: pointer;
+    transition: all var(--transition-base);
+    flex-shrink: 0;
+    background: white;
+}
+
+.filter-option input[type="checkbox"]:hover {
+    border-color: var(--france-blue-dark);
+    box-shadow: 0 0 0 4px rgba(0, 85, 164, 0.1);
+}
+
+.filter-option input[type="checkbox"]:checked {
+    background: var(--gradient-blue-to-red);
+    border-color: var(--france-blue-dark);
+    box-shadow: 0 0 0 4px rgba(0, 85, 164, 0.2);
+}
+
+.filter-option input[type="checkbox"]:checked::after {
+    content: '✓';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: white;
+    font-weight: bold;
+    font-size: 14px;
+    animation: bounce 0.3s ease-out;
+}
+
+.filter-option-label {
+    flex: 1;
+    font-size: var(--text-sm);
+    color: var(--text-primary);
+    font-weight: 500;
+    transition: color var(--transition-base);
+}
+
+.filter-option:hover .filter-option-label {
+    color: var(--france-blue);
+}
+
+.filter-option input:checked ~ .filter-option-label {
+    color: var(--france-blue-dark);
+    font-weight: 600;
+}
+
+/* ==================== SELECT ELEMENTS (BASE + ENHANCED) ==================== */
+
+.filter-select,
+.filter-input {
+    width: 100%;
+    padding: var(--spacing-sm) var(--spacing-md);
+    border: 2px solid var(--border-color);
+    border-radius: var(--radius-md);
+    font-size: var(--text-sm);
+    background: white;
+    transition: var(--transition-base);
+}
+
+.filter-select {
+    color: var(--text-primary);
+    font-weight: 500;
+    cursor: pointer;
+    appearance: none;
+    background-image: url('data:image/svg+xml;charset=UTF-8,%3csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="%230055A4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"%3e%3cpolyline points="6 9 12 15 18 9"%3e%3c/polyline%3e%3c/svg%3e');
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    background-size: 1.5em 1.5em;
+    padding-right: 2.5rem;
+}
+
+.filter-select:focus,
+.filter-input:focus {
+    outline: none;
+    border-color: var(--france-blue-dark);
+    box-shadow: 0 0 0 4px rgba(0, 85, 164, 0.2);
+}
+
+.filter-select:hover,
+.filter-input:hover {
+    border-color: var(--france-blue);
+    background-color: var(--france-blue-ultra-light);
+    box-shadow: 0 0 0 4px rgba(0, 85, 164, 0.1);
+}
+
+.filter-select:focus {
+    background: linear-gradient(135deg, 
+        rgba(0, 85, 164, 0.05) 0%, 
+        rgba(255, 255, 255, 1) 100%);
+}
+
+/* ==================== QUICK FILTERS (BASE) ==================== */
+
+.quick-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--spacing-sm);
+    margin-bottom: var(--spacing-lg);
+}
+
+.quick-filter-btn {
+    padding: var(--spacing-sm) var(--spacing-lg);
+    border: 2px solid var(--border);
+    border-radius: var(--radius-full);
+    background: var(--white);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--gray);
+    cursor: pointer;
+    transition: var(--transition-base);
+}
+
+.quick-filter-btn:hover {
+    background: var(--primary-lighter);
+    border-color: var(--primary);
+    color: var(--primary);
+}
+
+.quick-filter-btn.active {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: var(--white);
+}
+
+/* ==================== DAY GRID (ENHANCED) ==================== */
+
+.days-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: var(--spacing-sm);
+    margin-top: var(--spacing-sm);
+}
+
+.day-option {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--spacing-xs);
+}
+
+.day-option input[type="checkbox"] {
+    display: none;
+}
+
+.day-label {
+    width: 100%;
+    padding: var(--spacing-sm);
+    text-align: center;
+    font-size: var(--text-xs);
+    font-weight: 700;
+    color: var(--text-secondary);
+    background: white;
+    border: 2px solid var(--border-color);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all var(--transition-bounce);
+    position: relative;
+    overflow: hidden;
+}
+
+.day-label::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--gradient-tricolore-h);
+    transform: scaleX(0);
+    transition: transform var(--transition-base);
+}
+
+.day-label:hover {
+    transform: translateY(-3px) scale(1.05);
+    border-color: var(--france-blue);
+    box-shadow: 0 4px 12px rgba(0, 85, 164, 0.2);
+}
+
+.day-option input[type="checkbox"]:checked + .day-label {
+    background: var(--gradient-blue-to-red);
+    color: white;
+    border-color: var(--france-blue-dark);
+    box-shadow: 0 4px 12px rgba(0, 85, 164, 0.3);
+    animation: bounce 0.5s ease-out;
+}
+
+.day-option input[type="checkbox"]:checked + .day-label::before {
+    transform: scaleX(1);
+}
+
+/* ==================== TIME INPUTS (ENHANCED) ==================== */
+
+.time-inputs {
+    display: flex;
+    gap: var(--spacing-md);
+    margin-top: var(--spacing-sm);
+}
+
+.time-input-group {
+    flex: 1;
+}
+
+.time-label {
+    display: block;
+    font-size: var(--text-xs);
+    font-weight: 600;
+    color: var(--france-blue);
+    margin-bottom: var(--spacing-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.time-input {
+    width: 100%;
+    padding: var(--spacing-sm);
+    border: 2px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: white;
+    color: var(--text-primary);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    cursor: pointer;
+    transition: all var(--transition-base);
+    font-family: 'Courier New', monospace;
+}
+
+.time-input:hover {
+    border-color: var(--france-blue);
+    background: var(--france-blue-ultra-light);
+    box-shadow: 0 0 0 4px rgba(0, 85, 164, 0.1);
+}
+
+.time-input:focus {
+    outline: none;
+    border-color: var(--france-blue-dark);
+    box-shadow: 0 0 0 4px rgba(0, 85, 164, 0.2);
+    background: white;
+}
+
+/* ==================== SEARCH BOX (ENHANCED) ==================== */
+
+.search-box {
+    position: relative;
+    margin-top: var(--spacing-sm);
+}
+
+.search-box::before {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    background: var(--gradient-blue-to-red);
+    border-radius: calc(var(--radius-md) + 2px);
+    opacity: 0;
+    transition: opacity var(--transition-base);
+    z-index: 0;
+}
+
+.search-box:focus-within::before {
+    opacity: 1;
+}
+
+.search-input {
+    width: 100%;
+    padding: var(--spacing-sm) var(--spacing-md) var(--spacing-sm) 2.5rem;
+    border: 2px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: white;
+    color: var(--text-primary);
+    font-size: var(--text-sm);
+    transition: all var(--transition-base);
+    position: relative;
+    z-index: 1;
+}
+
+.search-input:hover {
+    border-color: var(--france-blue);
+    background: var(--france-blue-ultra-light);
+}
+
+.search-input:focus {
+    outline: none;
+    border-color: transparent;
+    background: white;
+}
+
+.search-input::placeholder {
+    color: var(--text-tertiary);
+    font-style: italic;
+}
+
+.search-icon {
+    position: absolute;
+    left: 0.75rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-secondary);
+    transition: all var(--transition-base);
+    z-index: 2;
+    pointer-events: none;
+}
+
+.search-box:focus-within .search-icon {
+    color: var(--france-blue-dark);
+    transform: translateY(-50%) scale(1.2);
+}
+
+/* ==================== FILTER ACTIONS (BASE) ==================== */
+
+.filter-actions {
+    display: flex;
+    gap: var(--spacing-sm);
+    margin-top: var(--spacing-md);
+}
+
+.filter-btn-apply {
+    flex: 1;
+    padding: var(--spacing-sm) var(--spacing-lg);
+    background: var(--primary);
+    color: var(--white);
+    border-radius: var(--radius-md);
+    font-weight: 600;
+    transition: var(--transition-base);
+    border: none;
+    cursor: pointer;
+}
+
+.filter-btn-apply:hover {
+    background: var(--primary-hover);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow);
+}
+
+.filter-btn-reset {
+    padding: var(--spacing-sm) var(--spacing-lg);
+    background: var(--light);
+    color: var(--gray);
+    border-radius: var(--radius-md);
+    font-weight: 600;
+    transition: var(--transition-base);
+    border: none;
+    cursor: pointer;
+}
+
+.filter-btn-reset:hover {
+    background: var(--danger-light);
+    color: var(--danger);
+}
+
+/* ==================== ACTIVE FILTERS DISPLAY (BASE) ==================== */
+
+.active-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-md);
+    background: var(--primary-lighter);
+    border-radius: var(--radius-md);
+    margin-bottom: var(--spacing-md);
+}
+
+.active-filter-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    padding: var(--spacing-xs) var(--spacing-sm);
+    background: var(--white);
+    border-radius: var(--radius-full);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    color: var(--primary);
+}
+
+.active-filter-remove {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border-radius: var(--radius-full);
+    background: var(--danger);
+    color: var(--white);
+    font-size: 12px;
+    cursor: pointer;
+    transition: var(--transition-fast);
+}
+
+.active-filter-remove:hover {
+    background: var(--danger-dark);
+    transform: scale(1.1);
+}
+
+/* ==================== FILTER COUNT (BASE) ==================== */
+
+.filter-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 24px;
+    height: 24px;
+    padding: 0 var(--spacing-xs);
+    background: var(--primary);
+    color: var(--white);
+    border-radius: var(--radius-full);
+    font-size: var(--text-xs);
+    font-weight: 700;
+}
+
+/* ==================== ANIMATIONS SPÉCIFIQUES ==================== */
+
+@keyframes slideInRight {
+    from {
+        opacity: 0;
+        transform: translateX(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+@keyframes float {
+    0%, 100% {
+        transform: translateY(0);
+    }
+    50% {
+        transform: translateY(-5px);
+    }
+}
+
+@keyframes bounce {
+    0%, 100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.2);
+    }
+}
+
+/* ==================== RESPONSIVE ==================== */
+
+@media (max-width: 1200px) {
+    .days-grid {
+        grid-template-columns: repeat(4, 1fr);
+    }
+}
+
+@media (max-width: 768px) {
+    .sidebar-right {
+        position: fixed;
+        right: -100%;
+        top: 0;
+        bottom: 0;
+        z-index: 1000;
+        transition: right var(--transition-base);
+    }
+    
+    .sidebar-right.visible {
+        right: 0;
+    }
+    
+    .days-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+    
+    .filters-container {
+        grid-template-columns: 1fr;
+    }
+}

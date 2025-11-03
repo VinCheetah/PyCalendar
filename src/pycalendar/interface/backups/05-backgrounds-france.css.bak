@@ -1,0 +1,540 @@
+/**
+ * PyCalendar Interface - Backgrounds Français Renforcés
+ * Patterns, gradients et éléments visuels français subtils
+ */
+
+/* ==================== BACKGROUNDS GÉNÉRAUX ==================== */
+
+body {
+    background: 
+        var(--pattern-dots),
+        linear-gradient(135deg, 
+            rgba(0, 85, 164, 0.02) 0%, 
+            rgba(255, 255, 255, 1) 50%, 
+            rgba(239, 65, 53, 0.02) 100%);
+    background-size: 20px 20px, cover;
+    background-attachment: fixed, scroll;
+}
+
+/* ==================== APP WRAPPER ==================== */
+
+.app-wrapper {
+    position: relative;
+}
+
+.app-wrapper::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--gradient-tricolore-h);
+    z-index: 9999;
+}
+
+/* ==================== HEADER BACKGROUNDS ==================== */
+
+.main-header {
+    background: 
+        linear-gradient(135deg, 
+            rgba(0, 85, 164, 0.05) 0%, 
+            rgba(255, 255, 255, 1) 100%);
+    position: relative;
+}
+
+.main-header::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--gradient-tricolore-h);
+}
+
+.header-content {
+    position: relative;
+}
+
+/* Pattern subtil dans le header */
+.header-content::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--pattern-dots);
+    background-size: 15px 15px;
+    opacity: 0.3;
+    pointer-events: none;
+}
+
+/* ==================== HEADER STATS AVEC BACKGROUNDS FRANÇAIS ==================== */
+
+.header-stats {
+    position: relative;
+    z-index: 1;
+}
+
+.header-stat {
+    background: 
+        linear-gradient(135deg, 
+            rgba(255, 255, 255, 0.9) 0%, 
+            rgba(255, 255, 255, 0.8) 100%);
+    backdrop-filter: blur(10px);
+    position: relative;
+    overflow: hidden;
+}
+
+.header-stat::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--gradient-tricolore-h);
+}
+
+/* Alternance bleu/rouge pour les stats */
+.header-stat:nth-child(odd) {
+    border-top: 3px solid var(--france-blue);
+}
+
+.header-stat:nth-child(even) {
+    border-top: 3px solid var(--france-red);
+}
+
+.header-stat:hover {
+    background: 
+        var(--pattern-stripes),
+        linear-gradient(135deg, 
+            rgba(0, 85, 164, 0.05) 0%, 
+            rgba(255, 255, 255, 0.9) 100%);
+}
+
+/* ==================== SIDEBARS BACKGROUNDS ==================== */
+
+.sidebar-left {
+    background: 
+        var(--pattern-stripes),
+        linear-gradient(180deg, 
+            rgba(0, 85, 164, 0.03) 0%, 
+            rgba(255, 255, 255, 1) 100%);
+    position: relative;
+}
+
+.sidebar-left::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 4px;
+    height: 100%;
+    background: var(--gradient-tricolore-v);
+    z-index: 10;
+}
+
+.sidebar-right {
+    background: 
+        var(--pattern-dots),
+        linear-gradient(180deg, 
+            rgba(239, 65, 53, 0.03) 0%, 
+            rgba(255, 255, 255, 1) 100%);
+    background-size: 20px 20px, cover;
+}
+
+/* ==================== MAIN CONTENT BACKGROUND ==================== */
+
+.main-content {
+    background: 
+        radial-gradient(circle at top left, 
+            rgba(0, 85, 164, 0.02) 0%, 
+            transparent 50%),
+        radial-gradient(circle at bottom right, 
+            rgba(239, 65, 53, 0.02) 0%, 
+            transparent 50%),
+        white;
+    position: relative;
+}
+
+.main-content::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--pattern-dots);
+    background-size: 25px 25px;
+    opacity: 0.15;
+    pointer-events: none;
+}
+
+/* ==================== VIEW CONTAINERS ==================== */
+
+.view-container {
+    background: 
+        linear-gradient(135deg, 
+            rgba(255, 255, 255, 0.95) 0%, 
+            rgba(255, 255, 255, 0.85) 100%);
+    backdrop-filter: blur(5px);
+    border-radius: var(--radius-lg);
+    border: 1px solid rgba(0, 85, 164, 0.1);
+    position: relative;
+    overflow: hidden;
+}
+
+.view-container::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: var(--gradient-tricolore-h);
+}
+
+/* ==================== CONTROL SECTIONS AVEC BACKGROUNDS ==================== */
+
+.control-section {
+    position: relative;
+    background: 
+        linear-gradient(135deg, 
+            rgba(0, 85, 164, 0.02) 0%, 
+            rgba(255, 255, 255, 0.5) 100%);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-lg);
+}
+
+.control-section::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: var(--radius-lg);
+    padding: 2px;
+    background: linear-gradient(135deg, 
+        var(--france-blue) 0%, 
+        var(--france-red) 100%);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    opacity: 0.3;
+}
+
+/* ==================== BOUTONS AVEC BACKGROUNDS FRANÇAIS ==================== */
+
+.sport-btn,
+.view-btn {
+    background: 
+        linear-gradient(135deg, 
+            rgba(255, 255, 255, 0.9) 0%, 
+            rgba(255, 255, 255, 0.7) 100%);
+    position: relative;
+    overflow: hidden;
+}
+
+.sport-btn::after,
+.view-btn::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--pattern-dots);
+    background-size: 10px 10px;
+    opacity: 0;
+    transition: opacity var(--transition-base);
+}
+
+.sport-btn:hover::after,
+.view-btn:hover::after {
+    opacity: 0.3;
+}
+
+.sport-btn.active,
+.view-btn.active {
+    background: 
+        var(--pattern-stripes),
+        linear-gradient(135deg, 
+            rgba(0, 85, 164, 0.1) 0%, 
+            rgba(255, 255, 255, 0.9) 100%);
+}
+
+/* ==================== THEME SELECTOR BACKGROUNDS ==================== */
+
+.theme-selector {
+    background: 
+        linear-gradient(135deg, 
+            rgba(255, 255, 255, 0.8) 0%, 
+            rgba(255, 255, 255, 0.6) 100%);
+    backdrop-filter: blur(10px);
+    position: relative;
+}
+
+.theme-selector::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--gradient-tricolore-h);
+    opacity: 0.1;
+    border-radius: var(--radius-full);
+}
+
+.theme-btn {
+    background: rgba(255, 255, 255, 0.7);
+    position: relative;
+}
+
+.theme-btn.active {
+    background: 
+        linear-gradient(135deg, 
+            var(--france-blue) 0%, 
+            var(--france-red) 100%);
+}
+
+/* ==================== MODALS AVEC BACKGROUNDS ==================== */
+
+.modal-overlay {
+    background: 
+        radial-gradient(circle at center, 
+            rgba(0, 85, 164, 0.4) 0%, 
+            rgba(0, 0, 0, 0.6) 100%);
+    backdrop-filter: blur(8px);
+}
+
+.modal {
+    background: 
+        var(--pattern-dots),
+        linear-gradient(135deg, 
+            rgba(255, 255, 255, 0.98) 0%, 
+            rgba(255, 255, 255, 0.95) 100%);
+    background-size: 15px 15px, cover;
+    position: relative;
+    border: 2px solid transparent;
+}
+
+.modal::before {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    border-radius: calc(var(--radius-xl) + 2px);
+    padding: 2px;
+    background: var(--gradient-blue-to-red);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+}
+
+.modal-header {
+    background: 
+        linear-gradient(135deg, 
+            rgba(0, 85, 164, 0.08) 0%, 
+            rgba(239, 65, 53, 0.08) 100%);
+    position: relative;
+}
+
+.modal-header::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: var(--gradient-tricolore-h);
+}
+
+/* ==================== MATCH CARDS AVEC BACKGROUNDS ==================== */
+
+.match-card {
+    background: 
+        linear-gradient(135deg, 
+            rgba(255, 255, 255, 0.95) 0%, 
+            rgba(255, 255, 255, 0.9) 100%);
+    backdrop-filter: blur(5px);
+    position: relative;
+    overflow: hidden;
+}
+
+.match-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--gradient-tricolore-h);
+    opacity: 0;
+    transition: opacity var(--transition-base);
+}
+
+.match-card:hover::before {
+    opacity: 1;
+}
+
+.match-card::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--pattern-dots);
+    background-size: 15px 15px;
+    opacity: 0;
+    transition: opacity var(--transition-base);
+    pointer-events: none;
+}
+
+.match-card:hover::after {
+    opacity: 0.1;
+}
+
+/* États des match cards */
+.match-card.scheduled {
+    border-left: 4px solid var(--france-blue);
+}
+
+.match-card.modified {
+    border-left: 4px solid var(--france-red);
+    background: 
+        repeating-linear-gradient(
+            45deg,
+            transparent,
+            transparent 10px,
+            rgba(239, 65, 53, 0.05) 10px,
+            rgba(239, 65, 53, 0.05) 20px
+        ),
+        linear-gradient(135deg, 
+            rgba(255, 255, 255, 0.95) 0%, 
+            rgba(255, 255, 255, 0.9) 100%);
+}
+
+.match-card.conflict {
+    border-left: 4px solid var(--warning);
+    background: 
+        repeating-linear-gradient(
+            -45deg,
+            transparent,
+            transparent 10px,
+            rgba(245, 158, 11, 0.05) 10px,
+            rgba(245, 158, 11, 0.05) 20px
+        ),
+        linear-gradient(135deg, 
+            rgba(255, 255, 255, 0.95) 0%, 
+            rgba(255, 255, 255, 0.9) 100%);
+}
+
+/* ==================== EMPTY STATE ==================== */
+
+.empty-state {
+    background: 
+        radial-gradient(circle at center, 
+            rgba(0, 85, 164, 0.05) 0%, 
+            rgba(255, 255, 255, 1) 100%);
+    position: relative;
+}
+
+.empty-state::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--pattern-dots);
+    background-size: 20px 20px;
+    opacity: 0.2;
+}
+
+/* ==================== LOADING STATE ==================== */
+
+.loading-state {
+    background: 
+        linear-gradient(135deg, 
+            rgba(0, 85, 164, 0.03) 0%, 
+            rgba(255, 255, 255, 1) 50%, 
+            rgba(239, 65, 53, 0.03) 100%);
+}
+
+/* ==================== THÈME TRICOLORE RENFORCÉ ==================== */
+
+[data-theme="tricolore"] body {
+    background: 
+        var(--pattern-stripes),
+        linear-gradient(135deg, 
+            rgba(0, 85, 164, 0.05) 0%, 
+            rgba(255, 255, 255, 1) 50%, 
+            rgba(239, 65, 53, 0.05) 100%);
+    background-size: 20px 20px, cover;
+}
+
+[data-theme="tricolore"] .main-header {
+    background: 
+        var(--pattern-dots),
+        linear-gradient(90deg, 
+            rgba(0, 85, 164, 0.08) 0%, 
+            rgba(255, 255, 255, 1) 50%, 
+            rgba(239, 65, 53, 0.08) 100%);
+    background-size: 15px 15px, cover;
+}
+
+[data-theme="tricolore"] .sidebar-left {
+    background: 
+        repeating-linear-gradient(
+            135deg,
+            transparent,
+            transparent 20px,
+            rgba(0, 85, 164, 0.03) 20px,
+            rgba(0, 85, 164, 0.03) 40px
+        ),
+        linear-gradient(180deg, 
+            rgba(0, 85, 164, 0.05) 0%, 
+            rgba(255, 255, 255, 1) 100%);
+}
+
+[data-theme="tricolore"] .sidebar-right {
+    background: 
+        repeating-linear-gradient(
+            -135deg,
+            transparent,
+            transparent 20px,
+            rgba(239, 65, 53, 0.03) 20px,
+            rgba(239, 65, 53, 0.03) 40px
+        ),
+        linear-gradient(180deg, 
+            rgba(239, 65, 53, 0.05) 0%, 
+            rgba(255, 255, 255, 1) 100%);
+}
+
+[data-theme="tricolore"] .main-content {
+    background: 
+        radial-gradient(circle at 20% 20%, 
+            rgba(0, 85, 164, 0.03) 0%, 
+            transparent 40%),
+        radial-gradient(circle at 80% 80%, 
+            rgba(239, 65, 53, 0.03) 0%, 
+            transparent 40%),
+        white;
+}
+
+/* ==================== ANIMATIONS DE PATTERNS ==================== */
+
+@keyframes pattern-slide {
+    from {
+        background-position: 0 0;
+    }
+    to {
+        background-position: 40px 40px;
+    }
+}
+
+.pattern-animated {
+    animation: pattern-slide 20s linear infinite;
+}
+
+/* ==================== RESPONSIVE ==================== */
+
+@media (max-width: 1200px) {
+    body {
+        background-size: 15px 15px, cover;
+    }
+}
+
+@media (max-width: 768px) {
+    body {
+        background-size: 10px 10px, cover;
+    }
+    
+    .app-wrapper::before {
+        height: 2px;
+    }
+}

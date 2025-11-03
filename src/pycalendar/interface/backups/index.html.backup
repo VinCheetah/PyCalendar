@@ -1,0 +1,1064 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PyCalendar FFSU - Gestion de Calendriers Sportifs</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    
+    <!-- CSS_PLACEHOLDER -->
+</head>
+<body>
+    <div class="app-wrapper">
+        <!-- ==================== HEADER PRINCIPAL ==================== -->
+        <header class="main-header">
+            <div class="header-content">
+                <div class="header-left">
+                    <div class="header-logo">
+                        <div class="logo-icon">🏐</div>
+                        <div class="logo-text">
+                            <h1 class="logo-title">PyCalendar FFSU</h1>
+                            <p class="logo-subtitle">Fédération Française du Sport Universitaire</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="header-center">
+                    <div class="header-stats">
+                        <div class="header-stat">
+                            <span class="stat-icon">📋</span>
+                            <span class="stat-value" id="stat-scheduled">-</span>
+                            <span class="stat-label">Planifiés</span>
+                        </div>
+                        <div class="header-stat">
+                            <span class="stat-icon">⚠️</span>
+                            <span class="stat-value" id="stat-unscheduled">-</span>
+                            <span class="stat-label">À planifier</span>
+                        </div>
+                        <div class="header-stat">
+                            <span class="stat-icon">🏟️</span>
+                            <span class="stat-value" id="stat-venues">-</span>
+                            <span class="stat-label">Gymnases</span>
+                        </div>
+                        <div class="header-stat">
+                            <span class="stat-icon">✏️</span>
+                            <span class="stat-value warning" id="stat-modifications">0</span>
+                            <span class="stat-label">Modifications</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="header-right">
+                    <div class="theme-selector">
+                        <button class="theme-btn" data-theme="light" title="Thème Clair">
+                            <span class="theme-icon">☀️</span>
+                        </button>
+                        <button class="theme-btn" data-theme="dark" title="Thème Sombre">
+                            <span class="theme-icon">🌙</span>
+                        </button>
+                        <button class="theme-btn active" data-theme="tricolore" title="Thème France">
+                            <span class="theme-icon">🇫🇷</span>
+                        </button>
+                    </div>
+                    <button class="btn-icon" id="btn-help" title="Aide">
+                        <span>❓</span>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Barre tricolore décorative -->
+            <div class="header-france-gradient"></div>
+        </header>
+        
+        <!-- ==================== LAYOUT PRINCIPAL (3 COLONNES) ==================== -->
+        <div class="main-layout">
+            
+            <!-- ==================== SIDEBAR GAUCHE - OPTIONS D'AFFICHAGE ==================== -->
+            <aside class="sidebar sidebar-left">
+                <div class="sidebar-header">
+                    <h2 class="sidebar-title">
+                        <span class="sidebar-icon">⚙️</span>
+                        Affichage
+                    </h2>
+                    <button class="btn-collapse" id="btn-collapse-left" title="Réduire">
+                        <span>◀</span>
+                    </button>
+                </div>
+                
+                <div class="sidebar-content">
+                    <!-- Section Sport -->
+                    <div class="control-section">
+                        <h3 class="control-section-title">Sport</h3>
+                        <div class="sport-selector">
+                            <button class="sport-btn active" data-sport="volleyball">
+                                <span class="sport-icon">🏐</span>
+                                <span class="sport-name">Volleyball</span>
+                            </button>
+                            <button class="sport-btn" data-sport="handball">
+                                <span class="sport-icon">🤾</span>
+                                <span class="sport-name">Handball</span>
+                            </button>
+                            <button class="sport-btn" data-sport="football">
+                                <span class="sport-icon">⚽</span>
+                                <span class="sport-name">Football</span>
+                            </button>
+                            <button class="sport-btn" data-sport="basketball">
+                                <span class="sport-icon">🏀</span>
+                                <span class="sport-name">Basketball</span>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Section Vue -->
+                    <div class="control-section">
+                        <h3 class="control-section-title">Vue</h3>
+                        <div class="view-selector">
+                            <button class="view-btn active" data-view="agenda">
+                                <span class="view-icon">📋</span>
+                                <span class="view-name">Agenda</span>
+                            </button>
+                            <button class="view-btn" data-view="pools">
+                                <span class="view-icon">🎯</span>
+                                <span class="view-name">Poules</span>
+                            </button>
+                            <button class="view-btn" data-view="cards">
+                                <span class="view-icon">🃏</span>
+                                <span class="view-name">Cartes</span>
+                            </button>
+                            <button class="view-btn" data-view="calendar">
+                                <span class="view-icon">�</span>
+                                <span class="view-name">Calendrier</span>
+                            </button>
+                            <button class="view-btn" data-view="stats">
+                                <span class="view-icon">📊</span>
+                                <span class="view-name">Statistiques</span>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Section Options d'affichage -->
+                    <div class="control-section">
+                        <h3 class="control-section-title">Options</h3>
+                        <div class="option-group">
+                            <label class="option-item">
+                                <input type="checkbox" id="opt-show-conflicts" checked>
+                                <span class="option-label">Afficher les conflits</span>
+                            </label>
+                            <label class="option-item">
+                                <input type="checkbox" id="opt-show-unscheduled">
+                                <span class="option-label">Inclure non planifiés</span>
+                            </label>
+                            <label class="option-item">
+                                <input type="checkbox" id="opt-show-details" checked>
+                                <span class="option-label">Détails complets</span>
+                            </label>
+                            <label class="option-item">
+                                <input type="checkbox" id="opt-compact-mode">
+                                <span class="option-label">Mode compact</span>
+                            </label>
+                            <label class="option-item">
+                                <input type="checkbox" id="opt-animations" checked>
+                                <span class="option-label">Animations</span>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <!-- Section Actions -->
+                    <div class="control-section">
+                        <h3 class="control-section-title">Actions</h3>
+                        <div class="action-buttons">
+                            <button class="btn btn-primary" id="btn-export-modifications">
+                                <span class="btn-icon">💾</span>
+                                <span class="btn-text">Exporter</span>
+                            </button>
+                            <button class="btn btn-secondary" id="btn-reset-modifications">
+                                <span class="btn-icon">🔄</span>
+                                <span class="btn-text">Réinitialiser</span>
+                            </button>
+                            <button class="btn btn-secondary" id="btn-print">
+                                <span class="btn-icon">🖨️</span>
+                                <span class="btn-text">Imprimer</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+            
+            <!-- ==================== CONTENU CENTRAL - VUES ==================== -->
+            <main class="main-content">
+                <div class="content-views">
+                    <!-- Vue Agenda -->
+                    <div class="view-container active" data-view-content="agenda">
+                        <div id="agenda-view">
+                            <!-- Content will be generated by agenda-view.js -->
+                        </div>
+                    </div>
+                    
+                    <!-- Vue Poules -->
+                    <div class="view-container" data-view-content="pools">
+                        <div id="pools-view">
+                            <!-- Content will be generated by pools-view.js -->
+                        </div>
+                    </div>
+                    
+                    <!-- Vue Cartes -->
+                    <div class="view-container" data-view-content="cards">
+                        <div id="cards-view">
+                            <!-- Content will be generated by cards-view.js -->
+                        </div>
+                    </div>
+                    
+                    <!-- Vue Calendrier -->
+                    <div class="view-container" data-view-content="calendar">
+                        <div id="calendar-view">
+                            <div class="empty-state">
+                                <div class="empty-state-icon">📅</div>
+                                <h3 class="empty-state-title">Vue Calendrier</h3>
+                                <p class="empty-state-message">Vue en développement</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Vue Statistiques -->
+                    <div class="view-container" data-view-content="stats">
+                        <div id="stats-view">
+                            <div class="empty-state">
+                                <div class="empty-state-icon">📊</div>
+                                <h3 class="empty-state-title">Statistiques</h3>
+                                <p class="empty-state-message">Vue en développement</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+            
+            <!-- ==================== SIDEBAR DROITE - FILTRES ==================== -->
+            <aside class="sidebar sidebar-right">
+                <div class="sidebar-header">
+                    <button class="btn-collapse" id="btn-collapse-right" title="Réduire">
+                        <span>▶</span>
+                    </button>
+                    <h2 class="sidebar-title">
+                        <span class="sidebar-icon">🔍</span>
+                        Filtres
+                    </h2>
+                </div>
+                
+                <div class="sidebar-content">
+                    <!-- Résumé des filtres actifs -->
+                    <div class="filter-summary" id="filter-summary">
+                        <div class="summary-header">
+                            <span class="summary-title">Filtres actifs</span>
+                            <button class="btn-clear-filters" id="btn-clear-filters">Effacer tout</button>
+                        </div>
+                        <div class="summary-tags" id="summary-tags">
+                            <!-- Les tags de filtres actifs seront ajoutés ici -->
+                        </div>
+                    </div>
+                    
+                    <!-- Filtre Genre -->
+                    <div class="filter-section">
+                        <h3 class="filter-section-title">Genre</h3>
+                        <div class="filter-options">
+                            <label class="filter-option">
+                                <input type="radio" name="filter-gender" value="" checked>
+                                <span class="filter-option-label">
+                                    <span class="option-icon">⚪</span>
+                                    <span>Tous</span>
+                                </span>
+                            </label>
+                            <label class="filter-option">
+                                <input type="radio" name="filter-gender" value="M">
+                                <span class="filter-option-label">
+                                    <span class="option-icon">🔵</span>
+                                    <span>Masculin</span>
+                                </span>
+                            </label>
+                            <label class="filter-option">
+                                <input type="radio" name="filter-gender" value="F">
+                                <span class="filter-option-label">
+                                    <span class="option-icon">🔴</span>
+                                    <span>Féminin</span>
+                                </span>
+                            </label>
+                            <label class="filter-option">
+                                <input type="radio" name="filter-gender" value="X">
+                                <span class="filter-option-label">
+                                    <span class="option-icon">�</span>
+                                    <span>Mixte</span>
+                                </span>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <!-- Filtre Semaine -->
+                    <div class="filter-section">
+                        <h3 class="filter-section-title">Semaine</h3>
+                        <select class="filter-select" id="filter-week">
+                            <option value="">Toutes les semaines</option>
+                            <!-- Options will be populated by JS -->
+                        </select>
+                    </div>
+                    
+                    <!-- Filtre Poule -->
+                    <div class="filter-section">
+                        <h3 class="filter-section-title">Poule</h3>
+                        <select class="filter-select" id="filter-pool">
+                            <option value="">Toutes les poules</option>
+                            <!-- Options will be populated by JS -->
+                        </select>
+                    </div>
+                    
+                    <!-- Filtre Institution -->
+                    <div class="filter-section">
+                        <h3 class="filter-section-title">Institution</h3>
+                        <select class="filter-select" id="filter-institution">
+                            <option value="">Toutes les institutions</option>
+                            <!-- Options will be populated by JS -->
+                        </select>
+                    </div>
+                    
+                    <!-- Filtre Gymnase -->
+                    <div class="filter-section">
+                        <h3 class="filter-section-title">Gymnase</h3>
+                        <select class="filter-select" id="filter-venue">
+                            <option value="">Tous les gymnases</option>
+                            <!-- Options will be populated by JS -->
+                        </select>
+                    </div>
+                    
+                    <!-- Filtre Jour de la semaine -->
+                    <div class="filter-section">
+                        <h3 class="filter-section-title">Jour</h3>
+                        <div class="filter-days">
+                            <label class="day-option">
+                                <input type="checkbox" name="filter-day" value="1">
+                                <span class="day-label">L</span>
+                            </label>
+                            <label class="day-option">
+                                <input type="checkbox" name="filter-day" value="2">
+                                <span class="day-label">M</span>
+                            </label>
+                            <label class="day-option">
+                                <input type="checkbox" name="filter-day" value="3">
+                                <span class="day-label">M</span>
+                            </label>
+                            <label class="day-option">
+                                <input type="checkbox" name="filter-day" value="4">
+                                <span class="day-label">J</span>
+                            </label>
+                            <label class="day-option">
+                                <input type="checkbox" name="filter-day" value="5">
+                                <span class="day-label">V</span>
+                            </label>
+                            <label class="day-option">
+                                <input type="checkbox" name="filter-day" value="6">
+                                <span class="day-label">S</span>
+                            </label>
+                            <label class="day-option">
+                                <input type="checkbox" name="filter-day" value="0">
+                                <span class="day-label">D</span>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <!-- Filtre Heure -->
+                    <div class="filter-section">
+                        <h3 class="filter-section-title">Horaires</h3>
+                        <div class="time-range-filter">
+                            <div class="time-input-group">
+                                <label class="time-label">De</label>
+                                <input type="time" class="time-input" id="filter-time-start" value="08:00">
+                            </div>
+                            <div class="time-input-group">
+                                <label class="time-label">À</label>
+                                <input type="time" class="time-input" id="filter-time-end" value="20:00">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Filtre Conflits -->
+                    <div class="filter-section">
+                        <h3 class="filter-section-title">État</h3>
+                        <div class="filter-options">
+                            <label class="filter-option">
+                                <input type="checkbox" name="filter-state" value="conflict">
+                                <span class="filter-option-label">
+                                    <span class="option-icon">⚠️</span>
+                                    <span>Avec conflits</span>
+                                </span>
+                            </label>
+                            <label class="filter-option">
+                                <input type="checkbox" name="filter-state" value="modified">
+                                <span class="filter-option-label">
+                                    <span class="option-icon">✏️</span>
+                                    <span>Modifiés</span>
+                                </span>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <!-- Recherche textuelle -->
+                    <div class="filter-section">
+                        <h3 class="filter-section-title">Recherche</h3>
+                        <div class="search-box">
+                            <input type="text" class="search-input" id="filter-search" placeholder="Rechercher...">
+                            <span class="search-icon">🔍</span>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+        </div>
+    </div>
+    
+    <!-- ==================== MODALS ==================== -->
+    
+    <!-- Modal d'export -->
+    <div class="modal-overlay hidden" id="modal-export">
+        <div class="modal modal-md">
+            <div class="modal-header">
+                <h2 class="modal-title">💾 Exporter les Modifications</h2>
+                <button class="modal-close" onclick="closeExportModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <p>Exporter <strong id="export-count">0</strong> modification(s) au format JSON.</p>
+                <div class="input-group">
+                    <label class="input-label">Nom du fichier</label>
+                    <input type="text" class="input-field" id="export-filename" placeholder="modifications_2025-10-27.json">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeExportModal()">Annuler</button>
+                <button class="btn btn-primary" onclick="exportModifications()">Télécharger</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Modal d'aide -->
+    <div class="modal-overlay hidden" id="modal-help">
+        <div class="modal modal-lg">
+            <div class="modal-header">
+                <h2 class="modal-title">❓ Aide - PyCalendar FFSU</h2>
+                <button class="modal-close" onclick="closeHelpModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="help-content">
+                    <section class="help-section">
+                        <h3>🎯 Interface</h3>
+                        <p>L'interface est divisée en 3 zones principales :</p>
+                        <ul>
+                            <li><strong>Sidebar gauche</strong> : Options d'affichage et actions</li>
+                            <li><strong>Zone centrale</strong> : Visualisation des matchs</li>
+                            <li><strong>Sidebar droite</strong> : Filtres avancés</li>
+                        </ul>
+                    </section>
+                    
+                    <section class="help-section">
+                        <h3>🎨 Thèmes</h3>
+                        <p>Trois thèmes sont disponibles :</p>
+                        <ul>
+                            <li><strong>Clair ☀️</strong> : Thème par défaut, optimal pour la journée</li>
+                            <li><strong>Sombre 🌙</strong> : Réduit la fatigue oculaire</li>
+                            <li><strong>France 🇫🇷</strong> : Couleurs tricolores (bleu, blanc, rouge)</li>
+                        </ul>
+                    </section>
+                    
+                    <section class="help-section">
+                        <h3>📋 Vues</h3>
+                        <ul>
+                            <li><strong>Agenda</strong> : Vue chronologique par semaine</li>
+                            <li><strong>Poules</strong> : Organisation par poules</li>
+                            <li><strong>Cartes</strong> : Vue en grille de cartes</li>
+                        </ul>
+                    </section>
+                    
+                    <section class="help-section">
+                        <h3>🔍 Filtres</h3>
+                        <p>Utilisez les filtres pour affiner l'affichage :</p>
+                        <ul>
+                            <li>Genre (M/F/Mixte)</li>
+                            <li>Semaine et jour</li>
+                            <li>Institution et gymnase</li>
+                            <li>Horaires</li>
+                            <li>Recherche textuelle</li>
+                        </ul>
+                    </section>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" onclick="closeHelpModal()">Fermer</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- DATA_PLACEHOLDER -->
+    
+    <!-- JS_PLACEHOLDER -->
+    
+    <!-- Initialization and event handlers -->
+    <script>
+        // ==================== GLOBAL STATE ====================
+        let currentView = 'agenda';
+        let currentTheme = 'light';
+        let currentSport = 'volleyball';
+        let activeFilters = {};
+        
+        // ==================== THEME MANAGEMENT ====================
+        
+        function initializeTheme() {
+            // Load saved theme from localStorage
+            const savedTheme = localStorage.getItem('pycalendar-theme') || 'light';
+            setTheme(savedTheme);
+            
+            // Setup theme buttons
+            document.querySelectorAll('.theme-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const theme = btn.dataset.theme;
+                    setTheme(theme);
+                });
+            });
+        }
+        
+        function setTheme(theme) {
+            currentTheme = theme;
+            document.documentElement.setAttribute('data-theme', theme);
+            localStorage.setItem('pycalendar-theme', theme);
+            
+            // Update button states
+            document.querySelectorAll('.theme-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.theme === theme);
+            });
+        }
+        
+        // ==================== VIEW MANAGEMENT ====================
+        
+        function initializeViewSwitching() {
+            document.querySelectorAll('.view-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const viewName = btn.dataset.view;
+                    switchView(viewName);
+                });
+            });
+        }
+        
+        function switchView(viewName) {
+            currentView = viewName;
+            
+            // Update sidebar buttons
+            document.querySelectorAll('.view-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.view === viewName);
+            });
+            
+            // Update view containers
+            document.querySelectorAll('.view-container').forEach(container => {
+                container.classList.toggle('active', container.dataset.viewContent === viewName);
+            });
+            
+            // Trigger view update if needed
+            updateCurrentView();
+        }
+        
+        function updateCurrentView() {
+            // This will be called by the actual view implementations
+            if (currentView === 'agenda' && window.agendaView) {
+                window.agendaView.render();
+            } else if (currentView === 'pools' && window.poolsView) {
+                window.poolsView.render();
+            } else if (currentView === 'cards' && window.cardsView) {
+                window.cardsView.render();
+            }
+        }
+        
+        // ==================== SPORT MANAGEMENT ====================
+        
+        function initializeSportSwitching() {
+            document.querySelectorAll('.sport-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const sport = btn.dataset.sport;
+                    setSport(sport);
+                });
+            });
+        }
+        
+        function setSport(sport) {
+            currentSport = sport;
+            
+            // Update button states
+            document.querySelectorAll('.sport-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.sport === sport);
+            });
+            
+            // Update sport icon in header
+            const sportIcons = {
+                'volleyball': '🏐',
+                'handball': '🤾',
+                'football': '⚽',
+                'basketball': '🏀'
+            };
+            
+            const logoIcon = document.querySelector('.logo-icon');
+            if (logoIcon && sportIcons[sport]) {
+                logoIcon.textContent = sportIcons[sport];
+            }
+            
+            // Note: Pour l'instant on ne filtre pas par sport car une solution = un sport
+            // Cette fonctionnalité sera utile quand on aura des solutions multi-sports
+        }
+        
+        // ==================== SIDEBAR COLLAPSE ====================
+        
+        function initializeSidebarCollapse() {
+            const btnCollapseLeft = document.getElementById('btn-collapse-left');
+            const btnCollapseRight = document.getElementById('btn-collapse-right');
+            const sidebarLeft = document.querySelector('.sidebar-left');
+            const sidebarRight = document.querySelector('.sidebar-right');
+            
+            if (btnCollapseLeft && sidebarLeft) {
+                btnCollapseLeft.addEventListener('click', () => {
+                    sidebarLeft.classList.toggle('collapsed');
+                    btnCollapseLeft.querySelector('span').textContent = 
+                        sidebarLeft.classList.contains('collapsed') ? '▶' : '◀';
+                });
+            }
+            
+            if (btnCollapseRight && sidebarRight) {
+                btnCollapseRight.addEventListener('click', () => {
+                    sidebarRight.classList.toggle('collapsed');
+                    btnCollapseRight.querySelector('span').textContent = 
+                        sidebarRight.classList.contains('collapsed') ? '◀' : '▶';
+                });
+            }
+        }
+        
+        // ==================== FILTERS ====================
+        
+        function initializeFilters() {
+            populateFilterOptions();
+            
+            // Gender filter
+            document.querySelectorAll('input[name="filter-gender"]').forEach(radio => {
+                radio.addEventListener('change', applyFilters);
+            });
+            
+            // Select filters
+            ['filter-week', 'filter-pool', 'filter-institution', 'filter-venue'].forEach(id => {
+                const element = document.getElementById(id);
+                if (element) {
+                    element.addEventListener('change', applyFilters);
+                }
+            });
+            
+            // Day checkboxes
+            document.querySelectorAll('input[name="filter-day"]').forEach(checkbox => {
+                checkbox.addEventListener('change', applyFilters);
+            });
+            
+            // Time inputs
+            ['filter-time-start', 'filter-time-end'].forEach(id => {
+                const element = document.getElementById(id);
+                if (element) {
+                    element.addEventListener('change', applyFilters);
+                }
+            });
+            
+            // State checkboxes
+            document.querySelectorAll('input[name="filter-state"]').forEach(checkbox => {
+                checkbox.addEventListener('change', applyFilters);
+            });
+            
+            // Search input
+            const searchInput = document.getElementById('filter-search');
+            if (searchInput) {
+                searchInput.addEventListener('input', debounce(applyFilters, 300));
+            }
+            
+            // Clear filters button
+            const btnClearFilters = document.getElementById('btn-clear-filters');
+            if (btnClearFilters) {
+                btnClearFilters.addEventListener('click', clearAllFilters);
+            }
+        }
+        
+        function populateFilterOptions() {
+            if (!window.dataManager) return;
+            
+            const data = window.dataManager.getData();
+            if (!data) return;
+            
+            // Institutions
+            const institutions = new Set();
+            data.entities?.equipes?.forEach(e => {
+                if (e.institution) institutions.add(e.institution);
+            });
+            
+            const institutionSelect = document.getElementById('filter-institution');
+            if (institutionSelect) {
+                Array.from(institutions).sort().forEach(inst => {
+                    const option = document.createElement('option');
+                    option.value = inst;
+                    option.textContent = inst;
+                    institutionSelect.appendChild(option);
+                });
+            }
+            
+            // Poules
+            const poolSelect = document.getElementById('filter-pool');
+            if (poolSelect && data.entities?.poules) {
+                data.entities.poules.forEach(pool => {
+                    const option = document.createElement('option');
+                    option.value = pool.id;
+                    option.textContent = pool.nom;
+                    poolSelect.appendChild(option);
+                });
+            }
+            
+            // Gymnases
+            const venueSelect = document.getElementById('filter-venue');
+            if (venueSelect && data.entities?.gymnases) {
+                data.entities.gymnases.forEach(gym => {
+                    const option = document.createElement('option');
+                    option.value = gym.id;
+                    option.textContent = gym.nom;
+                    venueSelect.appendChild(option);
+                });
+            }
+            
+            // Semaines
+            const weekSelect = document.getElementById('filter-week');
+            if (weekSelect && data.statistics?.by_week) {
+                Object.keys(data.statistics.by_week)
+                    .map(Number)
+                    .sort((a, b) => a - b)
+                    .forEach(week => {
+                        const option = document.createElement('option');
+                        option.value = week;
+                        option.textContent = `Semaine ${week}`;
+                        weekSelect.appendChild(option);
+                    });
+            }
+        }
+        
+        function applyFilters() {
+            // Collect all active filters
+            const filters = {};
+            
+            // Gender
+            const genderRadio = document.querySelector('input[name="filter-gender"]:checked');
+            if (genderRadio && genderRadio.value) {
+                filters.gender = genderRadio.value;
+            }
+            
+            // Selects
+            ['week', 'pool', 'institution', 'venue'].forEach(key => {
+                const element = document.getElementById(`filter-${key}`);
+                if (element && element.value) {
+                    filters[key] = element.value;
+                }
+            });
+            
+            // Days
+            const selectedDays = Array.from(document.querySelectorAll('input[name="filter-day"]:checked'))
+                .map(cb => cb.value);
+            if (selectedDays.length > 0) {
+                filters.days = selectedDays;
+            }
+            
+            // Time range
+            const timeStart = document.getElementById('filter-time-start')?.value;
+            const timeEnd = document.getElementById('filter-time-end')?.value;
+            if (timeStart) filters.timeStart = timeStart;
+            if (timeEnd) filters.timeEnd = timeEnd;
+            
+            // State
+            const selectedStates = Array.from(document.querySelectorAll('input[name="filter-state"]:checked'))
+                .map(cb => cb.value);
+            if (selectedStates.length > 0) {
+                filters.states = selectedStates;
+            }
+            
+            // Search
+            const search = document.getElementById('filter-search')?.value;
+            if (search) {
+                filters.search = search.trim();
+            }
+            
+            activeFilters = filters;
+            updateFilterSummary();
+            
+            // Apply to views
+            if (window.agendaView) window.agendaView.setFilters(filters);
+            if (window.poolsView) window.poolsView.setFilters(filters);
+            if (window.cardsView) window.cardsView.setFilters(filters);
+        }
+        
+        function clearAllFilters() {
+            // Reset gender
+            const genderDefault = document.querySelector('input[name="filter-gender"][value=""]');
+            if (genderDefault) genderDefault.checked = true;
+            
+            // Reset selects
+            ['filter-week', 'filter-pool', 'filter-institution', 'filter-venue'].forEach(id => {
+                const element = document.getElementById(id);
+                if (element) element.value = '';
+            });
+            
+            // Reset checkboxes
+            document.querySelectorAll('input[name="filter-day"]').forEach(cb => cb.checked = false);
+            document.querySelectorAll('input[name="filter-state"]').forEach(cb => cb.checked = false);
+            
+            // Reset time
+            document.getElementById('filter-time-start').value = '08:00';
+            document.getElementById('filter-time-end').value = '20:00';
+            
+            // Reset search
+            document.getElementById('filter-search').value = '';
+            
+            applyFilters();
+        }
+        
+        function updateFilterSummary() {
+            const summaryTags = document.getElementById('summary-tags');
+            if (!summaryTags) return;
+            
+            summaryTags.innerHTML = '';
+            
+            if (Object.keys(activeFilters).length === 0) {
+                summaryTags.innerHTML = '<span class="no-filters">Aucun filtre actif</span>';
+                return;
+            }
+            
+            // Create tags for each active filter
+            Object.entries(activeFilters).forEach(([key, value]) => {
+                const tag = document.createElement('span');
+                tag.className = 'filter-tag';
+                
+                let label = '';
+                switch(key) {
+                    case 'gender':
+                        label = value === 'M' ? 'Masculin' : value === 'F' ? 'Féminin' : 'Mixte';
+                        break;
+                    case 'week':
+                        label = `Semaine ${value}`;
+                        break;
+                    case 'search':
+                        label = `"${value}"`;
+                        break;
+                    default:
+                        label = value;
+                }
+                
+                tag.textContent = label;
+                summaryTags.appendChild(tag);
+            });
+        }
+        
+        // ==================== STATS ====================
+        
+        function updateStatsDisplay() {
+            if (!window.dataManager) return;
+            
+            const data = window.dataManager.getData();
+            if (!data) return;
+            
+            const scheduled = data.matches?.scheduled?.length || 0;
+            const unscheduled = data.matches?.unscheduled?.length || 0;
+            const venues = data.entities?.gymnases?.length || 0;
+            const modifications = window.modificationManager ? window.modificationManager.getModificationCount() : 0;
+            
+            const statScheduled = document.getElementById('stat-scheduled');
+            const statUnscheduled = document.getElementById('stat-unscheduled');
+            const statVenues = document.getElementById('stat-venues');
+            const statModifications = document.getElementById('stat-modifications');
+            
+            if (statScheduled) statScheduled.textContent = scheduled;
+            if (statUnscheduled) statUnscheduled.textContent = unscheduled;
+            if (statVenues) statVenues.textContent = venues;
+            if (statModifications) statModifications.textContent = modifications;
+        }
+        
+        // ==================== MODALS ====================
+        
+        function openExportModal() {
+            const modal = document.getElementById('modal-export');
+            const count = window.modificationManager ? window.modificationManager.getModificationCount() : 0;
+            document.getElementById('export-count').textContent = count;
+            
+            // Generate default filename
+            const date = new Date().toISOString().split('T')[0];
+            document.getElementById('export-filename').value = `pycalendar_modifications_${date}.json`;
+            
+            modal.classList.remove('hidden');
+        }
+        
+        function closeExportModal() {
+            document.getElementById('modal-export').classList.add('hidden');
+        }
+        
+        function exportModifications() {
+            if (window.modificationManager) {
+                const filename = document.getElementById('export-filename').value || null;
+                window.modificationManager.exportAndDownload(filename);
+                closeExportModal();
+            }
+        }
+        
+        function openHelpModal() {
+            document.getElementById('modal-help').classList.remove('hidden');
+        }
+        
+        function closeHelpModal() {
+            document.getElementById('modal-help').classList.add('hidden');
+        }
+        
+        // ==================== UTILITIES ====================
+        
+        function debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
+        }
+        
+        // ==================== ACTION BUTTONS ====================
+        
+        function initializeActionButtons() {
+            // Export button
+            const btnExport = document.getElementById('btn-export-modifications');
+            if (btnExport) {
+                btnExport.addEventListener('click', openExportModal);
+            }
+            
+            // Reset button
+            const btnReset = document.getElementById('btn-reset-modifications');
+            if (btnReset) {
+                btnReset.addEventListener('click', () => {
+                    if (confirm('Réinitialiser toutes les modifications ?')) {
+                        if (window.modificationManager) {
+                            window.modificationManager.clearAll();
+                        }
+                        if (window.dataManager) {
+                            window.dataManager.revertAllModifications();
+                        }
+                        updateStatsDisplay();
+                        updateCurrentView();
+                    }
+                });
+            }
+            
+            // Print button
+            const btnPrint = document.getElementById('btn-print');
+            if (btnPrint) {
+                btnPrint.addEventListener('click', () => {
+                    window.print();
+                });
+            }
+            
+            // Help button
+            const btnHelp = document.getElementById('btn-help');
+            if (btnHelp) {
+                btnHelp.addEventListener('click', openHelpModal);
+            }
+        }
+        
+        // ==================== DISPLAY OPTIONS ====================
+        
+        function initializeDisplayOptions() {
+            // Compact mode
+            const optCompactMode = document.getElementById('opt-compact-mode');
+            if (optCompactMode) {
+                optCompactMode.addEventListener('change', (e) => {
+                    document.documentElement.classList.toggle('compact-mode', e.target.checked);
+                });
+            }
+            
+            // Animations
+            const optAnimations = document.getElementById('opt-animations');
+            if (optAnimations) {
+                optAnimations.addEventListener('change', (e) => {
+                    document.documentElement.classList.toggle('no-animations', !e.target.checked);
+                });
+            }
+        }
+        
+        // ==================== MAIN INITIALIZATION ====================
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            initializeTheme();
+            initializeViewSwitching();
+            initializeSportSwitching();
+            initializeSidebarCollapse();
+            initializeActionButtons();
+            initializeDisplayOptions();
+            
+            // Filters will be initialized after data is loaded
+            // This is handled by the main app.js
+        });
+    </script>
+</body>
+</html>
+                document.getElementById(`tab-${tabName}`).classList.add('active');
+            });
+        });
+        
+        // Filter change handlers
+        document.querySelectorAll('.filter-select').forEach(select => {
+            select.addEventListener('change', applyFilters);
+        });
+        
+        // Export modal
+        function openExportModal() {
+            const modal = document.getElementById('modal-export');
+            const count = window.modificationManager ? window.modificationManager.getModificationCount() : 0;
+            document.getElementById('export-count').textContent = count;
+            
+            // Generate default filename
+            const date = new Date().toISOString().split('T')[0];
+            document.getElementById('export-filename').value = `pycalendar_modifications_${date}.json`;
+            
+            modal.classList.remove('hidden');
+        }
+        
+        function closeExportModal() {
+            document.getElementById('modal-export').classList.add('hidden');
+        }
+        
+        function exportModifications() {
+            if (window.modificationManager) {
+                const filename = document.getElementById('export-filename').value || null;
+                window.modificationManager.exportAndDownload(filename);
+                closeExportModal();
+            }
+        }
+        
+        // Button handlers
+        document.getElementById('btn-export-modifications')?.addEventListener('click', openExportModal);
+        
+        document.getElementById('btn-reset-modifications')?.addEventListener('click', () => {
+            if (confirm('Réinitialiser toutes les modifications ?')) {
+                if (window.modificationManager) {
+                    window.modificationManager.clearAll();
+                }
+                if (window.dataManager) {
+                    window.dataManager.revertAllModifications();
+                }
+                updateStatsDisplay();
+                
+                // Re-render current view
+                if (currentView === 'agenda' && agendaView) agendaView.render();
+                if (currentView === 'pools' && poolsView) poolsView.render();
+                if (currentView === 'cards' && cardsView) cardsView.render();
+            }
+        });
+        
+        // Initialize after DOM is ready
+        document.addEventListener('DOMContentLoaded', () => {
+            // Views will be initialized after data is loaded by the main initialization script
+        });
+    </script>
+</body>
+</html>

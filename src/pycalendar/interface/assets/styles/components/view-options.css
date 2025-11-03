@@ -1,0 +1,32 @@
+/**
+ * PyCalendar Interface - View Options (Optimized)
+ * Dynamic view-specific options
+ */
+
+#view-options-container {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+}
+
+.option-group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+}
+
+.option-item {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+.option-item input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+}
+
+.option-label {
+    font-size: var(--text-sm);
+    color: var(--text-primary);
+}

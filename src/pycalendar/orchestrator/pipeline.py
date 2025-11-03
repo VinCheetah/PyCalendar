@@ -89,11 +89,11 @@ class SchedulingPipeline:
             
             Statistics.afficher_stats(solution, creneaux_restants)
             
-            # Validation post-solution
-            self._valider_solution(solution, gymnases)
-            
             # Sauvegarder la solution avec les matchs fixes pour traçabilité
             self._save_solution(solution, matchs, creneaux, gymnases, matchs_fixes)
+            
+            # Validation post-solution
+            self._valider_solution(solution, gymnases)
             
             self._exporter_solution(solution)
             return solution
@@ -364,10 +364,6 @@ class SchedulingPipeline:
             solver = GreedySolver(self.config, self.groupes_non_simultaneite, self.ententes, self.contraintes_temporelles, self.niveaux_gymnases)
             solution = solver.solve(matchs, creneaux, gymnases_dict, self.obligations_presence)
             
-            # Sauvegarder la solution pour utilisation future
-            if solution and solution.matchs_planifies:
-                self._save_solution(solution, matchs, creneaux, gymnases, matchs_fixes)
-            
             return solution
         
         elif self.config.strategie == "cpsat":
@@ -383,10 +379,6 @@ class SchedulingPipeline:
                 solution = solver.solve(matchs, creneaux, gymnases_dict, 
                                        self.obligations_presence,
                                        use_warm_start=use_warm_start)
-                
-                # Sauvegarder la solution pour utilisation future
-                if solution and solution.matchs_planifies:
-                    self._save_solution(solution, matchs, creneaux, gymnases, matchs_fixes)
                 
                 return solution
                 

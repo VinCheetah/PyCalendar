@@ -50,6 +50,8 @@ class InterfaceGenerator:
         # Step 1: Format solution data
         print("  📊 Formatting solution data...")
         
+        solution_data = {} # Default to empty dict
+        
         # Handle different input types
         if isinstance(solution, (Path, str)):
             # Load JSON file (v2.0 format)
@@ -75,6 +77,11 @@ class InterfaceGenerator:
             
         else:
             raise TypeError(f"Invalid solution type: {type(solution)}")
+
+        # Validate that we have data before proceeding
+        if not solution_data:
+            print("  ⚠️  Warning: Solution data is empty. Proceeding with an empty dataset.")
+            solution_data = {}
         
         # Step 2: Load HTML template
         print("  📄 Loading HTML template...")
@@ -122,20 +129,25 @@ class InterfaceGenerator:
             'styles/01-reset.css',
             'styles/02-base.css',
             'styles/03-layout.css',
+            'styles/04-enhancements.css',  # Visual enhancements & animations
+            'styles/05-backgrounds-france.css',  # Backgrounds français renforcés
             
             # Component styles
             'styles/components/match-card.css',
-            'styles/components/filters.css',
+            'styles/components/filters.css',  # Filtres complets (fusion de base + enhanced)
             'styles/components/modals.css',
             'styles/components/loading.css',
             'styles/components/tabs.css',
             'styles/components/views.css',
+            'styles/components/view-options.css',  # Options de vue latérales
             
             # View styles
-            'styles/views/agenda-grid.css',
+            'styles/views/agenda-view.css',  # Vue agenda complète et optimisée
+            'styles/views/pools-view.css',  # Design magnifique pour la vue Poules
             
-            # Theme (last)
+            # Themes (last)
             'styles/themes/default-light.css',
+            'styles/themes/france.css',
         ]
         
         combined_css = []
@@ -164,8 +176,12 @@ class InterfaceGenerator:
             'utils/agenda-view-manager.js',  # Gestionnaire des vues (gymnase/semaine)
             'utils/available-slots-manager.js',  # Gestion des créneaux disponibles
             
+            # Managers
+            'managers/view-options-manager.js',
+            
             # Features
             'features/drag-drop-manager.js',  # Drag & drop des matchs
+            'features/enhanced-filter-system.js',  # Système de filtres amélioré
             
             # Core modules (order matters!)
             'core/data-manager.js',
@@ -181,8 +197,8 @@ class InterfaceGenerator:
             # Views (depend on everything else)
             'views/agenda-grid.js',
             'views/agenda/agenda-view.js',
-            'views/pools/pools-view.js',
-            'views/cards/cards-view.js',
+            'views/pools-view.js',
+            'views/cards-view.js',
             
             # Application initialization (loaded last)
             'app.js',
@@ -232,52 +248,6 @@ class InterfaceGenerator:
 const SOLUTION_NAME = "{solution_name}";
 
 {js}
-
-// Initialize application when DOM is ready
-document.addEventListener('DOMContentLoaded', function() {{
-    console.log('🚀 PyCalendar Interface loaded');
-    
-    // Load solution data
-    const solutionDataElement = document.getElementById('solution-data');
-    if (!solutionDataElement) {{
-        console.error('❌ Solution data not found');
-        return;
-    }}
-    
-    let solutionData;
-    try {{
-        solutionData = JSON.parse(solutionDataElement.textContent);
-        console.log('✅ Solution data loaded:', {{
-            version: solutionData.version,
-            matches: solutionData.matches.scheduled.length
-        }});
-    }} catch (error) {{
-        console.error('❌ Error parsing solution data:', error);
-        return;
-    }}
-    
-    // Initialize managers
-    try {{
-        window.dataManager = new DataManager(solutionData);
-        window.modificationManager = new ModificationManager(SOLUTION_NAME);
-        
-        console.log('✅ Managers initialized');
-        
-        // Initialize views and populate filters
-        if (typeof initializeViews === 'function') {{
-            initializeViews();
-            console.log('✅ Views initialized');
-        }}
-        
-        if (typeof populateFilters === 'function') {{
-            populateFilters();
-            console.log('✅ Filters populated');
-        }}
-        
-    }} catch (error) {{
-        console.error('❌ Error initializing application:', error);
-    }}
-}});
 </script>
 '''
         html = html.replace('<!-- JS_PLACEHOLDER -->', js_block)

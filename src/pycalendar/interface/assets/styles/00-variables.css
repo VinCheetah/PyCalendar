@@ -1,80 +1,238 @@
 /**
  * PyCalendar Interface - CSS Variables
  * Central design tokens for consistent theming
+ * 
+ * Système de thèmes : Light (défaut), Dark, Tricolore
  */
 
 :root {
-    /* ==================== PALETTE TRICOLORE FRANÇAISE ==================== */
+    /* ==================== PALETTE FRANÇAISE DE BASE ==================== */
     
-    /* Bleus - Inspirés du drapeau */
+    /* Bleu France - Couleur officielle du drapeau */
+    --france-blue: #0055A4;
+    --france-blue-dark: #002654;
+    --france-blue-light: #4A90E2;
+    --france-blue-lighter: #7CB3F5;
+    
+    /* Rouge France - Couleur officielle du drapeau */
+    --france-red: #EF4135;
+    --france-red-dark: #C1172C;
+    --france-red-light: #F87171;
+    --france-red-lighter: #FCA5A0;
+    
+    /* Blanc France */
+    --france-white: #FFFFFF;
+    
+    /* ==================== THÈME LIGHT (DÉFAUT) ==================== */
+    
+    /* Couleurs principales - Plus vives et modernes */
     --primary: #0055A4;
-    --primary-hover: #1E3A8A;
-    --primary-light: rgba(0, 85, 164, 0.08);
-    --primary-lighter: #EFF6FF;
+    --primary-hover: #0066CC;
+    --primary-dark: #002654;
+    --primary-light: rgba(0, 85, 164, 0.12);
+    --primary-lighter: #E6F2FF;
+    --primary-gradient: linear-gradient(135deg, #0055A4 0%, #0066CC 50%, #4A90E2 100%);
+    --primary-glow: 0 0 20px rgba(0, 85, 164, 0.3);
     
-    /* Rouges - Palette étendue */
-    --danger: #EF4444;
-    --danger-dark: #DC2626;
-    --danger-darker: #B91C1C;
-    --danger-deepest: #991B1B;
-    --danger-light: rgba(239, 68, 68, 0.1);
-    --danger-glow: rgba(239, 68, 68, 0.3);
+    /* Couleurs de danger/erreur - Plus impactantes */
+    --danger: #EF4135;
+    --danger-dark: #C1172C;
+    --danger-hover: #F85C51;
+    --danger-light: rgba(239, 65, 53, 0.12);
+    --danger-lighter: #FFE8E6;
+    --danger-glow: 0 0 20px rgba(239, 65, 53, 0.4);
     
-    /* Couleurs complémentaires */
-    --secondary: #10B981;
-    --secondary-light: rgba(16, 185, 129, 0.1);
+    /* Couleurs de succès - Plus éclatantes */
+    --success: #10B981;
+    --success-dark: #059669;
+    --success-hover: #34D399;
+    --success-light: rgba(16, 185, 129, 0.12);
+    --success-lighter: #D1FAE5;
+    --success-glow: 0 0 20px rgba(16, 185, 129, 0.3);
+    
+    /* Couleurs d'avertissement - Plus visibles */
     --warning: #F59E0B;
-    --warning-light: rgba(245, 158, 11, 0.1);
+    --warning-dark: #D97706;
+    --warning-hover: #FBBF24;
+    --warning-light: rgba(245, 158, 11, 0.12);
+    --warning-lighter: #FEF3C7;
+    --warning-glow: 0 0 20px rgba(245, 158, 11, 0.3);
     
-    /* Violets - Modernité et élégance */
+    /* Couleurs d'information - Plus attractives */
+    --info: #3B82F6;
+    --info-dark: #2563EB;
+    --info-hover: #60A5FA;
+    --info-light: rgba(59, 130, 246, 0.12);
+    --info-lighter: #DBEAFE;
+    --info-glow: 0 0 20px rgba(59, 130, 246, 0.3);
+    
+    /* Couleurs d'accent - Palette élargie */
     --accent: #8B5CF6;
-    --accent-light: rgba(139, 92, 246, 0.1);
+    --accent-dark: #7C3AED;
+    --accent-hover: #A78BFA;
+    --accent-light: rgba(139, 92, 246, 0.12);
+    --accent-lighter: #EDE9FE;
+    --accent-glow: 0 0 20px rgba(139, 92, 246, 0.3);
     
-    /* Gris sophistiqués */
-    --dark: #1E293B;
-    --gray: #64748B;
-    --gray-light: #94A3B8;
-    --light: #F8FAFC;
-    --border: #E2E8F0;
+    --accent-pink: #EC4899;
+    --accent-pink-light: rgba(236, 72, 153, 0.12);
+    --accent-pink-lighter: #FCE7F3;
     
-    /* Blancs */
-    --white: #FFFFFF;
-    --off-white: #F1F5F9;
+    --accent-orange: #F97316;
+    --accent-orange-light: rgba(249, 115, 22, 0.12);
+    --accent-orange-lighter: #FFEDD5;
+    
+    --accent-teal: #14B8A6;
+    --accent-teal-light: rgba(20, 184, 166, 0.12);
+    --accent-teal-lighter: #CCFBF1;
+    
+    --accent-indigo: #6366F1;
+    --accent-indigo-light: rgba(99, 102, 241, 0.12);
+    --accent-indigo-lighter: #E0E7FF;
+    
+    /* Couleurs de fond et de surface - Plus contrastées */
+    --bg-primary: #FFFFFF;
+    --bg-secondary: #F8FAFC;
+    --bg-tertiary: #F1F5F9;
+    --bg-quaternary: #E2E8F0;
+    --bg-hover: #F1F5F9;
+    --bg-active: #E2E8F0;
+    
+    /* Couleurs de texte - Meilleur contraste */
+    --text-primary: #0F172A;
+    --text-secondary: #475569;
+    --text-tertiary: #94A3B8;
+    --text-quaternary: #CBD5E1;
+    --text-inverse: #FFFFFF;
+    
+    /* Bordures - Plus visibles */
+    --border-color: #E2E8F0;
+    --border-hover: #CBD5E1;
+    --border-active: #94A3B8;
+    --border-focus: #0055A4;
+    
+    /* ==================== SPORTS - Couleurs vibrantes ==================== */
+    
+    /* Volleyball - Orange énergique */
+    --sport-volleyball: #FF6B35;
+    --sport-volleyball-light: rgba(255, 107, 53, 0.12);
+    --sport-volleyball-lighter: #FFE4D9;
+    --sport-volleyball-dark: #E85A24;
+    
+    /* Handball - Turquoise dynamique */
+    --sport-handball: #14B8A6;
+    --sport-handball-light: rgba(20, 184, 166, 0.12);
+    --sport-handball-lighter: #CCFBF1;
+    --sport-handball-dark: #0F9488;
+    
+    /* Football - Vert frais */
+    --sport-football: #10B981;
+    --sport-football-light: rgba(16, 185, 129, 0.12);
+    --sport-football-lighter: #D1FAE5;
+    --sport-football-dark: #059669;
+    
+    /* Basketball - Orange brûlant */
+    --sport-basketball: #F97316;
+    --sport-basketball-light: rgba(249, 115, 22, 0.12);
+    --sport-basketball-lighter: #FFEDD5;
+    --sport-basketball-dark: #EA580C;
     
     /* ==================== CONFLITS ==================== */
     
-    --conflict-critical: #DC2626;
+    --conflict-critical: #C1172C;
+    --conflict-critical-light: rgba(193, 23, 44, 0.12);
     --conflict-warning: #F59E0B;
+    --conflict-warning-light: rgba(245, 158, 11, 0.12);
     --conflict-border: 3px;
-    --conflict-glow: 0 0 12px rgba(220, 38, 38, 0.4);
+    --conflict-glow: 0 0 15px rgba(193, 23, 44, 0.5);
+    --conflict-glow-warning: 0 0 15px rgba(245, 158, 11, 0.5);
     
-    /* ==================== GENRES ==================== */
+    /* ==================== GENRES - Plus distincts ==================== */
     
     --male: #3B82F6;
     --male-dark: #2563EB;
+    --male-hover: #60A5FA;
     --male-light: rgba(59, 130, 246, 0.12);
+    --male-lighter: #DBEAFE;
     
     --female: #EC4899;
     --female-dark: #DB2777;
+    --female-hover: #F472B6;
     --female-light: rgba(236, 72, 153, 0.12);
+    --female-lighter: #FCE7F3;
     
     --mixed: #8B5CF6;
     --mixed-dark: #7C3AED;
+    --mixed-hover: #A78BFA;
     --mixed-light: rgba(139, 92, 246, 0.12);
+    --mixed-lighter: #EDE9FE;
     
-    /* ==================== CATÉGORIES ==================== */
+    /* ==================== CATÉGORIES - Dégradé harmonieux ==================== */
     
     --cat-a1: #8B5CF6;
+    --cat-a1-light: rgba(139, 92, 246, 0.12);
     --cat-a2: #6366F1;
+    --cat-a2-light: rgba(99, 102, 241, 0.12);
     --cat-a3: #3B82F6;
+    --cat-a3-light: rgba(59, 130, 246, 0.12);
     --cat-a4: #14B8A6;
+    --cat-a4-light: rgba(20, 184, 166, 0.12);
     
-    /* ==================== OMBRES ==================== */
+    /* ==================== STATUTS - Palette complète ==================== */
     
-    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-    --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
-    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
-    --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1);
+    --status-assigned: #10B981;
+    --status-assigned-light: rgba(16, 185, 129, 0.12);
+    --status-modified: #F59E0B;
+    --status-modified-light: rgba(245, 158, 11, 0.12);
+    --status-pending: #94A3B8;
+    --status-pending-light: rgba(148, 163, 184, 0.12);
+    --status-confirmed: #0055A4;
+    --status-confirmed-light: rgba(0, 85, 164, 0.12);
+    
+    /* ==================== LIEUX/VENUES - Arc-en-ciel ==================== */
+    
+    --venue-1: #EF4444;
+    --venue-1-light: rgba(239, 68, 68, 0.12);
+    --venue-2: #F97316;
+    --venue-2-light: rgba(249, 115, 22, 0.12);
+    --venue-3: #F59E0B;
+    --venue-3-light: rgba(245, 158, 11, 0.12);
+    --venue-4: #10B981;
+    --venue-4-light: rgba(16, 185, 129, 0.12);
+    --venue-5: #14B8A6;
+    --venue-5-light: rgba(20, 184, 166, 0.12);
+    --venue-6: #3B82F6;
+    --venue-6-light: rgba(59, 130, 246, 0.12);
+    --venue-7: #6366F1;
+    --venue-7-light: rgba(99, 102, 241, 0.12);
+    --venue-8: #8B5CF6;
+    --venue-8-light: rgba(139, 92, 246, 0.12);
+    --venue-9: #EC4899;
+    --venue-9-light: rgba(236, 72, 153, 0.12);
+    --venue-10: #F43F5E;
+    --venue-10-light: rgba(244, 63, 94, 0.12);
+    
+    /* ==================== OMBRES - Plus prononcées et colorées ==================== */
+    
+    --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+    --shadow-sm: 0 2px 4px 0 rgba(0, 0, 0, 0.10);
+    --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.12), 0 2px 4px -1px rgba(0, 0, 0, 0.08);
+    --shadow-md: 0 6px 12px -2px rgba(0, 0, 0, 0.15), 0 3px 6px -2px rgba(0, 0, 0, 0.10);
+    --shadow-lg: 0 10px 20px -3px rgba(0, 0, 0, 0.18), 0 4px 8px -3px rgba(0, 0, 0, 0.12);
+    --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.22), 0 10px 10px -5px rgba(0, 0, 0, 0.15);
+    --shadow-2xl: 0 25px 50px -12px rgba(0, 0, 0, 0.30);
+    --shadow-inner: inset 0 2px 4px 0 rgba(0, 0, 0, 0.08);
+    
+    /* Ombres colorées pour états interactifs */
+    --shadow-primary: 0 4px 14px 0 rgba(0, 85, 164, 0.30);
+    --shadow-primary-lg: 0 10px 25px -5px rgba(0, 85, 164, 0.35);
+    --shadow-danger: 0 4px 14px 0 rgba(239, 65, 53, 0.30);
+    --shadow-danger-lg: 0 10px 25px -5px rgba(239, 65, 53, 0.35);
+    --shadow-success: 0 4px 14px 0 rgba(16, 185, 129, 0.30);
+    --shadow-success-lg: 0 10px 25px -5px rgba(16, 185, 129, 0.35);
+    --shadow-warning: 0 4px 14px 0 rgba(245, 158, 11, 0.30);
+    --shadow-info: 0 4px 14px 0 rgba(59, 130, 246, 0.30);
+    --shadow-accent: 0 4px 14px 0 rgba(139, 92, 246, 0.30);
     
     /* ==================== SPACING ==================== */
     
@@ -93,11 +251,23 @@
     --radius-xl: 1rem;
     --radius-full: 9999px;
     
-    /* ==================== TRANSITIONS ==================== */
+    /* ==================== TRANSITIONS & ANIMATIONS ==================== */
     
-    --transition-fast: 150ms ease;
-    --transition-base: 200ms ease;
-    --transition-slow: 300ms ease;
+    --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-base: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-slow: 350ms cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-bounce: 500ms cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    
+    /* ==================== LAYOUT DIMENSIONS ==================== */
+    
+    /* Largeurs */
+    --sidebar-width: 280px;
+    --sidebar-collapsed-width: 60px;
+    --max-content-width: 1400px;
+    
+    /* Hauteurs */
+    --header-height: 70px;
+    --toolbar-height: 60px;
     
     /* ==================== FONT SIZES ==================== */
     
@@ -112,27 +282,213 @@
     
     /* ==================== LAYOUT GRID ==================== */
     
-    --cards-columns: 3;
-    --card-gap: 1.25rem;
-    --max-width: 1400px;
-    
-    /* ==================== Z-INDEX SCALE ==================== */
-    
-    --z-base: 1;
-    --z-dropdown: 100;
-    --z-sticky: 200;
-    --z-fixed: 300;
-    --z-modal-backdrop: 400;
-    --z-modal: 500;
-    --z-tooltip: 600;
+    --grid-columns: 3;
+    --grid-gap: 1.5rem;
+    --card-min-width: 320px;
 }
 
-/* ==================== DARK THEME (Pour plus tard) ==================== */
+/* ==================== THÈME SOMBRE ==================== */
 
 [data-theme="dark"] {
-    --background: #0F172A;
-    --text-color: #F1F5F9;
-    --border: #334155;
+    /* Couleurs principales */
+    --primary: #4A90E2;
+    --primary-hover: #6BA3E8;
+    --primary-light: rgba(74, 144, 226, 0.15);
+    --primary-lighter: rgba(74, 144, 226, 0.08);
+    --primary-gradient: linear-gradient(135deg, #4A90E2 0%, #6BA3E8 100%);
     
-    /* À compléter quand le thème sombre sera implémenté */
+    /* Couleurs de danger/erreur */
+    --danger: #F87171;
+    --danger-dark: #EF4444;
+    --danger-light: rgba(248, 113, 113, 0.15);
+    
+    /* Couleurs de succès */
+    --success: #34D399;
+    --success-dark: #10B981;
+    --success-light: rgba(52, 211, 153, 0.15);
+    
+    /* Couleurs d'avertissement */
+    --warning: #FBBF24;
+    --warning-dark: #F59E0B;
+    --warning-light: rgba(251, 191, 36, 0.15);
+    
+    /* Couleurs d'information */
+    --info: #60A5FA;
+    --info-dark: #3B82F6;
+    --info-light: rgba(96, 165, 250, 0.15);
+    
+    /* Couleurs d'accent */
+    --accent: #A78BFA;
+    --accent-dark: #8B5CF6;
+    --accent-light: rgba(167, 139, 250, 0.15);
+    
+    /* Couleurs de fond et de surface */
+    --bg-primary: #0F172A;
+    --bg-secondary: #1E293B;
+    --bg-tertiary: #334155;
+    --bg-hover: #1E293B;
+    
+    /* Couleurs de texte */
+    --text-primary: #F1F5F9;
+    --text-secondary: #CBD5E1;
+    --text-tertiary: #94A3B8;
+    --text-inverse: #0F172A;
+    
+    /* Bordures */
+    --border-color: #334155;
+    --border-hover: #475569;
+    --border-focus: #4A90E2;
+    
+    /* Ombres adaptées au dark mode */
+    --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+    --shadow-sm: 0 2px 4px 0 rgba(0, 0, 0, 0.4);
+    --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5), 0 2px 4px -1px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 6px 12px -2px rgba(0, 0, 0, 0.6), 0 3px 6px -2px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 10px 20px -3px rgba(0, 0, 0, 0.7), 0 4px 8px -3px rgba(0, 0, 0, 0.5);
+    --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.8), 0 10px 10px -5px rgba(0, 0, 0, 0.6);
+    --shadow-2xl: 0 25px 50px -12px rgba(0, 0, 0, 0.9);
+}
+
+/* ==================== THÈME TRICOLORE (BLEU BLANC ROUGE) ==================== */
+
+[data-theme="tricolore"] {
+    /* Couleurs principales - Bleu France dominant */
+    --primary: #0055A4;
+    --primary-hover: #002654;
+    --primary-light: rgba(0, 85, 164, 0.15);
+    --primary-lighter: rgba(0, 85, 164, 0.05);
+    --primary-gradient: linear-gradient(135deg, #0055A4 0%, #EF4135 100%);
+    
+    /* Couleurs de danger - Rouge France */
+    --danger: #EF4135;
+    --danger-dark: #C1172C;
+    --danger-light: rgba(239, 65, 53, 0.15);
+    
+    /* Couleurs de succès - avec teinte bleue */
+    --success: #059669;
+    --success-dark: #047857;
+    --success-light: rgba(5, 150, 105, 0.15);
+    
+    /* Couleurs d'avertissement */
+    --warning: #F59E0B;
+    --warning-dark: #D97706;
+    --warning-light: rgba(245, 158, 11, 0.15);
+    
+    /* Couleurs d'information - Bleu France */
+    --info: #0055A4;
+    --info-dark: #002654;
+    --info-light: rgba(0, 85, 164, 0.15);
+    
+    /* Couleurs d'accent - Rouge France */
+    --accent: #EF4135;
+    --accent-dark: #C1172C;
+    --accent-light: rgba(239, 65, 53, 0.15);
+    
+    /* Couleurs de fond - ton blanc cassé avec touches tricolores */
+    --bg-primary: #FFFFFF;
+    --bg-secondary: #F8F9FA;
+    --bg-tertiary: #E8EFF5;
+    --bg-hover: #EFF6FF;
+    
+    /* Couleurs de texte */
+    --text-primary: #002654;
+    --text-secondary: #0055A4;
+    --text-tertiary: #64748B;
+    --text-inverse: #FFFFFF;
+    
+    /* Bordures - Bleu France */
+    --border-color: #CBD5E1;
+    --border-hover: #0055A4;
+    --border-focus: #EF4135;
+    
+    /* Ombres avec touches de bleu */
+    --shadow-xs: 0 1px 2px 0 rgba(0, 85, 164, 0.08);
+    --shadow-sm: 0 2px 4px 0 rgba(0, 85, 164, 0.12);
+    --shadow: 0 4px 6px -1px rgba(0, 85, 164, 0.15), 0 2px 4px -1px rgba(0, 85, 164, 0.1);
+    --shadow-md: 0 6px 12px -2px rgba(0, 85, 164, 0.18), 0 3px 6px -2px rgba(0, 85, 164, 0.12);
+    --shadow-lg: 0 10px 20px -3px rgba(0, 85, 164, 0.22), 0 4px 8px -3px rgba(0, 85, 164, 0.15);
+    --shadow-xl: 0 20px 25px -5px rgba(0, 85, 164, 0.25), 0 10px 10px -5px rgba(0, 85, 164, 0.18);
+    --shadow-2xl: 0 25px 50px -12px rgba(0, 85, 164, 0.3);
+    
+    /* Ombres colorées spéciales */
+    --shadow-primary: 0 4px 14px 0 rgba(0, 85, 164, 0.35);
+    --shadow-danger: 0 4px 14px 0 rgba(239, 65, 53, 0.35);
+}
+
+/* ==================== ANIMATIONS GLOBALES ==================== */
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes slideInLeft {
+    from {
+        opacity: 0;
+        transform: translateX(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+@keyframes slideInRight {
+    from {
+        opacity: 0;
+        transform: translateX(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.7;
+    }
+}
+
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes bounce {
+    0%, 100% {
+        transform: translateY(0);
+    }
+    50% {
+        transform: translateY(-10px);
+    }
 }
