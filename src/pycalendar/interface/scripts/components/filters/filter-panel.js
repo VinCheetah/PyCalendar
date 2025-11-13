@@ -14,6 +14,7 @@ window.FilterPanel = class FilterPanel {
         this.activeFilters = {
             gender: '',
             institution: '',
+            equipe: '',
             pool: '',
             venue: '',
             week: ''
@@ -42,39 +43,39 @@ window.FilterPanel = class FilterPanel {
         const data = this.dataManager.getData();
         if (!data) return;
         
-        // Extraire les valeurs uniques
-        const genders = this._extractGenders(data);
-        const institutions = this._extractInstitutions(data);
-        const pools = this._extractPools(data);
-        const venues = this._extractVenues(data);
-        const weeks = this._extractWeeks(data);
+        // Extraire les valeurs avec filtrage intelligent
+        const availableOptions = this._getAvailableOptions(data);
         
         this.container.innerHTML = `
-            <div class="filter-panel">
-                <h3 class="filter-title">
-                    <span class="filter-icon">🔍</span>
-                    Filtres
-                    <button class="filter-reset-btn" id="filter-reset" title="Réinitialiser">
+            <div class="filter-panel" style="padding: 1rem; background: rgba(255, 255, 255, 0.95); border-radius: 12px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);">
+                <h3 class="filter-title" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; font-size: 1.125rem; font-weight: 700; color: #1e293b;">
+                    <span style="display: flex; align-items: center; gap: 0.5rem;">
+                        <span class="filter-icon">🔍</span>
+                        Filtres
+                    </span>
+                    <button class="filter-reset-btn" id="filter-reset" title="Réinitialiser" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 8px; padding: 0.5rem 0.75rem; cursor: pointer; font-size: 1rem; transition: all 0.2s ease; box-shadow: 0 2px 6px rgba(102, 126, 234, 0.3);">
                         🔄
                     </button>
                 </h3>
                 
-                <div class="filters-grid">
-                    ${this._renderFilter('gender', 'Genre', genders, {
+                <div class="filters-grid" style="display: flex; flex-direction: column; gap: 1rem;">
+                    ${this._renderFilter('gender', 'Genre', availableOptions.genders, {
                         'M': '♂ Masculin',
                         'F': '♀ Féminin'
                     })}
                     
-                    ${this._renderFilter('institution', 'Institution', institutions)}
+                    ${this._renderFilter('institution', 'Institution', availableOptions.institutions)}
                     
-                    ${this._renderFilter('pool', 'Poule', pools)}
+                    ${this._renderFilter('equipe', 'Équipe', availableOptions.equipes, null, '', true)}
                     
-                    ${this._renderFilter('venue', 'Gymnase', venues)}
+                    ${this._renderFilter('pool', 'Poule', availableOptions.pools)}
                     
-                    ${this._renderFilter('week', 'Semaine', weeks, null, 'Semaine')}
+                    ${this._renderFilter('venue', 'Gymnase', availableOptions.venues)}
+                    
+                    ${this._renderFilter('week', 'Semaine', availableOptions.weeks, null, 'Semaine')}
                 </div>
                 
-                <div class="filter-status">
+                <div class="filter-status" style="margin-top: 1.5rem; padding-top: 1rem; border-top: 2px solid #e2e8f0; font-size: 0.875rem; color: #64748b; text-align: center; font-weight: 600;">
                     <span id="filter-active-count">0</span> filtre(s) actif(s)
                 </div>
             </div>
@@ -84,23 +85,34 @@ window.FilterPanel = class FilterPanel {
     /**
      * Rendu d'un filtre individuel
      */
-    _renderFilter(id, label, values, customLabels = null, prefix = '') {
+    _renderFilter(id, label, values, customLabels = null, prefix = '', showEquipeFormat = false) {
         if (!values || values.length === 0) {
             return '';
         }
         
+        const count = values.length;
         const options = values.map(value => {
-            const displayValue = customLabels && customLabels[value] 
-                ? customLabels[value]
-                : prefix ? `${prefix} ${value}` : value;
+            let displayValue;
+            
+            if (showEquipeFormat && typeof value === 'object') {
+                // Format spécial pour les équipes: "Institution (numéro)"
+                displayValue = value.display;
+                value = value.id;
+            } else if (customLabels && customLabels[value]) {
+                displayValue = customLabels[value];
+            } else {
+                displayValue = prefix ? `${prefix} ${value}` : value;
+            }
             
             return `<option value="${value}">${displayValue}</option>`;
         }).join('');
         
         return `
-            <div class="filter-group">
-                <label class="filter-label" for="filter-${id}">${label}</label>
-                <select class="filter-select" id="filter-${id}" data-filter="${id}">
+            <div class="filter-group" style="display: flex; flex-direction: column; gap: 0.5rem;">
+                <label class="filter-label" for="filter-${id}" style="font-size: 0.875rem; font-weight: 600; color: #1e293b; text-transform: uppercase; letter-spacing: 0.5px;">
+                    ${label} <span style="color: #94a3b8; font-weight: 400;">(${count})</span>
+                </label>
+                <select class="filter-select" id="filter-${id}" data-filter="${id}" style="width: 100%; padding: 0.75rem 1rem; border: 2px solid #e2e8f0; border-radius: 8px; background: white; font-size: 0.875rem; font-weight: 500; cursor: pointer; transition: all 0.2s ease; outline: none; color: #334155;">
                     <option value="">Tous</option>
                     ${options}
                 </select>
@@ -129,6 +141,128 @@ window.FilterPanel = class FilterPanel {
     }
     
     /**
+     * Obtient les options disponibles selon les filtres actifs (filtrage intelligent)
+     */
+    _getAvailableOptions(data) {
+        // Obtenir les matchs filtrés selon les filtres actuels
+        const filteredMatches = this._getFilteredMatches(data);
+        
+        // Extraire équipes impliquées dans ces matchs
+        const relevantEquipes = new Set();
+        filteredMatches.forEach(match => {
+            relevantEquipes.add(match.equipe1_id);
+            relevantEquipes.add(match.equipe2_id);
+        });
+        
+        // Filtrer les équipes du dataset
+        let availableEquipes = data.entities.equipes.filter(e => relevantEquipes.has(e.id));
+        
+        // Appliquer filtres en cascade
+        if (this.activeFilters.gender) {
+            availableEquipes = availableEquipes.filter(e => e.genre === this.activeFilters.gender);
+        }
+        if (this.activeFilters.institution) {
+            availableEquipes = availableEquipes.filter(e => e.institution === this.activeFilters.institution);
+        }
+        if (this.activeFilters.equipe) {
+            availableEquipes = availableEquipes.filter(e => e.id === this.activeFilters.equipe);
+        }
+        if (this.activeFilters.pool) {
+            availableEquipes = availableEquipes.filter(e => e.poule === this.activeFilters.pool);
+        }
+        
+        // Extraire valeurs uniques
+        const genders = [...new Set(availableEquipes.map(e => e.genre).filter(Boolean))].sort();
+        const institutions = [...new Set(availableEquipes.map(e => e.institution).filter(Boolean))].sort();
+        
+        // Format équipes: "Institution (numéro)"
+        const equipes = availableEquipes
+            .map(e => ({
+                id: e.id,
+                display: `${e.institution} (${e.nom.match(/\((\d+)\)/)?.[1] || e.nom})`,
+                institution: e.institution,
+                genre: e.genre,
+                poule: e.poule
+            }))
+            .sort((a, b) => a.display.localeCompare(b.display));
+        
+        // Poules contenant les équipes disponibles
+        const relevantPools = [...new Set(availableEquipes.map(e => e.poule).filter(Boolean))].sort();
+        
+        // Gymnases et semaines avec matchs après filtrage
+        const venues = [...new Set(filteredMatches.map(m => m.gymnase).filter(Boolean))].sort();
+        const weeks = [...new Set(filteredMatches.map(m => m.semaine).filter(Boolean))].sort((a, b) => a - b);
+        
+        return {
+            genders,
+            institutions,
+            equipes,
+            pools: relevantPools,
+            venues,
+            weeks
+        };
+    }
+    
+    /**
+     * Obtient les matchs filtrés selon les filtres actifs (sauf les filtres qu'on veut populer)
+     */
+    _getFilteredMatches(data) {
+        return data.matches.scheduled.filter(match => {
+            // Récupérer les équipes
+            const equipe1 = data.entities.equipes.find(e => e.id === match.equipe1_id);
+            const equipe2 = data.entities.equipes.find(e => e.id === match.equipe2_id);
+            
+            if (!equipe1 || !equipe2) return false;
+            
+            // Filtre genre
+            if (this.activeFilters.gender) {
+                if (equipe1.genre !== this.activeFilters.gender && equipe2.genre !== this.activeFilters.gender) {
+                    return false;
+                }
+            }
+            
+            // Filtre institution
+            if (this.activeFilters.institution) {
+                if (equipe1.institution !== this.activeFilters.institution &&
+                    equipe2.institution !== this.activeFilters.institution) {
+                    return false;
+                }
+            }
+            
+            // Filtre équipe
+            if (this.activeFilters.equipe) {
+                if (match.equipe1_id !== this.activeFilters.equipe &&
+                    match.equipe2_id !== this.activeFilters.equipe) {
+                    return false;
+                }
+            }
+            
+            // Filtre poule
+            if (this.activeFilters.pool) {
+                if (equipe1.poule !== this.activeFilters.pool && equipe2.poule !== this.activeFilters.pool) {
+                    return false;
+                }
+            }
+            
+            // Filtre gymnase
+            if (this.activeFilters.venue) {
+                if (match.gymnase !== this.activeFilters.venue) {
+                    return false;
+                }
+            }
+            
+            // Filtre semaine
+            if (this.activeFilters.week) {
+                if (match.semaine !== parseInt(this.activeFilters.week)) {
+                    return false;
+                }
+            }
+            
+            return true;
+        });
+    }
+    
+    /**
      * Définit un filtre
      */
     setFilter(type, value) {
@@ -148,6 +282,7 @@ window.FilterPanel = class FilterPanel {
         this.activeFilters = {
             gender: '',
             institution: '',
+            equipe: '',
             pool: '',
             venue: '',
             week: ''
@@ -202,6 +337,14 @@ window.FilterPanel = class FilterPanel {
             if (this.activeFilters.institution) {
                 if (equipe1.institution !== this.activeFilters.institution &&
                     equipe2.institution !== this.activeFilters.institution) {
+                    return false;
+                }
+            }
+            
+            // Filtre équipe
+            if (this.activeFilters.equipe) {
+                if (match.equipes[0] !== this.activeFilters.equipe &&
+                    match.equipes[1] !== this.activeFilters.equipe) {
                     return false;
                 }
             }

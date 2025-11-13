@@ -15,6 +15,13 @@ import numpy as np
 from pathlib import Path
 from typing import Dict, List, Set, Tuple, Optional, Any
 from dataclasses import dataclass, field
+
+# Ajouter le répertoire parent au path pour les imports
+current_file = Path(__file__).resolve()
+project_root = current_file.parent.parent.parent.parent
+if str(project_root / 'src') not in sys.path:
+    sys.path.insert(0, str(project_root / 'src'))
+
 from pycalendar.core.config_manager import ConfigManager
 import re
 import openpyxl
@@ -504,6 +511,8 @@ class ConfigActualisateurV2:
             self._valider_matchs_fixes(df, rapport)
         elif nom_feuille == 'Equipes_Hors_Championnat':
             self._valider_equipes_hors_championnat(df, rapport)
+        elif nom_feuille == 'Dispos_Gymnases_Equipes':
+            self._valider_dispos_gymnases_equipes(df, rapport)
         
         return rapport 
 
@@ -639,6 +648,21 @@ class ConfigActualisateurV2:
                         "error"
                     )
                 return ValidationResult(True)
+            # Pour Dispos_Gymnases_Equipes, la validation se fait dans _valider_dispos_gymnases_equipes
+            # car elle nécessite de combiner Equipe + Genre
+            elif nom_feuille == 'Dispos_Gymnases_Equipes':
+                # Validation basique de format uniquement (sans genre)
+                if pd.isna(valeur) or str(valeur).strip() == '':
+                    return ValidationResult(False, "Équipe manquante", None, "error")
+                valeur_str = str(valeur).strip()
+                if not re.match(r'^.+\s*\(\d+\)\s*$', valeur_str):
+                    return ValidationResult(
+                        False,
+                        f"Format équipe invalide: '{valeur_str}' (attendu: 'Institution (numéro)' sans [F]/[M])",
+                        None,
+                        "error"
+                    )
+                return ValidationResult(True)  # La validation complète est dans _valider_dispos_gymnases_equipes
             # Pour la feuille Equipes, valider contre les équipes chargées (sans variantes genre)
             elif nom_feuille == 'Equipes' and self.equipes_ref:
                 return self.validator.valider_equipe(valeur, self.equipes_ref)
@@ -914,6 +938,194 @@ class ConfigActualisateurV2:
                         f"Ligne {ligne_num}: Format d'horaires potentiellement invalide ('{horaires_str}'). "
                         f"Exemple attendu: 'Mercredi 18h00, Vendredi 16h00'"
                     )
+    
+    def _valider_dispos_gymnases_equipes(self, df: pd.DataFrame, rapport: RapportFeuille):
+        """
+        Validation spécifique pour la feuille Dispos_Gymnases_Equipes.
+        
+        Vérifie:
+        - Format des équipes (sans genre dans le nom)
+        - Genre valide (M/F)
+        - Horaire_Dispo valide et cohérent
+        - Gymnases existent dans la feuille Gymnases
+        - Horaire_Dispo est AVANT l'horaire préféré de l'équipe
+        """
+        if df is None or df.empty:
+            return
+        
+        # Charger les horaires préférés des équipes pour validation
+        equipes_horaires = {}  # {nom_equipe_sans_genre|genre: horaire_prefere}
+        equipes_existantes = set()  # {nom_equipe_sans_genre|genre} - TOUTES les équipes
+        df_equipes = self.config.lire_feuille('Equipes')
+        if df_equipes is not None:
+            from pycalendar.core.utils import extraire_genre_depuis_poule, parser_nom_avec_genre
+            
+            for _, row_eq in df_equipes.iterrows():
+                equipe_nom_brut = str(row_eq.get('Equipe', '')).strip()
+                if not equipe_nom_brut:
+                    continue
+                
+                # Extraire le nom sans genre et le genre depuis le nom complet
+                # (le nom dans Equipes peut contenir [M] ou [F])
+                equipe_nom, genre_depuis_nom = parser_nom_avec_genre(equipe_nom_brut)
+                
+                # Extraire le genre : priorité au genre dans le nom, sinon colonne Genre, sinon Poule
+                genre = genre_depuis_nom
+                if not genre and 'Genre' in df_equipes.columns:
+                    genre_col = row_eq.get('Genre')
+                    if pd.notna(genre_col):
+                        genre_col_str = str(genre_col).strip().upper()
+                        if genre_col_str in ['M', 'F']:
+                            genre = genre_col_str
+                
+                if not genre and 'Poule' in df_equipes.columns:
+                    poule = row_eq.get('Poule')
+                    if pd.notna(poule):
+                        genre = extraire_genre_depuis_poule(str(poule))
+                
+                # Clé format: "LYON 1 (1)|M" (nom SANS genre + genre)
+                if genre:
+                    cle = f"{equipe_nom}|{genre}"
+                    equipes_existantes.add(cle)  # Ajouter TOUTES les équipes
+                    
+                    # Récupérer l'horaire préféré (optionnel)
+                    horaire_pref = row_eq.get('Horaire_Prefere')
+                    if pd.notna(horaire_pref):
+                        horaire_str = str(horaire_pref).strip()
+                        if horaire_str:
+                            equipes_horaires[cle] = horaire_str
+        
+        # Valider chaque ligne
+        dispos_vues = {}  # {(equipe, genre): ligne_num} pour détecter doublons
+        
+        for idx, row in df.iterrows():
+            ligne_num = int(idx) + 2
+            
+            # Récupérer les valeurs
+            equipe = row.get('Equipe')
+            genre = row.get('Genre')
+            horaire_dispo = row.get('Horaire_Dispo')
+            
+            # Ignorer lignes vides
+            if pd.isna(equipe) and pd.isna(genre) and pd.isna(horaire_dispo):
+                continue
+            
+            # Validation équipe
+            if pd.isna(equipe) or str(equipe).strip() == '':
+                rapport.erreurs_contenu.append(
+                    f"Ligne {ligne_num}: Équipe manquante"
+                )
+                continue
+            
+            equipe_str = str(equipe).strip()
+            
+            # Vérifier format équipe (sans [F]/[M])
+            if not re.match(r'^.+\s*\(\d+\)\s*$', equipe_str):
+                rapport.erreurs_contenu.append(
+                    f"Ligne {ligne_num}: Format Équipe invalide: '{equipe_str}' "
+                    "(attendu: 'Institution (numéro)' sans [F]/[M])"
+                )
+            
+            # Validation genre
+            if pd.isna(genre) or str(genre).strip() == '':
+                rapport.erreurs_contenu.append(
+                    f"Ligne {ligne_num}: Genre manquant"
+                )
+                continue
+            
+            genre_str = str(genre).strip().upper()
+            if genre_str not in ['M', 'F']:
+                rapport.erreurs_contenu.append(
+                    f"Ligne {ligne_num}: Genre invalide ('{genre}'), doit être 'M' ou 'F'"
+                )
+                continue
+            
+            # Validation horaire dispo
+            if pd.isna(horaire_dispo) or str(horaire_dispo).strip() == '':
+                rapport.erreurs_contenu.append(
+                    f"Ligne {ligne_num}: Horaire_Dispo manquant"
+                )
+                continue
+            
+            horaire_dispo_str = str(horaire_dispo).strip()
+            
+            # Valider format horaire
+            result_horaire = self.validator.valider_horaire(horaire_dispo_str)
+            if not result_horaire.valide:
+                rapport.erreurs_contenu.append(
+                    f"Ligne {ligne_num}: {result_horaire.message}"
+                )
+                continue
+            
+            # Normaliser l'horaire pour comparaison
+            horaire_dispo_normalise = result_horaire.valeur_corrigee or horaire_dispo_str
+            
+            # Vérifier que l'équipe avec ce genre existe et récupérer son horaire préféré
+            cle_equipe = f"{equipe_str}|{genre_str}"
+            
+            # Vérifier que l'équipe existe
+            if cle_equipe not in equipes_existantes:
+                rapport.erreurs_contenu.append(
+                    f"Ligne {ligne_num}, colonne 'Equipe': Équipe '{equipe_str}' non trouvée dans la liste"
+                )
+                continue
+            
+            # Si l'équipe a un horaire préféré, vérifier que Horaire_Dispo est AVANT
+            if cle_equipe in equipes_horaires:
+                horaire_general = equipes_horaires[cle_equipe]
+                
+                # Normaliser l'horaire général
+                result_general = self.validator.valider_horaire(horaire_general)
+                if result_general.valide:
+                    horaire_general_normalise = result_general.valeur_corrigee or horaire_general
+                    
+                    # Comparer les horaires (format HH:MM)
+                    if horaire_dispo_normalise >= horaire_general_normalise:
+                        rapport.erreurs_contenu.append(
+                            f"Ligne {ligne_num}: Horaire_Dispo ({horaire_dispo_normalise}) doit être "
+                            f"AVANT l'horaire préféré général de l'équipe ({horaire_general_normalise})"
+                        )
+            
+            # Vérifier les gymnases (colonnes Gymnase_1 à Gymnase_5)
+            gymnases_utilises = []
+            for i in range(1, 6):
+                col_gymnase = f'Gymnase_{i}'
+                if col_gymnase in df.columns:
+                    gymnase = row.get(col_gymnase)
+                    if pd.notna(gymnase) and str(gymnase).strip():
+                        gymnase_str = str(gymnase).strip()
+                        
+                        # Vérifier que le gymnase existe
+                        if self.gymnases_ref and gymnase_str not in self.gymnases_ref:
+                            rapport.erreurs_contenu.append(
+                                f"Ligne {ligne_num}: Gymnase '{gymnase_str}' ({col_gymnase}) non trouvé "
+                                "dans la feuille Gymnases"
+                            )
+                        
+                        # Vérifier doublons de gymnases sur la même ligne
+                        if gymnase_str in gymnases_utilises:
+                            rapport.warnings_contenu.append(
+                                f"Ligne {ligne_num}: Gymnase '{gymnase_str}' apparaît plusieurs fois"
+                            )
+                        else:
+                            gymnases_utilises.append(gymnase_str)
+            
+            # Vérifier qu'au moins un gymnase est spécifié
+            if not gymnases_utilises:
+                rapport.warnings_contenu.append(
+                    f"Ligne {ligne_num}: Aucun gymnase spécifié pour cette disponibilité anticipée"
+                )
+            
+            # Vérifier doublons (même équipe + même genre)
+            cle_dispo = (equipe_str, genre_str)
+            if cle_dispo in dispos_vues:
+                ligne_precedente = dispos_vues[cle_dispo]
+                rapport.erreurs_contenu.append(
+                    f"Ligne {ligne_num}: Disponibilité en doublon pour '{equipe_str} [{genre_str}]' "
+                    f"(déjà définie ligne {ligne_precedente})"
+                )
+            else:
+                dispos_vues[cle_dispo] = ligne_num
     
     def _valider_matchs_fixes(self, df: pd.DataFrame, rapport: RapportFeuille):
         """
@@ -1683,6 +1895,113 @@ class ConfigActualisateurV2:
         except Exception as e:
             print(f"  ⚠️  Erreur lors de l'ajout des validations Niveaux_Gymnases: {e}")
     
+    def _ajouter_validations_dispos_gymnases_equipes(self):
+        """
+        Ajoute les validations par liste déroulante pour la feuille Dispos_Gymnases_Equipes:
+        - Colonne A (Equipe): Liste des équipes (sans genre)
+        - Colonne B (Genre): M, F
+        - Colonne C (Horaire_Dispo): Format HH:MM (validation texte)
+        - Colonnes D-H (Gymnase_1 à Gymnase_5): Tous les gymnases disponibles
+        """
+        try:
+            from openpyxl.worksheet.datavalidation import DataValidation
+            from openpyxl.utils import quote_sheetname
+            
+            wb = openpyxl.load_workbook(self.fichier_path)
+            
+            if 'Dispos_Gymnases_Equipes' not in wb.sheetnames:
+                return
+            
+            ws = wb['Dispos_Gymnases_Equipes']
+            
+            # Supprimer toutes les validations existantes
+            ws.data_validations.dataValidation = []
+            
+            # ========== CRÉER UNE FEUILLE CACHÉE POUR LES LISTES ==========
+            sheet_name_listes = 'Listes_Deroulantes'
+            if sheet_name_listes not in wb.sheetnames:
+                ws_listes = wb.create_sheet(sheet_name_listes)
+                ws_listes.sheet_state = 'hidden'
+            else:
+                ws_listes = wb[sheet_name_listes]
+                ws_listes.sheet_state = 'hidden'
+            
+            # ========== EQUIPE (Colonne A) ==========
+            # Liste des équipes sans genre (format: "Institution (numéro)")
+            if not self.equipes_ref:
+                print(f"  ⚠️  Aucune équipe trouvée pour les validations Dispos_Gymnases_Equipes")
+                return
+            
+            equipes = sorted(self.equipes_ref)
+            
+            # Écrire la liste dans la feuille cachée (utiliser colonne D)
+            col_equipes = 4  # Colonne D de Listes_Deroulantes
+            for i, equipe in enumerate(equipes, start=1):
+                ws_listes.cell(row=i, column=col_equipes, value=equipe)
+            
+            # Créer la validation pour la colonne Equipe
+            range_equipes = f"{quote_sheetname(sheet_name_listes)}!$D$1:$D${len(equipes)}"
+            dv_equipe = DataValidation(
+                type="list",
+                formula1=range_equipes,
+                allow_blank=False,
+                showErrorMessage=True,
+                errorTitle="Équipe invalide",
+                error="Choisissez une équipe dans la liste déroulante"
+            )
+            dv_equipe.add('A2:A1000')
+            ws.add_data_validation(dv_equipe)
+            
+            # ========== GENRE (Colonne B) ==========
+            dv_genre = DataValidation(
+                type="list",
+                formula1='"M,F"',
+                allow_blank=False,
+                showErrorMessage=True,
+                errorTitle="Genre invalide",
+                error="Choisissez 'M' (masculin) ou 'F' (féminin)"
+            )
+            dv_genre.add('B2:B1000')
+            ws.add_data_validation(dv_genre)
+            
+            # ========== HORAIRE_DISPO (Colonne C) ==========
+            # Note: Pas de validation stricte, juste un message d'aide
+            # L'utilisateur peut saisir HH:MM, HHhMM, etc.
+            
+            # ========== GYMNASE_1 à GYMNASE_5 (Colonnes D à H) ==========
+            if not self.gymnases_ref:
+                print(f"  ⚠️  Aucun gymnase trouvé pour les validations Dispos_Gymnases_Equipes")
+                wb.save(self.fichier_path)
+                return
+            
+            gymnases = sorted(self.gymnases_ref)
+            
+            # Écrire la liste des gymnases dans la feuille cachée (colonne E)
+            col_gymnases = 5  # Colonne E de Listes_Deroulantes
+            for i, gymnase in enumerate(gymnases, start=1):
+                ws_listes.cell(row=i, column=col_gymnases, value=gymnase)
+            
+            # Créer la validation pour les colonnes Gymnase_1 à Gymnase_5
+            range_gymnases = f"{quote_sheetname(sheet_name_listes)}!$E$1:$E${len(gymnases)}"
+            
+            # Appliquer la même validation aux 5 colonnes de gymnases (D à H)
+            for col_letter in ['D', 'E', 'F', 'G', 'H']:  # Gymnase_1 à Gymnase_5
+                dv_gymnase = DataValidation(
+                    type="list",
+                    formula1=range_gymnases,
+                    allow_blank=True,  # Les gymnases sont optionnels
+                    showErrorMessage=True,
+                    errorTitle="Gymnase invalide",
+                    error="Choisissez un gymnase dans la liste déroulante"
+                )
+                dv_gymnase.add(f'{col_letter}2:{col_letter}1000')
+                ws.add_data_validation(dv_gymnase)
+            
+            wb.save(self.fichier_path)
+            
+        except Exception as e:
+            print(f"  ⚠️  Erreur lors de l'ajout des validations Dispos_Gymnases_Equipes: {e}")
+    
     def _appliquer_corrections(self) -> int:
         """Applique toutes les corrections détectées."""
         corrections_appliquees = 0
@@ -1806,6 +2125,9 @@ class ConfigActualisateurV2:
             
             # Ajouter les validations pour Niveaux_Gymnases
             self._ajouter_validations_niveaux_gymnases()
+            
+            # Ajouter les validations pour Dispos_Gymnases_Equipes
+            self._ajouter_validations_dispos_gymnases_equipes()
         except Exception as e:
             pass  # Silencieux si erreur
     

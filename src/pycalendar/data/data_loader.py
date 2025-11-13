@@ -40,6 +40,30 @@ class DataLoader:
                 for err in errs:
                     logger.warning(f"  {feuille}: {err}")
     
+    @staticmethod
+    def _normaliser_horaire(horaire_brut: str) -> str:
+        """
+        Normalise un horaire au format HH:MM.
+        
+        Gère les formats: "14h00", "14h", "14:00", "9:00", etc.
+        Retourne toujours au format "HH:MM" (ex: "09:00", "14:00")
+        
+        Args:
+            horaire_brut: Horaire brut depuis Excel
+            
+        Returns:
+            Horaire normalisé au format HH:MM
+        """
+        horaire = horaire_brut.replace('h', ':')
+        if ':' not in horaire:
+            horaire = horaire + ':00'
+        elif horaire.endswith(':'):
+            horaire += '00'
+        # Ajouter le zéro devant si nécessaire (9:00 → 09:00)
+        if len(horaire) == 4:  # Format "9:00"
+            horaire = '0' + horaire
+        return horaire
+    
     def _obtenir_horaires_systeme(self) -> List[str]:
         """
         Obtient la liste de tous les horaires disponibles dans le système.
@@ -100,26 +124,34 @@ class DataLoader:
         contraintes_institutions = self._charger_contraintes_institutions(horaires_systeme)
         preferences_institutions = self._charger_preferences_institutions()
         indispos_equipes = self._charger_indispos_equipes(horaires_systeme)
+        dispos_gymnases_equipes = self._charger_dispos_gymnases_equipes()
         
         equipes = []
         
         for _, row in df_equipes.iterrows():
-            nom = str(row.get('Equipe', '')).strip()
-            if not nom or pd.isna(nom):
+            nom_brut = str(row.get('Equipe', '')).strip()
+            if not nom_brut or pd.isna(nom_brut):
                 continue
             
             poule = str(row.get('Poule', 'Default')).strip()
             
-            # Extraire le genre : priorité à la colonne Genre, sinon depuis la poule
-            genre_explicite = row.get('Genre')
-            if pd.notna(genre_explicite) and str(genre_explicite).strip() in ['M', 'F']:
-                genre = str(genre_explicite).strip()
-            else:
-                # Extraire le genre depuis le code de la poule
+            # NORMALISATION: Extraire le nom SANS genre et le genre depuis le nom brut
+            # Le nom dans la feuille Equipes peut contenir [M] ou [F], on les retire systématiquement
+            # pour garantir que Equipe.nom soit TOUJOURS sans genre
+            nom_sans_genre, genre_depuis_nom = parser_nom_avec_genre(nom_brut)
+            
+            # Extraire le genre : priorité au genre dans le nom, sinon colonne Genre, sinon poule
+            genre = genre_depuis_nom
+            if not genre and 'Genre' in df_equipes.columns:
+                genre_explicite = row.get('Genre')
+                if pd.notna(genre_explicite) and str(genre_explicite).strip() in ['M', 'F']:
+                    genre = str(genre_explicite).strip()
+            
+            if not genre:
+                # Extraire le genre depuis le code de la poule en dernier recours
                 genre = extraire_genre_depuis_poule(poule)
             
-            # Parser le nom pour extraire institution et numéro
-            nom_sans_genre = re.sub(r'\s*\[(M|F)\]\s*$', '', nom)
+            # Parser le nom SANS GENRE pour extraire institution et numéro
             match = re.match(r'^(.+?)\s*\((\d+)\)\s*$', nom_sans_genre)
             
             if match:
@@ -182,7 +214,7 @@ class DataLoader:
                     if semaine not in indispos:
                         indispos[semaine] = set()
                     indispos[semaine].update(horaires_indispo)
-                logger.debug(f"Équipe {nom}: indisponibilités institutionnelles ajoutées pour {len(indispos_inst)} semaines")
+                logger.debug(f"Équipe {nom_sans_genre} [{genre}]: indisponibilités institutionnelles ajoutées pour {len(indispos_inst)} semaines")
             
             # 2. Ajouter les préférences de lieux de l'institution
             if institution in preferences_institutions:
@@ -191,28 +223,60 @@ class DataLoader:
                 lieux = preferences_institutions[institution].copy()
                 
                 nb_prefs = sum(1 for g in lieux if g is not None)
-                logger.debug(f"Équipe {nom}: {nb_prefs} gymnases préférés institutionnels (avec rangs préservés)")
+                logger.debug(f"Équipe {nom_sans_genre} [{genre}]: {nb_prefs} gymnases préférés institutionnels (avec rangs préservés)")
             
             # 3. Ajouter les indisponibilités spécifiques de l'équipe (depuis Indispos_Equipes)
-            if nom in indispos_equipes:
-                indispo_equipe = indispos_equipes[nom]
-                # indispo_equipe est maintenant un Dict[int, Set[str]]
+            # IMPORTANT: Les indispos_equipes peuvent être stockées de deux façons:
+            # - Avec genre (format "LYON 1 (1)|F") → s'applique uniquement à ce genre
+            # - Sans genre (format "LYON 1 (1)") → s'applique à tous les genres
+            logger.debug(f"Recherche indispos pour nom_sans_genre='{nom_sans_genre}', genre='{genre}'")
+            
+            # Chercher d'abord les indispos spécifiques au genre
+            cle_avec_genre = f"{nom_sans_genre}|{genre}"
+            if cle_avec_genre in indispos_equipes:
+                indispo_equipe = indispos_equipes[cle_avec_genre]
                 for semaine, horaires_indispo in indispo_equipe.items():
                     if semaine not in indispos:
                         indispos[semaine] = set()
                     indispos[semaine].update(horaires_indispo)
-                logger.debug(f"Équipe {nom}: indisponibilités spécifiques ajoutées pour {len(indispo_equipe)} semaines")
+                logger.info(f"✅ Équipe {nom_sans_genre} [{genre}]: {len(indispo_equipe)} semaines d'indispos (spécifique genre)")
+            
+            # Chercher ensuite les indispos globales (sans genre, s'appliquent à M et F)
+            if nom_sans_genre in indispos_equipes:
+                indispo_globale = indispos_equipes[nom_sans_genre]
+                for semaine, horaires_indispo in indispo_globale.items():
+                    if semaine not in indispos:
+                        indispos[semaine] = set()
+                    indispos[semaine].update(horaires_indispo)
+                logger.info(f"✅ Équipe {nom_sans_genre} [{genre}]: {len(indispo_globale)} semaines d'indispos (globale tous genres)")
+            
+            # Si aucune indispo trouvée
+            if cle_avec_genre not in indispos_equipes and nom_sans_genre not in indispos_equipes:
+                if indispos_equipes:
+                    logger.debug(f"❌ Équipe {nom_sans_genre} [{genre}]: PAS d'indispo trouvée")
+            
+            # 4. Ajouter les disponibilités anticipées sur gymnases spécifiques
+            # IMPORTANT: Les dispos_gymnases_equipes utilisent le nom SANS genre (format: "LYON 1 (1)")
+            # car c'est le format de la colonne Equipe dans la feuille Dispos_Gymnases_Equipes
+            dispos_gymnases = {}
+            cle_equipe = f"{nom_sans_genre}|{genre}"
+            if cle_equipe in dispos_gymnases_equipes:
+                dispos_gymnases = dispos_gymnases_equipes[cle_equipe].copy()
+                logger.debug(f"Équipe {nom_sans_genre} [{genre}]: {len(dispos_gymnases)} disponibilités anticipées sur gymnases")
             
             # Créer l'équipe avec toutes les contraintes appliquées
+            # IMPORTANT: Equipe.nom doit TOUJOURS être SANS genre pour garantir la cohérence
+            # Le genre est stocké dans Equipe.genre, et id_unique combine les deux
             equipe = Equipe(
-                nom=nom,
+                nom=nom_sans_genre,
                 poule=poule,
                 institution=institution,
                 numero_equipe=numero_equipe,
                 genre=genre,
                 horaires_preferes=horaires,
                 lieux_preferes=lieux,
-                semaines_indisponibles=indispos
+                semaines_indisponibles=indispos,
+                dispos_gymnases_specifiques=dispos_gymnases
             )
             equipes.append(equipe)
         
@@ -231,8 +295,13 @@ class DataLoader:
         - Horaire_Fin: Heure de fin (optionnel)
         - Remarques: Commentaires (optionnel)
         
-        Si Horaire_Debut et Horaire_Fin ne sont pas renseignés ou vides,
-        l'indisponibilité s'applique à tous les horaires de la semaine.
+        IMPORTANT - Gestion des horaires:
+        - Si Horaire_Debut OU Horaire_Fin est vide (cellule vide, NaN, ou ""),
+          l'indisponibilité s'applique à TOUTE LA JOURNÉE (tous les horaires système)
+        - Si les deux horaires sont renseignés, l'indisponibilité s'applique à la plage
+          [Horaire_Debut, Horaire_Fin[ (l'horaire de fin est EXCLU)
+        - Les horaires sont normalisés (gère "14h00", "14h", "9:00" → "14:00", "09:00")
+        - Ces indisponibilités s'appliquent à TOUTES les équipes de l'institution
         
         Args:
             horaires_systeme: Liste de tous les horaires disponibles dans le système
@@ -267,15 +336,21 @@ class DataLoader:
             horaire_debut = row.get('Horaire_Debut')
             horaire_fin = row.get('Horaire_Fin')
             
+            # Vérifier si l'horaire est vide (None, NaN, ou chaîne vide)
+            horaire_debut_vide = pd.isna(horaire_debut) or str(horaire_debut).strip() == ''
+            horaire_fin_vide = pd.isna(horaire_fin) or str(horaire_fin).strip() == ''
+            
             # Déterminer les horaires concernés
-            if pd.isna(horaire_debut) or pd.isna(horaire_fin):
-                # Toute la semaine est indisponible
+            if horaire_debut_vide or horaire_fin_vide:
+                # Toute la semaine est indisponible si l'un des deux horaires est vide
                 horaires_concernes = set(horaires_systeme)
             else:
+                # Normaliser les horaires au format HH:MM pour comparaison
+                horaire_debut_str = self._normaliser_horaire(str(horaire_debut).strip())
+                horaire_fin_str = self._normaliser_horaire(str(horaire_fin).strip())
+                
                 # Filtrer les horaires dans la plage [debut, fin[
                 # L'horaire de fin est EXCLU pour permettre un match commençant à cet horaire
-                horaire_debut_str = str(horaire_debut).strip()
-                horaire_fin_str = str(horaire_fin).strip()
                 horaires_concernes = set(h for h in horaires_systeme 
                                         if horaire_debut_str <= h < horaire_fin_str)
             
@@ -351,12 +426,17 @@ class DataLoader:
         Charge les indisponibilités spécifiques par équipe.
         
         Structure attendue:
-        - Equipe: Nom de l'équipe
+        - Equipe: Nom de l'équipe (SANS genre, ex: "LYON 1 (1)")
         - Semaine: Numéro de semaine (obligatoire)
         - Horaire_Debut: Heure de début (optionnel)
         - Horaire_Fin: Heure de fin (optionnel)
         
-        Si les horaires ne sont pas renseignés, l'indisponibilité s'applique à toute la journée.
+        IMPORTANT - Gestion des horaires:
+        - Si Horaire_Debut OU Horaire_Fin est vide (cellule vide, NaN, ou ""), 
+          l'indisponibilité s'applique à TOUTE LA JOURNÉE (tous les horaires système)
+        - Si les deux horaires sont renseignés, l'indisponibilité s'applique à la plage
+          [Horaire_Debut, Horaire_Fin[ (l'horaire de fin est EXCLU)
+        - Les horaires sont normalisés (gère "14h00", "14h", "9:00" → "14:00", "09:00")
         
         Args:
             horaires_systeme: Liste de tous les horaires disponibles dans le système
@@ -366,52 +446,172 @@ class DataLoader:
         """
         df = self.config.lire_feuille('Indispos_Equipes')
         if df is None or df.empty:
+            print("⚠️  INDISPOS: Feuille Indispos_Equipes vide ou inexistante")
             return {}
         
+        print(f"📋 INDISPOS: Chargement de {len(df)} lignes depuis Indispos_Equipes")
+        
+        # Structure: {nom_equipe: {semaine: set(horaires)}} ou {nom_equipe|genre: {semaine: set(horaires)}}
+        # Si le nom contient [F] ou [M], on stocke avec le genre pour appliquer uniquement à ce genre
+        # Sinon, on stocke sans genre pour appliquer à tous les genres
         indispos = {}
         
+        # Import pour parser les noms avec genre
+        from pycalendar.core.utils import parser_nom_avec_genre
+        
         for _, row in df.iterrows():
-            equipe = str(row.get('Equipe', '')).strip()
-            if not equipe or pd.isna(equipe):
+            equipe_brut = str(row.get('Equipe', '')).strip()
+            if not equipe_brut or pd.isna(equipe_brut):
                 continue
+            
+            # Parser le nom pour retirer [M] ou [F] si présent
+            # IMPORTANT: Indispos_Equipes peut contenir:
+            # - "LYON 1 (1) [F]" → indispo s'applique uniquement à l'équipe féminine
+            # - "LYON 1 (1)" → indispo s'applique aux équipes M ET F
+            equipe_nom, genre_depuis_nom = parser_nom_avec_genre(equipe_brut)
+            
+            # Déterminer la clé de stockage
+            if genre_depuis_nom:
+                # Genre spécifié → indispo spécifique à ce genre
+                cle_indispo = f"{equipe_nom}|{genre_depuis_nom}"
+            else:
+                # Pas de genre → indispo pour tous les genres
+                cle_indispo = equipe_nom
             
             # Récupérer la semaine
             semaine = row.get('Semaine')
             if pd.isna(semaine):
-                logger.warning(f"Indisponibilité équipe '{equipe}': semaine manquante, ligne ignorée")
+                logger.warning(f"Indisponibilité équipe '{cle_indispo}': semaine manquante, ligne ignorée")
                 continue
             
             try:
                 semaine = int(semaine)
             except (ValueError, TypeError):
-                logger.warning(f"Indisponibilité équipe '{equipe}': semaine invalide '{semaine}', ligne ignorée")
+                logger.warning(f"Indisponibilité équipe '{cle_indispo}': semaine invalide '{semaine}', ligne ignorée")
                 continue
             
             # Vérifier si des horaires spécifiques sont définis
             horaire_debut = row.get('Horaire_Debut')
             horaire_fin = row.get('Horaire_Fin')
             
+            # Vérifier si l'horaire est vide (None, NaN, ou chaîne vide)
+            horaire_debut_vide = pd.isna(horaire_debut) or str(horaire_debut).strip() == ''
+            horaire_fin_vide = pd.isna(horaire_fin) or str(horaire_fin).strip() == ''
+            
             # Déterminer les horaires concernés
-            if pd.isna(horaire_debut) or pd.isna(horaire_fin):
-                # Toute la journée est indisponible
+            if horaire_debut_vide or horaire_fin_vide:
+                # Toute la journée est indisponible si l'un des deux horaires est vide
                 horaires_concernes = set(horaires_systeme)
+                logger.debug(f"Indispo {cle_indispo} S{semaine}: TOUTE LA JOURNÉE ({len(horaires_concernes)} horaires)")
             else:
+                # Normaliser les horaires au format HH:MM pour comparaison
+                horaire_debut_str = self._normaliser_horaire(str(horaire_debut).strip())
+                horaire_fin_str = self._normaliser_horaire(str(horaire_fin).strip())
+                
                 # Filtrer les horaires dans la plage [debut, fin[
                 # L'horaire de fin est EXCLU pour permettre un match commençant à cet horaire
-                horaire_debut_str = str(horaire_debut).strip()
-                horaire_fin_str = str(horaire_fin).strip()
                 horaires_concernes = set(h for h in horaires_systeme 
                                         if horaire_debut_str <= h < horaire_fin_str)
+                logger.debug(f"Indispo {cle_indispo} S{semaine}: {horaire_debut_str} - {horaire_fin_str} → {len(horaires_concernes)} horaires")
             
             # Ajouter l'indisponibilité
-            if equipe not in indispos:
-                indispos[equipe] = {}
-            if semaine not in indispos[equipe]:
-                indispos[equipe][semaine] = set()
-            indispos[equipe][semaine].update(horaires_concernes)
+            if cle_indispo not in indispos:
+                indispos[cle_indispo] = {}
+            if semaine not in indispos[cle_indispo]:
+                indispos[cle_indispo][semaine] = set()
+            indispos[cle_indispo][semaine].update(horaires_concernes)
+            
+            logger.debug(f"Indispo chargée: clé='{cle_indispo}', semaine={semaine}, horaires={len(horaires_concernes)}")
         
         logger.info(f"Indisponibilités spécifiques chargées pour {len(indispos)} équipes")
+        if indispos:
+            logger.debug(f"Équipes avec indispos: {list(indispos.keys())}")
         return indispos
+    
+    def _charger_dispos_gymnases_equipes(self) -> Dict[str, Dict[str, str]]:
+        """
+        Charge les disponibilités anticipées d'équipes sur des gymnases spécifiques.
+        
+        Structure de la feuille Dispos_Gymnases_Equipes:
+        - Equipe: Nom de l'équipe (sans genre)
+        - Genre: M ou F
+        - Horaire_Dispo: Horaire de disponibilité anticipée (avant l'horaire général)
+        - Gymnase_1 à Gymnase_5: Gymnases où la disponibilité s'applique
+        - Remarques: Commentaires (optionnel)
+        
+        Returns:
+            Dictionnaire {equipe_avec_genre: {gymnase: horaire_dispo}}
+            Format: {"LYON 1 (1)|M": {"PARC": "18:00", "INSA C": "18:00"}}
+        """
+        df = self.config.lire_feuille('Dispos_Gymnases_Equipes')
+        if df is None or df.empty:
+            return {}
+        
+        dispos_gymnases = {}
+        lignes_traitees = 0
+        
+        for _, row in df.iterrows():
+            equipe = str(row.get('Equipe', '')).strip()
+            if not equipe or pd.isna(equipe):
+                continue
+            
+            # Récupérer le genre
+            genre = row.get('Genre')
+            if pd.isna(genre):
+                logger.warning(f"Dispo gymnases '{equipe}': genre manquant, ligne ignorée")
+                continue
+            
+            genre_str = str(genre).strip().upper()
+            if genre_str not in ['M', 'F']:
+                logger.warning(f"Dispo gymnases '{equipe}': genre invalide '{genre}', ligne ignorée")
+                continue
+            
+            # Récupérer l'horaire de disponibilité
+            horaire_dispo = row.get('Horaire_Dispo')
+            if pd.isna(horaire_dispo):
+                logger.warning(f"Dispo gymnases '{equipe}' {genre_str}: horaire manquant, ligne ignorée")
+                continue
+            
+            horaire_dispo_str = str(horaire_dispo).strip()
+            if not horaire_dispo_str:
+                continue
+            
+            # Normaliser l'horaire au format HH:MM
+            horaire_normalise = horaire_dispo_str.replace('h', ':')
+            if ':' not in horaire_normalise:
+                horaire_normalise = horaire_normalise + ':00'
+            elif horaire_normalise.endswith(':'):
+                horaire_normalise += '00'
+            
+            # Récupérer les gymnases (colonnes Gymnase_1 à Gymnase_5)
+            gymnases = []
+            for i in range(1, 6):
+                col_gymnase = f'Gymnase_{i}'
+                if col_gymnase in df.columns:
+                    gymnase = row.get(col_gymnase)
+                    if pd.notna(gymnase):
+                        gymnase_str = str(gymnase).strip()
+                        if gymnase_str:
+                            gymnases.append(gymnase_str)
+            
+            if not gymnases:
+                logger.warning(f"Dispo gymnases '{equipe}' {genre_str}: aucun gymnase spécifié, ligne ignorée")
+                continue
+            
+            # Créer la clé avec équipe|genre
+            cle = f"{equipe}|{genre_str}"
+            lignes_traitees += 1
+            
+            # Initialiser le dictionnaire pour cette équipe
+            if cle not in dispos_gymnases:
+                dispos_gymnases[cle] = {}
+            
+            # Ajouter chaque gymnase avec son horaire
+            for gymnase in gymnases:
+                dispos_gymnases[cle][gymnase] = horaire_normalise
+        
+        logger.info(f"Disponibilités gymnases spécifiques chargées pour {len(dispos_gymnases)} équipes")
+        return dispos_gymnases
     
     def charger_gymnases(self) -> List[Gymnase]:
         """
@@ -822,7 +1022,12 @@ class DataLoader:
         
         # Charger les équipes pour pouvoir créer les objets Match complets
         equipes = self.charger_equipes()
-        equipes_dict = {eq.nom: eq for eq in equipes}
+        # Utiliser id_unique comme clé pour éviter les collisions entre équipes de même nom mais genre différent
+        # Format: "NOM|GENRE" (ex: "LYON 1 (1)|M", "LYON 1 (1)|F")
+        equipes_dict = {eq.id_unique: eq for eq in equipes}
+        # Créer aussi un index par nom seul (pour les matchs sans genre spécifié)
+        # ATTENTION: Si plusieurs équipes ont le même nom, on garde la dernière (comportement de fallback)
+        equipes_dict_by_nom = {eq.nom: eq for eq in equipes}
         
         for ligne_idx, (idx, row) in enumerate(df.iterrows()):
             ligne_num = ligne_idx + 2  # Numéro de ligne dans Excel (header + 1-based)
@@ -845,36 +1050,53 @@ class DataLoader:
                 logger.warning(f"Ligne {ligne_num}: équipes manquantes, ligne ignorée")
                 continue
             
-            # Si genre présent, on l'ajoute au nom pour matcher avec les équipes de la config
-            equipe1_nom_complet = f"{equipe1_nom} [{genre}]" if genre in ['F', 'M'] else equipe1_nom
-            equipe2_nom_complet = f"{equipe2_nom} [{genre}]" if genre in ['F', 'M'] else equipe2_nom
+            # Recherche des équipes avec priorité au genre
+            # Priorité 1: Utiliser le genre du match fixé pour construire l'id_unique
+            # Priorité 2: Recherche par nom seul (fallback si pas de genre ou équipe introuvable)
+            equipe1 = None
+            equipe2 = None
             
-            # Essayer d'abord avec le genre complet, puis sans genre
-            equipe1 = equipes_dict.get(equipe1_nom_complet) or equipes_dict.get(equipe1_nom)
-            equipe2 = equipes_dict.get(equipe2_nom_complet) or equipes_dict.get(equipe2_nom)
+            if genre in ['F', 'M']:
+                # Si le genre est spécifié, chercher avec id_unique (nom|genre)
+                equipe1_id = f"{equipe1_nom}|{genre}"
+                equipe2_id = f"{equipe2_nom}|{genre}"
+                equipe1 = equipes_dict.get(equipe1_id)
+                equipe2 = equipes_dict.get(equipe2_id)
+            
+            # Fallback: chercher par nom seul si pas trouvé avec le genre
+            if not equipe1:
+                equipe1 = equipes_dict_by_nom.get(equipe1_nom)
+            if not equipe2:
+                equipe2 = equipes_dict_by_nom.get(equipe2_nom)
             
             # Vérifier que les équipes existent, sinon créer des équipes temporaires pour les externes
             if not equipe1:
+                # Déterminer le genre pour l'équipe externe
+                genre_equipe = genre if genre in ['F', 'M'] else extraire_genre_depuis_poule(poule)
+                
                 # Créer une équipe temporaire pour les équipes hors championnat
                 equipe1 = Equipe(
-                    nom=equipe1_nom_complet,
+                    nom=equipe1_nom,
                     poule=poule,
                     institution="EXTERNE",  # Marquer comme équipe externe
-                    genre=genre.lower() if genre in ['F', 'M'] else "",
+                    genre=genre_equipe,  # Utiliser le genre déterminé en majuscules
                     numero_equipe=""
                 )
-                logger.info(f"Ligne {ligne_num}: équipe externe '{equipe1_nom_complet}' créée pour match fixe")
+                logger.info(f"Ligne {ligne_num}: équipe externe '{equipe1_nom}' créée pour match fixe (genre: {genre_equipe or 'non défini'})")
             
             if not equipe2:
+                # Déterminer le genre pour l'équipe externe
+                genre_equipe = genre if genre in ['F', 'M'] else extraire_genre_depuis_poule(poule)
+                
                 # Créer une équipe temporaire pour les équipes hors championnat
                 equipe2 = Equipe(
-                    nom=equipe2_nom_complet,
+                    nom=equipe2_nom,
                     poule=poule,
                     institution="EXTERNE",  # Marquer comme équipe externe
-                    genre=genre.lower() if genre in ['F', 'M'] else "",
+                    genre=genre_equipe,  # Utiliser le genre déterminé en majuscules
                     numero_equipe=""
                 )
-                logger.info(f"Ligne {ligne_num}: équipe externe '{equipe2_nom_complet}' créée pour match fixe")
+                logger.info(f"Ligne {ligne_num}: équipe externe '{equipe2_nom}' créée pour match fixe (genre: {genre_equipe or 'non défini'})")
             
             semaine = row.get('Semaine')
             if pd.isna(semaine):
@@ -920,7 +1142,8 @@ class DataLoader:
                     'gymnase': gymnase,
                     'score': score_str,
                     'type_competition': type_competition_str,
-                    'remarques': remarques_str
+                    'remarques': remarques_str,
+                    'genre_fixe': genre if genre in ['F', 'M'] else None  # Préserver le genre du match fixé
                 }
             )
             

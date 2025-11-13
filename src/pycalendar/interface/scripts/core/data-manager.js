@@ -418,7 +418,7 @@ class DataManager {
         this.indexes.matchesByPool.clear();
         this.indexes.matchesByVenue.clear();
         
-        // Rebuild from current state
+        // Rebuild from scheduled matches
         this.current.matches.scheduled.forEach(match => {
             this.indexes.matchesById.set(match.match_id, match);
             
@@ -436,6 +436,17 @@ class DataManager {
                 this.indexes.matchesByVenue.set(match.gymnase, []);
             }
             this.indexes.matchesByVenue.get(match.gymnase).push(match);
+        });
+        
+        // IMPORTANT: Ajouter les matchs non planifiés dans l'index des poules
+        // pour que getMatchesByPool() retourne TOUS les matchs (planifiés + non planifiés)
+        this.current.matches.unscheduled.forEach(match => {
+            this.indexes.matchesById.set(match.match_id, match);
+            
+            if (!this.indexes.matchesByPool.has(match.poule)) {
+                this.indexes.matchesByPool.set(match.poule, []);
+            }
+            this.indexes.matchesByPool.get(match.poule).push(match);
         });
     }
     

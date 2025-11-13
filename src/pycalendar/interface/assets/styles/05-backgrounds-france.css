@@ -1,31 +1,32 @@
 /**
- * PyCalendar Interface - French Theme Backgrounds (Optimized)
- * Minimal French theme elements
+ * PyCalendar Interface - Theme Decorations
+ * Subtle theme visual elements
  */
 
-[data-theme="tricolore"] .app-wrapper::before {
+/* Optional: Add subtle top accent bar for dark theme */
+[data-theme="dark"] .app-wrapper::before {
     content: '';
     position: fixed;
     top: 0;
     left: 0;
     right: 0;
-    height: 3px;
-    background: linear-gradient(90deg, 
-        #0055A4 0%, #0055A4 33.33%, 
-        #FFFFFF 33.33%, #FFFFFF 66.66%, 
-        #EF4135 66.66%, #EF4135 100%);
+    height: 2px;
+    background: var(--gradient-primary);
     z-index: 9999;
+    opacity: 0.6;
 }
 
-[data-theme="tricolore"] .main-header::after {
+/* Optional: Add subtle header accent for enhanced visibility */
+.main-header::after {
     content: '';
     position: absolute;
     bottom: 0;
     left: 0;
     right: 0;
-    height: 2px;
+    height: 1px;
     background: linear-gradient(90deg, 
-        #0055A4 0%, #0055A4 33.33%, 
-        #FFFFFF 33.33%, #FFFFFF 66.66%, 
-        #EF4135 66.66%, #EF4135 100%);
+        transparent 0%, 
+        var(--primary) 50%, 
+        transparent 100%);
+    opacity: 0.3;
 }

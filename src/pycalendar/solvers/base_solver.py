@@ -1,7 +1,7 @@
 """Base solver interface."""
 
 from abc import ABC, abstractmethod
-from typing import List, Dict
+from typing import List, Dict, Optional
 from pycalendar.core.models import Match, Creneau, Gymnase, Solution
 from pycalendar.core.config import Config
 
@@ -26,9 +26,18 @@ class BaseSolver(ABC):
         """Get solver name."""
         pass
     
-    def _create_solution_state(self) -> Dict:
-        """Create initial solution state for constraint validation."""
-        return {
+    def _create_solution_state(self, matchs_fixes: Optional[List[Match]] = None) -> Dict:
+        """Create initial solution state for constraint validation.
+        
+        Args:
+            matchs_fixes: Liste optionnelle des matchs déjà fixés/planifiés.
+                         Ces matchs seront intégrés dans le state initial pour que
+                         les contraintes (espacement, max par semaine, etc.) en tiennent compte.
+        
+        Returns:
+            Dictionnaire représentant l'état de la solution
+        """
+        state = {
             'creneaux_usage': {},
             'equipes_semaines': {},
             'equipes_creneaux': {},
@@ -38,6 +47,21 @@ class BaseSolver(ABC):
             'avg_matchs_semaine': 0,
             'avg_matchs_gymnase': 0,
         }
+        
+        # Intégrer les matchs fixes dans l'état initial
+        if matchs_fixes:
+            for match in matchs_fixes:
+                # Les matchs fixes doivent avoir leurs métadonnées avec semaine/horaire/gymnase
+                if match.metadata and 'semaine' in match.metadata:
+                    from pycalendar.core.models import Creneau
+                    creneau = Creneau(
+                        semaine=match.metadata['semaine'],
+                        horaire=match.metadata['horaire'],
+                        gymnase=match.metadata['gymnase']
+                    )
+                    self._update_solution_state(state, match, creneau)
+        
+        return state
     
     def _update_solution_state(self, state: Dict, match: Match, creneau: Creneau):
         """Update solution state after assigning a match.

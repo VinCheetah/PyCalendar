@@ -1,0 +1,319 @@
+/**/**
+
+ * PyCalendar Interface - Dark Theme * PyCalendar Interface - Thème France
+
+ * Additional styles and overrides for dark mode * Styles spécifiques pour le thème tricolore français
+
+ */ */
+
+
+
+[data-theme="dark"] {[data-theme="tricolore"] {
+
+    /* ==================== CUSTOM DARK THEME ADJUSTMENTS ==================== */    /* ==================== DRAPEAU FRANÇAIS ==================== */
+
+        
+
+    /* Enhanced shadows for dark mode */    /* Gradient tricolore pour les headers */
+
+    .match-card {    .header-france-gradient {
+
+        box-shadow: var(--shadow-lg);        background: linear-gradient(
+
+        background: var(--bg-secondary);            to right,
+
+    }            #0055A4 0%,
+
+                #0055A4 33.33%,
+
+    .match-card:hover {            #FFFFFF 33.33%,
+
+        box-shadow: var(--shadow-xl);            #FFFFFF 66.66%,
+
+        background: var(--bg-tertiary);            #EF4135 66.66%,
+
+    }            #EF4135 100%
+
+            );
+
+    /* Glassmorphism adjustments for dark */        height: 4px;
+
+    .glass {        width: 100%;
+
+        background: var(--glass-bg-dark);    }
+
+        border: 1px solid var(--glass-border-dark);    
+
+    }    /* Bordure tricolore */
+
+        .border-france {
+
+    .glass-strong {        border-top: 3px solid #0055A4;
+
+        background: var(--glass-bg-dark-strong);        border-right: 3px solid #FFFFFF;
+
+    }        border-bottom: 3px solid #EF4135;
+
+        }
+
+    /* Button adjustments */    
+
+    .btn-primary {    /* Cards avec accent tricolore */
+
+        box-shadow: var(--shadow-primary-lg);    .stat-card {
+
+    }        border-left: 4px solid #0055A4;
+
+            background: linear-gradient(135deg, rgba(0, 85, 164, 0.05) 0%, rgba(255, 255, 255, 1) 100%);
+
+    .btn-primary:hover {    }
+
+        box-shadow: var(--shadow-primary-lg), var(--primary-glow);    
+
+    }    .stat-card:nth-child(2n) {
+
+            border-left: 4px solid #EF4135;
+
+    /* Filter panel adjustments */        background: linear-gradient(135deg, rgba(239, 65, 53, 0.05) 0%, rgba(255, 255, 255, 1) 100%);
+
+    .filter-section {    }
+
+        background: var(--bg-tertiary);    
+
+        border-color: var(--border-hover);    /* Buttons avec style tricolore */
+
+    }    .btn-primary {
+
+            background: linear-gradient(135deg, #0055A4 0%, #002654 100%);
+
+    /* Modal backdrop for dark mode */        border: none;
+
+    .modal-backdrop {        color: white;
+
+        background: rgba(0, 0, 0, 0.8);        box-shadow: 0 4px 14px 0 rgba(0, 85, 164, 0.35);
+
+    }    }
+
+        
+
+    .modal-content {    .btn-primary:hover {
+
+        background: var(--bg-secondary);        background: linear-gradient(135deg, #002654 0%, #0055A4 100%);
+
+        box-shadow: var(--shadow-2xl);        box-shadow: 0 6px 20px 0 rgba(0, 85, 164, 0.45);
+
+    }    }
+
+        
+
+    /* Header enhancement */    .btn-danger {
+
+    .main-header {        background: linear-gradient(135deg, #EF4135 0%, #C1172C 100%);
+
+        background: var(--bg-primary);        border: none;
+
+        border-bottom: 1px solid var(--border-hover);        color: white;
+
+        box-shadow: var(--shadow-lg);        box-shadow: 0 4px 14px 0 rgba(239, 65, 53, 0.35);
+
+    }    }
+
+        
+
+    /* Sidebar enhancements */    .btn-danger:hover {
+
+    .sidebar {        background: linear-gradient(135deg, #C1172C 0%, #EF4135 100%);
+
+        background: var(--bg-primary);        box-shadow: 0 6px 20px 0 rgba(239, 65, 53, 0.45);
+
+        border-color: var(--border-hover);    }
+
+    }    
+
+        /* Tabs avec style tricolore */
+
+    .sidebar-header {    .tab-button.active {
+
+        background: var(--bg-tertiary);        background: linear-gradient(135deg, #0055A4 0%, #4A90E2 100%);
+
+        border-bottom: 1px solid var(--border-hover);        color: white;
+
+    }        border-bottom: 3px solid #EF4135;
+
+        }
+
+    /* Empty state adjustments */    
+
+    .empty-state {    /* Header avec touches tricolores */
+
+        background: var(--bg-secondary);    .header {
+
+        border: 2px dashed var(--border-hover);        position: relative;
+
+    }        overflow: hidden;
+
+        }
+
+    /* Table enhancements for dark */    
+
+    .table-row:hover {    .header::before {
+
+        background: var(--bg-tertiary);        content: '';
+
+    }        position: absolute;
+
+            top: 0;
+
+    /* Badge adjustments */        left: 0;
+
+    .badge {        right: 0;
+
+        filter: brightness(1.1);        height: 4px;
+
+    }        background: linear-gradient(
+
+                to right,
+
+    /* Input fields */            #0055A4 0%,
+
+    .form-input,            #0055A4 33.33%,
+
+    .form-select,            #FFFFFF 33.33%,
+
+    .form-textarea {            #FFFFFF 66.66%,
+
+        background: var(--bg-tertiary);            #EF4135 66.66%,
+
+        border-color: var(--border-hover);            #EF4135 100%
+
+        color: var(--text-primary);        );
+
+    }    }
+
+        
+
+    .form-input:focus,    /* Sidebar avec accent bleu France */
+
+    .form-select:focus,    .sidebar-left,
+
+    .form-textarea:focus {    .sidebar-right {
+
+        background: var(--bg-quaternary);        border-top: 3px solid #0055A4;
+
+        border-color: var(--primary);    }
+
+    }    
+
+        /* Match cards avec bordures tricolores selon l'état */
+
+    /* Scrollbar styling for dark theme */    .match-card {
+
+    ::-webkit-scrollbar-track {        border-left: 4px solid #0055A4;
+
+        background: var(--bg-secondary);    }
+
+    }    
+
+        .match-card.conflict-warning {
+
+    ::-webkit-scrollbar-thumb {        border-left: 4px solid #F59E0B;
+
+        background: var(--bg-quaternary);        border-top: 2px solid #EF4135;
+
+    }    }
+
+        
+
+    ::-webkit-scrollbar-thumb:hover {    .match-card.conflict-critical {
+
+        background: var(--text-tertiary);        border-left: 4px solid #EF4135;
+
+    }        border-top: 2px solid #EF4135;
+
+}        background: linear-gradient(135deg, rgba(239, 65, 53, 0.08) 0%, rgba(255, 255, 255, 1) 100%);
+
+    }
+    
+    /* Liens avec style France */
+    a {
+        color: #0055A4;
+        transition: color var(--transition-base);
+    }
+    
+    a:hover {
+        color: #EF4135;
+    }
+    
+    /* Badges et tags */
+    .badge-primary {
+        background: #0055A4;
+        color: white;
+    }
+    
+    .badge-danger {
+        background: #EF4135;
+        color: white;
+    }
+    
+    /* Focus states avec couleurs France */
+    *:focus-visible {
+        outline: 2px solid #0055A4;
+        outline-offset: 2px;
+    }
+    
+    button:focus-visible,
+    .btn:focus-visible {
+        outline: 2px solid #EF4135;
+    }
+    
+    /* Scrollbar personnalisée (Chrome/Edge) */
+    ::-webkit-scrollbar {
+        width: 10px;
+        height: 10px;
+    }
+    
+    ::-webkit-scrollbar-track {
+        background: rgba(0, 85, 164, 0.05);
+    }
+    
+    ::-webkit-scrollbar-thumb {
+        background: linear-gradient(135deg, #0055A4 0%, #EF4135 100%);
+        border-radius: 5px;
+    }
+    
+    ::-webkit-scrollbar-thumb:hover {
+        background: linear-gradient(135deg, #002654 0%, #C1172C 100%);
+    }
+    
+    /* Loading spinner tricolore */
+    .spinner::after {
+        border: 3px solid rgba(0, 85, 164, 0.2);
+        border-top-color: #0055A4;
+        border-right-color: #FFFFFF;
+        border-bottom-color: #EF4135;
+    }
+    
+    /* Tooltips */
+    .tooltip {
+        background: linear-gradient(135deg, #0055A4 0%, #002654 100%);
+        color: white;
+        border: 1px solid #EF4135;
+    }
+    
+    /* Modal headers */
+    .modal-header {
+        border-bottom: 3px solid transparent;
+        border-image: linear-gradient(to right, #0055A4, #EF4135) 1;
+    }
+    
+    /* Progress bars */
+    .progress-bar {
+        background: linear-gradient(to right, #0055A4, #FFFFFF, #EF4135);
+    }
+    
+    /* Selection */
+    ::selection {
+        background: rgba(0, 85, 164, 0.3);
+        color: #002654;
+    }
+}

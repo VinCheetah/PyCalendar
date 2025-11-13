@@ -12,11 +12,12 @@ class TeamAvailabilityConstraint(Constraint):
         super().__init__(weight=weight, hard=True)
     
     def validate(self, match: Match, creneau: Creneau, solution_state: Dict) -> Tuple[bool, float]:
-        # Vérifier la disponibilité avec l'horaire spécifique
-        if not match.equipe1.est_disponible(creneau.semaine, creneau.horaire):
+        # Vérifier la disponibilité avec l'horaire spécifique ET le gymnase
+        # Le gymnase est important pour les disponibilités anticipées spécifiques
+        if not match.equipe1.est_disponible(creneau.semaine, creneau.horaire, creneau.gymnase):
             return False, self.weight
         
-        if not match.equipe2.est_disponible(creneau.semaine, creneau.horaire):
+        if not match.equipe2.est_disponible(creneau.semaine, creneau.horaire, creneau.gymnase):
             return False, self.weight
         
         return True, 0.0

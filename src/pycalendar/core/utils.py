@@ -267,3 +267,67 @@ def extraire_niveau_match(poule: str) -> Optional[int]:
             return None
     
     return None
+
+
+def determiner_genre_match(equipe1_genre: str, equipe2_genre: str, poule: str = "") -> str:
+    """
+    Détermine le genre d'un match basé sur les genres des équipes et éventuellement la poule.
+    
+    Logique:
+    1. Si les deux équipes ont le même genre explicite (M ou F), utiliser ce genre
+    2. Si une seule équipe a un genre explicite, utiliser ce genre
+    3. Si aucune équipe n'a de genre mais la poule en contient un, extraire depuis la poule
+    4. Sinon, retourner 'X' (genre indéterminé/mixte)
+    
+    Args:
+        equipe1_genre: Genre de la première équipe ('M', 'F', ou '')
+        equipe2_genre: Genre de la deuxième équipe ('M', 'F', ou '')
+        poule: Nom de la poule (optionnel, utilisé comme fallback)
+        
+    Returns:
+        'M' (masculin), 'F' (féminin), ou 'X' (indéterminé/mixte)
+        
+    Examples:
+        >>> determiner_genre_match('M', 'M', '')
+        'M'
+        >>> determiner_genre_match('F', 'F', '')
+        'F'
+        >>> determiner_genre_match('M', '', '')
+        'M'
+        >>> determiner_genre_match('', '', 'VBFA1PA')
+        'F'
+        >>> determiner_genre_match('', '', '')
+        'X'
+        >>> determiner_genre_match('M', 'F', '')  # Cas d'erreur - genres différents
+        'X'
+    """
+    # Normaliser les genres en majuscules
+    g1 = equipe1_genre.upper().strip() if equipe1_genre else ""
+    g2 = equipe2_genre.upper().strip() if equipe2_genre else ""
+    
+    # Valider les genres
+    g1 = g1 if g1 in ['M', 'F'] else ""
+    g2 = g2 if g2 in ['M', 'F'] else ""
+    
+    # Cas 1: Les deux équipes ont le même genre explicite
+    if g1 and g2:
+        if g1 == g2:
+            return g1
+        else:
+            # Genres différents - match mixte ou erreur de données
+            return 'X'
+    
+    # Cas 2: Une seule équipe a un genre explicite
+    if g1:
+        return g1
+    if g2:
+        return g2
+    
+    # Cas 3: Aucun genre explicite, essayer d'extraire depuis la poule
+    if poule:
+        genre_poule = extraire_genre_depuis_poule(poule)
+        if genre_poule in ['M', 'F']:
+            return genre_poule
+    
+    # Cas 4: Impossible de déterminer le genre
+    return 'X'

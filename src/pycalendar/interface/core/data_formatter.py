@@ -13,6 +13,7 @@ import json
 
 from pycalendar.core.models import Solution, Match, Equipe, Creneau, Gymnase
 from pycalendar.core.config import Config
+from pycalendar.core.utils import determiner_genre_match
 
 
 class DataFormatter:
@@ -26,7 +27,8 @@ class DataFormatter:
         config: Optional[Config] = None,
         equipes: Optional[List[Equipe]] = None,
         gymnases: Optional[List[Gymnase]] = None,
-        creneaux_disponibles: Optional[List[Creneau]] = None
+        creneaux_disponibles: Optional[List[Creneau]] = None,
+        types_poules: Optional[Dict[str, str]] = None
     ) -> Dict[str, Any]:
         """
         Transform Solution into enriched JSON format.
@@ -37,6 +39,7 @@ class DataFormatter:
             equipes: List of all teams (optional, extracted from matches if not provided)
             gymnases: List of all venues (optional)
             creneaux_disponibles: List of available slots (optional)
+            types_poules: Dictionary {poule_name: type} where type is 'Classique' or 'Aller-Retour' (optional)
             
         Returns:
             Dictionary with complete formatted data
@@ -54,9 +57,9 @@ class DataFormatter:
             
             "metadata": DataFormatter._format_metadata(solution, config),
             "config": DataFormatter._format_config(config),
-            "entities": DataFormatter._format_entities(equipes, gymnases, solution),
+            "entities": DataFormatter._format_entities(equipes, gymnases, solution, types_poules),
             "matches": DataFormatter._format_matches(solution, config),
-            "slots": DataFormatter._format_slots(creneaux_disponibles, solution),
+            "slots": DataFormatter._format_slots(creneaux_disponibles, solution, gymnases),
             "statistics": DataFormatter._calculate_statistics(solution, equipes, gymnases),
         }
         
@@ -67,7 +70,7 @@ class DataFormatter:
         """Format solution metadata."""
         metadata = solution.metadata.copy() if solution.metadata else {}
         
-        return {
+        result = {
             "solution_name": metadata.get("solution_name", "unknown"),
             "solver": metadata.get("solver", "unknown"),
             "status": metadata.get("status", "UNKNOWN"),
@@ -75,6 +78,12 @@ class DataFormatter:
             "execution_time_seconds": metadata.get("execution_time", 0.0),
             "date": metadata.get("date", datetime.now().isoformat()),
         }
+        
+        # Ajouter la décomposition des pénalités si disponible
+        if "penalty_breakdown" in metadata:
+            result["penalty_breakdown"] = metadata["penalty_breakdown"]
+        
+        return result
     
     @staticmethod
     def _format_config(config: Optional[Config]) -> Dict[str, Any]:
@@ -113,7 +122,8 @@ class DataFormatter:
     def _format_entities(
         equipes: List[Equipe],
         gymnases: List[Gymnase],
-        solution: Solution
+        solution: Solution,
+        types_poules: Optional[Dict[str, str]] = None
     ) -> Dict[str, Any]:
         """Format all entities (teams, venues, pools)."""
         
@@ -160,7 +170,7 @@ class DataFormatter:
             })
         
         # Extract pools from matches
-        poules_data = DataFormatter._extract_pools_data(solution, equipes)
+        poules_data = DataFormatter._extract_pools_data(solution, equipes, types_poules)
         
         return {
             "equipes": equipes_data,
@@ -169,7 +179,7 @@ class DataFormatter:
         }
     
     @staticmethod
-    def _extract_pools_data(solution: Solution, equipes: List[Equipe]) -> List[Dict[str, Any]]:
+    def _extract_pools_data(solution: Solution, equipes: List[Equipe], types_poules: Optional[Dict[str, str]] = None) -> List[Dict]:
         """Extract pool data from matches and teams."""
         pools: Dict[str, Dict[str, Any]] = {}
         
@@ -181,8 +191,15 @@ class DataFormatter:
                 if genre not in ["M", "F", ""]:
                     genre = ""  # Invalid genre -> empty
                 
-                # Extract niveau from pool name (e.g., "A1 F" -> "A1")
-                niveau = equipe.poule.replace(" F", "").replace(" M", "").strip()
+                # Extract niveau from pool name (e.g., "VBFA1PA" -> "A1", "VBMA2PB" -> "A2")
+                import re
+                niveau_match = re.search(r'A([1-4])', equipe.poule)
+                if niveau_match:
+                    niveau = f"A{niveau_match.group(1)}"
+                else:
+                    # Chercher CFE ou CFU
+                    cfe_match = re.search(r'CF[EU]', equipe.poule)
+                    niveau = cfe_match.group(0) if cfe_match else equipe.poule
                 
                 pools[equipe.poule] = {
                     "id": equipe.poule,
@@ -190,6 +207,7 @@ class DataFormatter:
                     "genre": genre,
                     "niveau": niveau,
                     "equipes_ids": [],
+                    "type": types_poules.get(equipe.poule, "Classique") if types_poules else "Classique",
                 }
             
             if equipe.id_unique not in pools[equipe.poule]["equipes_ids"]:
@@ -209,6 +227,10 @@ class DataFormatter:
     @staticmethod
     def _format_matches(solution: Solution, config: Optional[Config]) -> Dict[str, List[Dict]]:
         """Format all matches (scheduled and unscheduled)."""
+        
+        # Pre-calculate context for global penalties (espacement, compaction, overlap)
+        if config:
+            DataFormatter._precalculate_penalty_context(solution, config)
         
         scheduled = []
         for idx, match in enumerate(solution.matchs_planifies):
@@ -231,6 +253,67 @@ class DataFormatter:
         }
     
     @staticmethod
+    def _precalculate_penalty_context(solution: Solution, config: Config):
+        """
+        Pre-calculate context needed for global penalties (espacement, overlap).
+        Stores results in match.metadata for later access.
+        
+        Note: Compaction penalties are pool-level and not stored per-match.
+        """
+        # Build index of matches by team
+        matches_by_team: Dict[str, List[Match]] = {}
+        for match in solution.matchs_planifies:
+            if not match.creneau:
+                continue
+            
+            team1_id = match.equipe1.id_unique
+            team2_id = match.equipe2.id_unique
+            
+            if team1_id not in matches_by_team:
+                matches_by_team[team1_id] = []
+            if team2_id not in matches_by_team:
+                matches_by_team[team2_id] = []
+            
+            matches_by_team[team1_id].append(match)
+            matches_by_team[team2_id].append(match)
+        
+        # Sort matches by week for each team (for espacement calculation)
+        for team_id in matches_by_team:
+            matches_by_team[team_id].sort(key=lambda m: m.creneau.semaine if m.creneau else 999)
+        
+        # Build index of matches by slot (for overlap calculation)
+        matches_by_slot: Dict[tuple, List[Match]] = {}  # (semaine, horaire) -> [matches]
+        for match in solution.matchs_planifies:
+            if not match.creneau:
+                continue
+            
+            slot_key = (match.creneau.semaine, match.creneau.horaire)
+            if slot_key not in matches_by_slot:
+                matches_by_slot[slot_key] = []
+            matches_by_slot[slot_key].append(match)
+        
+        # Store context in match metadata
+        for match in solution.matchs_planifies:
+            if not match.creneau:
+                continue
+            
+            if not match.metadata:
+                match.metadata = {}
+            
+            # Store team matches for espacement calculation
+            team1_matches = matches_by_team.get(match.equipe1.id_unique, [])
+            team2_matches = matches_by_team.get(match.equipe2.id_unique, [])
+            
+            match.metadata["_penalty_context"] = {
+                "team1_matches": team1_matches,
+                "team2_matches": team2_matches,
+                "slot_matches": matches_by_slot.get(
+                    (match.creneau.semaine, match.creneau.horaire), 
+                    []
+                ),
+            }
+    
+    @staticmethod
     def _format_single_match(
         match: Match, 
         index: int, 
@@ -238,6 +321,9 @@ class DataFormatter:
         config: Optional[Config]
     ) -> Dict[str, Any]:
         """Format a single match."""
+        
+        # Vérifier si le match a un genre fixé explicitement (pour les matchs fixes)
+        genre_fixe = match.metadata.get('genre_fixe') if match.metadata else None
         
         # Normalize genres to uppercase
         equipe1_genre = match.equipe1.genre.upper() if match.equipe1.genre else ""
@@ -247,6 +333,14 @@ class DataFormatter:
         equipe2_genre = match.equipe2.genre.upper() if match.equipe2.genre else ""
         if equipe2_genre not in ["M", "F", ""]:
             equipe2_genre = ""
+        
+        # Déterminer le genre du match
+        # Priorité 1: genre_fixe (pour les matchs fixes avec genre explicite)
+        # Priorité 2: détermination normale basée sur les équipes et la poule
+        if genre_fixe and genre_fixe in ['M', 'F']:
+            match_genre = genre_fixe
+        else:
+            match_genre = determiner_genre_match(equipe1_genre, equipe2_genre, match.poule)
         
         match_data = {
             "match_id": f"M_{index:04d}",
@@ -264,6 +358,7 @@ class DataFormatter:
             "equipe2_horaires_preferes": match.equipe2.horaires_preferes if match.equipe2.horaires_preferes else [],
             "poule": match.poule,
             "priorite": match.priorite,  # Added priority field
+            "genre": match_genre,  # Genre du match (M, F, ou X)
         }
         
         if is_scheduled and match.creneau:
@@ -277,15 +372,43 @@ class DataFormatter:
             })
             
             # Add score if available
-            score_data = match.metadata.get("score", {})
+            score_data = match.metadata.get("score")
             if isinstance(score_data, dict):
+                # Score déjà au format dictionnaire
                 match_data["score"] = {
                     "equipe1": score_data.get("equipe1"),
                     "equipe2": score_data.get("equipe2"),
                     "has_score": score_data.get("equipe1") is not None,
                 }
+            elif isinstance(score_data, str) and score_data.strip():
+                # Score au format string (ex: "3-1", "21-19")
+                # Parser le score
+                parts = score_data.strip().split('-')
+                if len(parts) == 2:
+                    try:
+                        equipe1_score = int(parts[0].strip())
+                        equipe2_score = int(parts[1].strip())
+                        match_data["score"] = {
+                            "equipe1": equipe1_score,
+                            "equipe2": equipe2_score,
+                            "has_score": True,
+                        }
+                    except ValueError:
+                        # Format invalide, traiter comme pas de score
+                        match_data["score"] = {
+                            "equipe1": None,
+                            "equipe2": None,
+                            "has_score": False,
+                        }
+                else:
+                    # Format invalide
+                    match_data["score"] = {
+                        "equipe1": None,
+                        "equipe2": None,
+                        "has_score": False,
+                    }
             else:
-                # Handle case where score is stored as a string or other format
+                # Pas de score disponible
                 match_data["score"] = {
                     "equipe1": None,
                     "equipe2": None,
@@ -310,6 +433,7 @@ class DataFormatter:
             # Unscheduled match
             match_data["reason"] = match.metadata.get("unscheduled_reason", "Aucun créneau disponible")
             match_data["constraints_violated"] = match.metadata.get("constraints_violated", [])
+            match_data["is_entente"] = match.metadata.get("is_entente", False)
         
         return match_data
     
@@ -347,71 +471,199 @@ class DataFormatter:
         """
         Calculate penalty for non-preferred time slots.
         
-        TODO: Implement actual calculation based on:
-        - match.equipe1.horaires_preferes
-        - match.equipe2.horaires_preferes
-        - match.creneau.horaire
-        - config.penalite_horaire_* weights
-        
-        Returns:
-            Penalty value (0.0 = preferred time, higher = worse)
+        Uses the same logic as PreferredTimeSlotConstraint.
+        Formula: penalty = multiplier × ((distance_minutes) / divisor)²
         """
-        # Placeholder: return 0.0 for now
-        return 0.0
+        if not match.creneau:
+            return 0.0
+            
+        # Get penalty parameters from config (use exact attribute names)
+        weight = getattr(config, 'penalite_apres_horaire_min', 1.0)
+        penalty_before_one = getattr(config, 'penalite_avant_horaire_min', 6.0)
+        penalty_before_both = getattr(config, 'penalite_avant_horaire_min_deux', 15.0)
+        tolerance_minutes = getattr(config, 'penalite_horaire_tolerance', 30.0)
+        divisor = getattr(config, 'penalite_horaire_diviseur', 60.0)
+        
+        def parse_horaire(horaire: str) -> int:
+            """Parse HH:MM to minutes since midnight"""
+            try:
+                parts = horaire.split(':')
+                heures = int(parts[0])
+                minutes = int(parts[1]) if len(parts) > 1 else 0
+                return heures * 60 + minutes
+            except (ValueError, IndexError):
+                return 14 * 60  # Default 14h
+        
+        def calculate_for_equipe(equipe) -> tuple:
+            """Returns (distance_minutes, is_before)"""
+            if not equipe.horaires_preferes:
+                return 0.0, False
+            
+            creneau_horaire = match.creneau.horaire
+            if creneau_horaire in equipe.horaires_preferes:
+                return 0.0, False
+            
+            horaire_match = parse_horaire(creneau_horaire)
+            horaire_pref = parse_horaire(equipe.horaires_preferes[0])
+            
+            distance_minutes = abs(horaire_match - horaire_pref)
+            
+            if distance_minutes <= tolerance_minutes:
+                return 0.0, False
+            
+            is_before = horaire_match < horaire_pref
+            return distance_minutes, is_before
+        
+        # Calculate for both teams
+        distance1, is_before1 = calculate_for_equipe(match.equipe1)
+        distance2, is_before2 = calculate_for_equipe(match.equipe2)
+        
+        if distance1 == 0 and distance2 == 0:
+            return 0.0
+        
+        # Count teams playing before their preferred time (outside tolerance)
+        nb_equipes_avant = 0
+        if distance1 > 0 and is_before1:
+            nb_equipes_avant += 1
+        if distance2 > 0 and is_before2:
+            nb_equipes_avant += 1
+        
+        # Determine multiplier
+        if nb_equipes_avant == 2:
+            multiplicateur = penalty_before_both
+        elif nb_equipes_avant == 1:
+            multiplicateur = penalty_before_one
+        else:
+            multiplicateur = weight
+        
+        # Calculate total penalty
+        penalty = 0.0
+        if distance1 > 0:
+            penalty += multiplicateur * ((distance1 / divisor) ** 2)
+        if distance2 > 0:
+            penalty += multiplicateur * ((distance2 / divisor) ** 2)
+        
+        return penalty
     
     @staticmethod
     def _calculate_espacement_penalty(match: Match, config: Config) -> float:
         """
         Calculate penalty for poor spacing between matches for same team.
         
-        TODO: Implement actual calculation based on:
-        - Time since last match for equipe1 and equipe2
-        - config.penalites_espacement_repos
-        - Minimum rest period requirements
-        
-        Note: This requires access to all matches for the teams, not just current match.
-        Consider passing additional context or pre-calculating in format_solution().
+        Uses config.penalites_espacement_repos: [penalty_0_weeks, penalty_1_week, penalty_2_weeks, ...]
+        If rest >= len(list), penalty = 0 (sufficient spacing).
         
         Returns:
             Penalty value (0.0 = good spacing, higher = worse)
         """
-        # Placeholder: return 0.0 for now
-        return 0.0
+        if not match.creneau:
+            return 0.0
+        
+        # Get penalty list from config
+        penalites = getattr(config, 'penalites_espacement_repos', [5.0, 2.0, 1.0])
+        if not penalites:
+            return 0.0
+        
+        # Get pre-calculated context
+        context = match.metadata.get("_penalty_context") if match.metadata else None
+        if not context:
+            return 0.0
+        
+        current_week = match.creneau.semaine
+        penalty = 0.0
+        
+        # Check spacing for team 1
+        team1_matches = context.get("team1_matches", [])
+        for other_match in team1_matches:
+            if other_match is match or not other_match.creneau:
+                continue
+            
+            weeks_gap = abs(current_week - other_match.creneau.semaine)
+            
+            # Apply penalty if gap is too small
+            if weeks_gap < len(penalites):
+                penalty += penalites[weeks_gap]
+        
+        # Check spacing for team 2
+        team2_matches = context.get("team2_matches", [])
+        for other_match in team2_matches:
+            if other_match is match or not other_match.creneau:
+                continue
+            
+            weeks_gap = abs(current_week - other_match.creneau.semaine)
+            
+            # Apply penalty if gap is too small
+            if weeks_gap < len(penalites):
+                penalty += penalites[weeks_gap]
+        
+        # Divide by 2 since we counted each pair twice (once per team)
+        return penalty / 2.0
     
     @staticmethod
     def _calculate_indisponibilite_penalty(match: Match, config: Config) -> float:
         """
         Calculate penalty for scheduling during unavailable periods.
         
-        TODO: Implement actual calculation based on:
-        - match.equipe1.semaines_indisponibles
-        - match.equipe2.semaines_indisponibles
-        - match.creneau.semaine and horaire
-        - config.poids_indisponibilite
-        
-        Returns:
-            Penalty value (0.0 = available, higher = conflict with unavailability)
+        semaines_indisponibles is Dict[int, Set[str]] where:
+        - key: week number
+        - value: set of unavailable time slots (or empty set = whole week unavailable)
         """
-        # Placeholder: return 0.0 for now
-        return 0.0
+        if not match.creneau:
+            return 0.0
+        
+        penalty_weight = getattr(config, 'poids_indisponibilite', 10000)
+        semaine = match.creneau.semaine
+        horaire = match.creneau.horaire
+        
+        penalty = 0.0
+        
+        # Check equipe1 unavailability
+        if hasattr(match.equipe1, 'semaines_indisponibles'):
+            indispo_horaires = match.equipe1.semaines_indisponibles.get(semaine)
+            if indispo_horaires is not None:
+                # If empty set: whole week unavailable
+                # If non-empty: specific time slots unavailable
+                if len(indispo_horaires) == 0 or horaire in indispo_horaires:
+                    penalty += penalty_weight
+        
+        # Check equipe2 unavailability
+        if hasattr(match.equipe2, 'semaines_indisponibles'):
+            indispo_horaires = match.equipe2.semaines_indisponibles.get(semaine)
+            if indispo_horaires is not None:
+                if len(indispo_horaires) == 0 or horaire in indispo_horaires:
+                    penalty += penalty_weight
+        
+        return penalty
     
     @staticmethod
     def _calculate_compaction_penalty(match: Match, config: Config) -> float:
         """
         Calculate penalty for spreading matches too much or too little across weeks.
         
-        TODO: Implement actual calculation based on:
-        - Week distribution for the pool
-        - Target compaction level from config
-        - Distance from ideal distribution
-        
-        Note: This is a global penalty that requires pool-level context.
-        Consider pre-calculating at solution level.
+        Uses config.compaction_penalites_par_semaine: [penalty_week1, penalty_week2, ...]
+        The penalty represents how undesirable it is to schedule in that week.
         
         Returns:
             Penalty value (0.0 = good distribution, higher = worse)
         """
-        # Placeholder: return 0.0 for now
+        if not match.creneau:
+            return 0.0
+        
+        # Get penalty list from config (indexed by week number - 1)
+        penalites = getattr(config, 'compaction_penalites_par_semaine', [])
+        if not penalites:
+            return 0.0
+        
+        current_week = match.creneau.semaine
+        
+        # Week indices are 0-based in the list, but semaine starts at 1 or semaine_min
+        semaine_min = getattr(config, 'semaine_min', 1)
+        week_index = current_week - semaine_min
+        
+        # Return penalty for this week if defined
+        if 0 <= week_index < len(penalites):
+            return float(penalites[week_index])
+        
         return 0.0
     
     @staticmethod
@@ -419,35 +671,79 @@ class DataFormatter:
         """
         Calculate penalty for institution overlaps (same institution, same time).
         
-        TODO: Implement actual calculation based on:
-        - Other matches at same semaine/horaire
-        - Institution of teams
-        - Overlap avoidance rules
-        
-        Note: This requires access to all matches at the same time slot.
-        Consider passing additional context or pre-calculating.
+        Uses config.overlap_institution_poids for penalty weight.
+        Checks if multiple teams from same institution play at same time.
         
         Returns:
             Penalty value (0.0 = no overlap, higher = conflicts)
         """
-        # Placeholder: return 0.0 for now
-        return 0.0
+        if not match.creneau:
+            return 0.0
+        
+        # Get penalty weight from config
+        poids = getattr(config, 'overlap_institution_poids', 10.0)
+        if poids == 0:
+            return 0.0
+        
+        # Get pre-calculated context
+        context = match.metadata.get("_penalty_context") if match.metadata else None
+        if not context:
+            return 0.0
+        
+        # Get matches at same slot
+        slot_matches = context.get("slot_matches", [])
+        if len(slot_matches) <= 1:
+            return 0.0  # No other matches at this time
+        
+        # Get institutions of current match teams
+        inst1 = match.equipe1.institution
+        inst2 = match.equipe2.institution
+        
+        penalty = 0.0
+        
+        # Check for overlaps with other matches
+        for other_match in slot_matches:
+            if other_match is match:
+                continue
+            
+            other_inst1 = other_match.equipe1.institution
+            other_inst2 = other_match.equipe2.institution
+            
+            # Count overlaps (same institution playing in both matches)
+            overlaps = 0
+            if inst1 == other_inst1 or inst1 == other_inst2:
+                overlaps += 1
+            if inst2 == other_inst1 or inst2 == other_inst2:
+                overlaps += 1
+            
+            # Apply penalty for each overlap
+            penalty += overlaps * poids
+        
+        # Divide by 2 since we'll count each pair twice when processing all matches
+        return penalty / 2.0
     
     @staticmethod
     def _format_slots(
         creneaux_disponibles: Optional[List[Creneau]],
-        solution: Solution
+        solution: Solution,
+        gymnases: Optional[List[Gymnase]] = None
     ) -> Dict[str, List[Dict]]:
         """Format slot data (available and occupied)."""
+        from collections import Counter
         
-        # Build set of occupied slots from matches
-        occupied_slots: Dict[str, Dict[str, Any]] = {}  # slot_id -> slot_data
+        # Compter le nombre de matchs par créneau (pour gérer la capacité)
+        slot_occupation = Counter()
+        occupied_with_matches = {}  # Pour garder l'info des matchs occupant les slots
+        
         for idx, match in enumerate(solution.matchs_planifies):
             if match.creneau:
-                slot_id = f"S_{match.creneau.gymnase}_{match.creneau.semaine}_{match.creneau.horaire}"
-                match_id = f"M_{idx:04d}"
+                slot_key = (match.creneau.gymnase, match.creneau.semaine, match.creneau.horaire)
+                slot_occupation[slot_key] += 1
                 
-                occupied_slots[slot_id] = {
+                match_id = f"M_{idx:04d}"
+                slot_id = f"S_{match.creneau.gymnase}_{match.creneau.semaine}_{match.creneau.horaire}_{slot_occupation[slot_key]}"
+                
+                occupied_with_matches[slot_id] = {
                     "slot_id": slot_id,
                     "gymnase": match.creneau.gymnase,
                     "semaine": match.creneau.semaine,
@@ -457,21 +753,35 @@ class DataFormatter:
                 }
         
         available = []
-        occupied = list(occupied_slots.values())
+        occupied = list(occupied_with_matches.values())
         
         # Add available slots from creneaux_disponibles
         if creneaux_disponibles:
+            # Créer un mapping gymnase -> capacité
+            gymnase_capacities = {}
+            if gymnases:
+                for gym in gymnases:
+                    gymnase_capacities[gym.nom] = gym.capacite
+            
             for creneau in creneaux_disponibles:
-                slot_id = f"S_{creneau.gymnase}_{creneau.semaine}_{creneau.horaire}"
+                slot_key = (creneau.gymnase, creneau.semaine, creneau.horaire)
+                nb_matchs_occupes = slot_occupation.get(slot_key, 0)
                 
-                # Only add if not already occupied
-                if slot_id not in occupied_slots:
+                # Récupérer la capacité du gymnase (défaut: 1)
+                capacite = gymnase_capacities.get(creneau.gymnase, 1)
+                
+                # Calculer le nombre de slots disponibles
+                nb_slots_disponibles = capacite - nb_matchs_occupes
+                
+                # Générer les slots disponibles
+                for i in range(nb_slots_disponibles):
+                    slot_id = f"S_{creneau.gymnase}_{creneau.semaine}_{creneau.horaire}_{nb_matchs_occupes + i + 1}"
                     slot_data = {
                         "slot_id": slot_id,
                         "gymnase": creneau.gymnase,
                         "semaine": creneau.semaine,
                         "horaire": creneau.horaire,
-                        "status": "libre",
+                        "status": "libre"
                     }
                     available.append(slot_data)
         

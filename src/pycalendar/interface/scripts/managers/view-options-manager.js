@@ -85,17 +85,22 @@ class ViewOptionsManager {
      */
     _generateButtonGroup(option) {
         let html = `
-            <div class="option-item">
-                <label class="option-label-full">${option.label}</label>
-                <div class="display-format-buttons">
+            <div class="option-item" style="margin-bottom: 1.5rem;">
+                <label class="option-label-full" style="display: block; font-weight: 600; margin-bottom: 0.75rem; color: #1e293b; font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.5px;">${option.label}</label>
+                <div class="display-format-buttons" style="display: flex; flex-direction: column; gap: 0.5rem;">
         `;
 
         option.values.forEach(value => {
             const isActive = value.value === option.default;
+            const activeStyles = isActive 
+                ? 'background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; font-weight: 600; box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);' 
+                : 'background: white; color: #475569; border: 2px solid #e2e8f0;';
+            
             html += `
                 <button class="display-option-btn ${isActive ? 'active' : ''}" 
                         data-option-id="${option.id}" 
-                        data-value="${value.value}">
+                        data-value="${value.value}"
+                        style="padding: 0.75rem 1rem; border-radius: 8px; border: none; cursor: pointer; transition: all 0.2s ease; font-size: 0.875rem; text-align: left; ${activeStyles}">
                     ${value.text}
                 </button>
             `;
@@ -164,10 +169,25 @@ class ViewOptionsManager {
                 if (option && option.action) {
                     option.action(value);
                     
-                    // Mettre à jour l'état visuel des boutons
+                    // Mettre à jour l'état visuel des boutons avec styles inline
                     const groupButtons = this.container.querySelectorAll(`[data-option-id="${optionId}"]`);
-                    groupButtons.forEach(btn => btn.classList.remove('active'));
+                    groupButtons.forEach(btn => {
+                        btn.classList.remove('active');
+                        // Style inactif
+                        btn.style.background = 'white';
+                        btn.style.color = '#475569';
+                        btn.style.border = '2px solid #e2e8f0';
+                        btn.style.fontWeight = 'normal';
+                        btn.style.boxShadow = 'none';
+                    });
+                    
                     e.currentTarget.classList.add('active');
+                    // Style actif
+                    e.currentTarget.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+                    e.currentTarget.style.color = 'white';
+                    e.currentTarget.style.border = 'none';
+                    e.currentTarget.style.fontWeight = '600';
+                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(102, 126, 234, 0.4)';
                 }
             });
         });

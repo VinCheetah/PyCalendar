@@ -1,14 +1,18 @@
 <!DOCTYPE html>
-<html lang="fr" data-theme="light">
+<html lang="fr" data-theme="light" data-animation-level="1">
 <head>
-    <meta charset="UTF-8">
+        <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PyCalendar FFSU - Gestion de Calendriers Sportifs</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    
+    <!-- Chart.js pour les graphiques -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     
     <!-- CSS_PLACEHOLDER -->
+
 </head>
-<body>
+<body data-animation-level="1">
     <div class="app-wrapper">
         <!-- ==================== HEADER PRINCIPAL ==================== -->
         <header class="main-header">
@@ -49,15 +53,18 @@
                 </div>
                 
                 <div class="header-right">
+                    <div class="palette-selector">
+                        <button class="palette-btn active" data-palette="purple" title="Purple Dream"></button>
+                        <button class="palette-btn" data-palette="ocean" title="Ocean Blue"></button>
+                        <button class="palette-btn" data-palette="sunset" title="Sunset Fire"></button>
+                        <button class="palette-btn" data-palette="forest" title="Forest Energy"></button>
+                    </div>
                     <div class="theme-selector">
-                        <button class="theme-btn" data-theme="light" title="Thème Clair">
+                        <button class="theme-btn active" data-theme="light" title="Thème Clair">
                             <span class="theme-icon">☀️</span>
                         </button>
                         <button class="theme-btn" data-theme="dark" title="Thème Sombre">
                             <span class="theme-icon">🌙</span>
-                        </button>
-                        <button class="theme-btn active" data-theme="tricolore" title="Thème France">
-                            <span class="theme-icon">🇫🇷</span>
                         </button>
                     </div>
                     <button class="btn-icon" id="btn-help" title="Aide">
@@ -69,11 +76,6 @@
         
         <!-- ==================== LAYOUT PRINCIPAL (3 COLONNES) ==================== -->
         <div class="main-layout">
-            
-            <!-- Bouton pour réafficher la sidebar gauche quand elle est masquée -->
-            <button class="btn-show-sidebar btn-show-left" id="btn-show-left" title="Afficher les options">
-                <span>▶</span>
-            </button>
             
             <!-- ==================== SIDEBAR GAUCHE - OPTIONS D'AFFICHAGE ==================== -->
             <aside class="sidebar sidebar-left">
@@ -100,9 +102,17 @@
                                 <span class="view-icon">🎯</span>
                                 <span class="view-name">Poules</span>
                             </button>
-                            <button class="view-btn" data-view="cards">
-                                <span class="view-icon">🃏</span>
-                                <span class="view-name">Cartes</span>
+                            <button class="view-btn" data-view="teams">
+                                <span class="view-icon">👥</span>
+                                <span class="view-name">Équipes</span>
+                            </button>
+                            <button class="view-btn" data-view="matches">
+                                <span class="view-icon">🏐</span>
+                                <span class="view-name">Matchs</span>
+                            </button>
+                            <button class="view-btn" data-view="penalties">
+                                <span class="view-icon">⚖️</span>
+                                <span class="view-name">Pénalités</span>
                             </button>
                             <button class="view-btn" data-view="calendar">
                                 <span class="view-icon">�</span>
@@ -205,6 +215,11 @@
                 </div>
             </aside>
             
+            <!-- Bouton pour réafficher la sidebar gauche quand elle est masquée -->
+            <button class="btn-show-sidebar btn-show-left" id="btn-show-left" title="Afficher les options">
+                <span>▶</span>
+            </button>
+            
             <!-- Poignée de redimensionnement gauche -->
             <div class="resize-handle resize-handle-left" id="resize-handle-left"></div>
             
@@ -225,10 +240,24 @@
                         </div>
                     </div>
                     
-                    <!-- Vue Cartes -->
-                    <div class="view-container" data-view-content="cards">
-                        <div id="cards-view">
-                            <!-- Content will be generated by cards-view.js -->
+                    <!-- Vue Équipes -->
+                    <div class="view-container" data-view-content="teams">
+                        <div id="teams-view">
+                            <!-- Content will be generated by teams-view.js -->
+                        </div>
+                    </div>
+                    
+                    <!-- Vue Matchs -->
+                    <div class="view-container" data-view-content="matches">
+                        <div id="matches-view">
+                            <!-- Content will be generated by matches-view.js -->
+                        </div>
+                    </div>
+                    
+                    <!-- Vue Pénalités -->
+                    <div class="view-container" data-view-content="penalties">
+                        <div id="penalties-view">
+                            <!-- Content will be generated by penalties-view.js -->
                         </div>
                     </div>
                     
@@ -273,45 +302,48 @@
                 
                 <div class="sidebar-content">
                     <!-- Résumé des filtres actifs -->
-                    <div class="filter-summary" id="filter-summary">
-                        <div class="summary-header">
-                            <span class="summary-title">Filtres actifs</span>
-                            <button class="btn-clear-filters" id="btn-clear-filters">Effacer tout</button>
+                    <div class="filter-summary" id="filter-summary" style="margin-bottom: 1.5rem; padding: 1rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);">
+                        <div class="summary-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+                            <span class="summary-title" style="font-size: 0.875rem; font-weight: 700; color: white; text-transform: uppercase; letter-spacing: 0.5px;">Filtres actifs</span>
+                            <button class="btn-clear-filters" id="btn-clear-filters" style="background: rgba(255, 255, 255, 0.2); color: white; border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 6px; padding: 0.375rem 0.75rem; font-size: 0.75rem; font-weight: 600; cursor: pointer; transition: all 0.2s ease;">Effacer tout</button>
                         </div>
-                        <div class="summary-tags" id="summary-tags">
+                        <div class="summary-tags" id="summary-tags" style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
                             <!-- Les tags de filtres actifs seront ajoutés ici -->
                         </div>
                     </div>
                     
                     <!-- Filtre Genre -->
-                    <div class="filter-section">
-                        <h3 class="filter-section-title">Genre</h3>
-                        <div class="filter-options">
-                            <label class="filter-option">
-                                <input type="radio" name="filter-gender" value="" checked>
-                                <span class="filter-option-label">
+                    <div class="filter-section" style="margin-bottom: 1.5rem; padding: 1rem; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border-radius: 12px; border: 1px solid rgba(226, 232, 240, 0.8); transition: all 0.3s ease;">
+                        <h3 class="filter-section-title" style="font-size: 0.875rem; font-weight: 700; color: #1e293b; margin-bottom: 0.75rem; padding-bottom: 0.75rem; border-bottom: 2px solid #e2e8f0; display: flex; align-items: center; gap: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px;">
+                            <span style="display: block; width: 3px; height: 14px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 2px;"></span>
+                            Genre
+                        </h3>
+                        <div class="filter-options" style="display: flex; flex-direction: column; gap: 0.5rem;">
+                            <label class="filter-option" style="display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 1rem; border-radius: 8px; cursor: pointer; transition: all 0.2s ease; background: white; border: 1.5px solid transparent; position: relative; overflow: hidden;">
+                                <input type="radio" name="filter-gender" value="" checked style="width: 18px; height: 18px; cursor: pointer; accent-color: #667eea; transition: transform 0.2s ease; flex-shrink: 0;">
+                                <span class="filter-option-label" style="flex: 1; font-size: 0.875rem; font-weight: 500; color: #334155; cursor: pointer; transition: color 0.2s ease; line-height: 1.4; display: flex; align-items: center; gap: 0.5rem;">
                                     <span class="option-icon">⚪</span>
                                     <span>Tous</span>
                                 </span>
                             </label>
-                            <label class="filter-option">
-                                <input type="radio" name="filter-gender" value="M">
-                                <span class="filter-option-label">
+                            <label class="filter-option" style="display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 1rem; border-radius: 8px; cursor: pointer; transition: all 0.2s ease; background: white; border: 1.5px solid transparent; position: relative; overflow: hidden;">
+                                <input type="radio" name="filter-gender" value="M" style="width: 18px; height: 18px; cursor: pointer; accent-color: #667eea; transition: transform 0.2s ease; flex-shrink: 0;">
+                                <span class="filter-option-label" style="flex: 1; font-size: 0.875rem; font-weight: 500; color: #334155; cursor: pointer; transition: color 0.2s ease; line-height: 1.4; display: flex; align-items: center; gap: 0.5rem;">
                                     <span class="option-icon">🔵</span>
                                     <span>Masculin</span>
                                 </span>
                             </label>
-                            <label class="filter-option">
-                                <input type="radio" name="filter-gender" value="F">
-                                <span class="filter-option-label">
+                            <label class="filter-option" style="display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 1rem; border-radius: 8px; cursor: pointer; transition: all 0.2s ease; background: white; border: 1.5px solid transparent; position: relative; overflow: hidden;">
+                                <input type="radio" name="filter-gender" value="F" style="width: 18px; height: 18px; cursor: pointer; accent-color: #667eea; transition: transform 0.2s ease; flex-shrink: 0;">
+                                <span class="filter-option-label" style="flex: 1; font-size: 0.875rem; font-weight: 500; color: #334155; cursor: pointer; transition: color 0.2s ease; line-height: 1.4; display: flex; align-items: center; gap: 0.5rem;">
                                     <span class="option-icon">🔴</span>
                                     <span>Féminin</span>
                                 </span>
                             </label>
-                            <label class="filter-option">
-                                <input type="radio" name="filter-gender" value="X">
-                                <span class="filter-option-label">
-                                    <span class="option-icon">�</span>
+                            <label class="filter-option" style="display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 1rem; border-radius: 8px; cursor: pointer; transition: all 0.2s ease; background: white; border: 1.5px solid transparent; position: relative; overflow: hidden;">
+                                <input type="radio" name="filter-gender" value="X" style="width: 18px; height: 18px; cursor: pointer; accent-color: #667eea; transition: transform 0.2s ease; flex-shrink: 0;">
+                                <span class="filter-option-label" style="flex: 1; font-size: 0.875rem; font-weight: 500; color: #334155; cursor: pointer; transition: color 0.2s ease; line-height: 1.4; display: flex; align-items: center; gap: 0.5rem;">
+                                    <span class="option-icon">🟣</span>
                                     <span>Mixte</span>
                                 </span>
                             </label>
@@ -319,105 +351,183 @@
                     </div>
                     
                     <!-- Filtre Semaine -->
-                    <div class="filter-section">
-                        <h3 class="filter-section-title">Semaine</h3>
-                        <select class="filter-select" id="filter-week">
+                    <div class="filter-section" style="margin-bottom: 1.5rem; padding: 1rem; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border-radius: 12px; border: 1px solid rgba(226, 232, 240, 0.8); transition: all 0.3s ease;">
+                        <h3 class="filter-section-title" style="font-size: 0.875rem; font-weight: 700; color: #1e293b; margin-bottom: 0.75rem; padding-bottom: 0.75rem; border-bottom: 2px solid #e2e8f0; display: flex; align-items: center; gap: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px;">
+                            <span style="display: block; width: 3px; height: 14px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 2px;"></span>
+                            Semaine
+                        </h3>
+                        <select class="filter-select" id="filter-week" style="width: 100%; padding: 0.75rem 1rem; border: 1.5px solid #e2e8f0; border-radius: 8px; background: white; font-size: 0.875rem; font-weight: 500; cursor: pointer; transition: all 0.2s ease; outline: none; color: #334155;">
                             <option value="">Toutes les semaines</option>
                             <!-- Options will be populated by JS -->
                         </select>
                     </div>
                     
                     <!-- Filtre Poule -->
-                    <div class="filter-section">
-                        <h3 class="filter-section-title">Poule</h3>
-                        <select class="filter-select" id="filter-pool">
+                    <div class="filter-section" style="margin-bottom: 1.5rem; padding: 1rem; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border-radius: 12px; border: 1px solid rgba(226, 232, 240, 0.8); transition: all 0.3s ease;">
+                        <h3 class="filter-section-title" style="font-size: 0.875rem; font-weight: 700; color: #1e293b; margin-bottom: 0.75rem; padding-bottom: 0.75rem; border-bottom: 2px solid #e2e8f0; display: flex; align-items: center; gap: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px;">
+                            <span style="display: block; width: 3px; height: 14px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 2px;"></span>
+                            Poule
+                        </h3>
+                        <select class="filter-select" id="filter-pool" style="width: 100%; padding: 0.75rem 1rem; border: 1.5px solid #e2e8f0; border-radius: 8px; background: white; font-size: 0.875rem; font-weight: 500; cursor: pointer; transition: all 0.2s ease; outline: none; color: #334155;">
                             <option value="">Toutes les poules</option>
                             <!-- Options will be populated by JS -->
                         </select>
                     </div>
                     
                     <!-- Filtre Institution -->
-                    <div class="filter-section">
-                        <h3 class="filter-section-title">Institution</h3>
-                        <select class="filter-select" id="filter-institution">
+                    <div class="filter-section" style="margin-bottom: 1.5rem; padding: 1rem; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border-radius: 12px; border: 1px solid rgba(226, 232, 240, 0.8); transition: all 0.3s ease;">
+                        <h3 class="filter-section-title" style="font-size: 0.875rem; font-weight: 700; color: #1e293b; margin-bottom: 0.75rem; padding-bottom: 0.75rem; border-bottom: 2px solid #e2e8f0; display: flex; align-items: center; gap: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px;">
+                            <span style="display: block; width: 3px; height: 14px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 2px;"></span>
+                            Institution
+                        </h3>
+                        <select class="filter-select" id="filter-institution" style="width: 100%; padding: 0.75rem 1rem; border: 1.5px solid #e2e8f0; border-radius: 8px; background: white; font-size: 0.875rem; font-weight: 500; cursor: pointer; transition: all 0.2s ease; outline: none; color: #334155;">
                             <option value="">Toutes les institutions</option>
                             <!-- Options will be populated by JS -->
                         </select>
                     </div>
                     
+                    <!-- Filtre Équipe -->
+                    <div class="filter-section" style="margin-bottom: 1.5rem; padding: 1rem; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border-radius: 12px; border: 1px solid rgba(226, 232, 240, 0.8); transition: all 0.3s ease;">
+                        <h3 class="filter-section-title" style="font-size: 0.875rem; font-weight: 700; color: #1e293b; margin-bottom: 0.75rem; padding-bottom: 0.75rem; border-bottom: 2px solid #e2e8f0; display: flex; align-items: center; gap: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px;">
+                            <span style="display: block; width: 3px; height: 14px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 2px;"></span>
+                            Équipe <span id="equipe-count" style="color: #94a3b8; font-weight: 400; margin-left: 0.25rem;">(0)</span>
+                        </h3>
+                        <select class="filter-select" id="filter-equipe" style="width: 100%; padding: 0.75rem 1rem; border: 1.5px solid #e2e8f0; border-radius: 8px; background: white; font-size: 0.875rem; font-weight: 500; cursor: pointer; transition: all 0.2s ease; outline: none; color: #334155;">
+                            <option value="">Toutes les équipes</option>
+                            <!-- Options will be populated by JS -->
+                        </select>
+                    </div>
+                    
                     <!-- Filtre Gymnase -->
-                    <div class="filter-section">
-                        <h3 class="filter-section-title">Gymnase</h3>
-                        <select class="filter-select" id="filter-venue">
+                    <div class="filter-section" style="margin-bottom: 1.5rem; padding: 1rem; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border-radius: 12px; border: 1px solid rgba(226, 232, 240, 0.8); transition: all 0.3s ease;">
+                        <h3 class="filter-section-title" style="font-size: 0.875rem; font-weight: 700; color: #1e293b; margin-bottom: 0.75rem; padding-bottom: 0.75rem; border-bottom: 2px solid #e2e8f0; display: flex; align-items: center; gap: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px;">
+                            <span style="display: block; width: 3px; height: 14px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 2px;"></span>
+                            Gymnase
+                        </h3>
+                        <select class="filter-select" id="filter-venue" style="width: 100%; padding: 0.75rem 1rem; border: 1.5px solid #e2e8f0; border-radius: 8px; background: white; font-size: 0.875rem; font-weight: 500; cursor: pointer; transition: all 0.2s ease; outline: none; color: #334155;">
                             <option value="">Tous les gymnases</option>
                             <!-- Options will be populated by JS -->
                         </select>
                     </div>
                     
                     <!-- Filtre Jour de la semaine -->
-                    <div class="filter-section">
-                        <h3 class="filter-section-title">Jour</h3>
-                        <div class="filter-days">
-                            <label class="day-option">
-                                <input type="checkbox" name="filter-day" value="1">
-                                <span class="day-label">L</span>
+                    <div class="filter-section" style="margin-bottom: 1.5rem; padding: 1rem; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border-radius: 12px; border: 1px solid rgba(226, 232, 240, 0.8); transition: all 0.3s ease;">
+                        <h3 class="filter-section-title" style="font-size: 0.875rem; font-weight: 700; color: #1e293b; margin-bottom: 0.75rem; padding-bottom: 0.75rem; border-bottom: 2px solid #e2e8f0; display: flex; align-items: center; gap: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px;">
+                            <span style="display: block; width: 3px; height: 14px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 2px;"></span>
+                            Jour
+                        </h3>
+                        <div class="filter-days" style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 0.5rem;">
+                            <label class="day-option" style="position: relative; cursor: pointer;">
+                                <input type="checkbox" name="filter-day" value="1" style="display: none;">
+                                <span class="day-label" style="display: block; padding: 0.75rem 0; text-align: center; font-size: 0.75rem; font-weight: 700; color: #64748b; background: rgba(226, 232, 240, 0.5); backdrop-filter: blur(10px); border: 1.5px solid #e2e8f0; border-radius: 8px; cursor: pointer; transition: all 0.2s ease; text-transform: uppercase; letter-spacing: 0.3px;">L</span>
                             </label>
-                            <label class="day-option">
-                                <input type="checkbox" name="filter-day" value="2">
-                                <span class="day-label">M</span>
+                            <label class="day-option" style="position: relative; cursor: pointer;">
+                                <input type="checkbox" name="filter-day" value="2" style="display: none;">
+                                <span class="day-label" style="display: block; padding: 0.75rem 0; text-align: center; font-size: 0.75rem; font-weight: 700; color: #64748b; background: rgba(226, 232, 240, 0.5); backdrop-filter: blur(10px); border: 1.5px solid #e2e8f0; border-radius: 8px; cursor: pointer; transition: all 0.2s ease; text-transform: uppercase; letter-spacing: 0.3px;">M</span>
                             </label>
-                            <label class="day-option">
-                                <input type="checkbox" name="filter-day" value="3">
-                                <span class="day-label">M</span>
+                            <label class="day-option" style="position: relative; cursor: pointer;">
+                                <input type="checkbox" name="filter-day" value="3" style="display: none;">
+                                <span class="day-label" style="display: block; padding: 0.75rem 0; text-align: center; font-size: 0.75rem; font-weight: 700; color: #64748b; background: rgba(226, 232, 240, 0.5); backdrop-filter: blur(10px); border: 1.5px solid #e2e8f0; border-radius: 8px; cursor: pointer; transition: all 0.2s ease; text-transform: uppercase; letter-spacing: 0.3px;">M</span>
                             </label>
-                            <label class="day-option">
-                                <input type="checkbox" name="filter-day" value="4">
-                                <span class="day-label">J</span>
+                            <label class="day-option" style="position: relative; cursor: pointer;">
+                                <input type="checkbox" name="filter-day" value="4" style="display: none;">
+                                <span class="day-label" style="display: block; padding: 0.75rem 0; text-align: center; font-size: 0.75rem; font-weight: 700; color: #64748b; background: rgba(226, 232, 240, 0.5); backdrop-filter: blur(10px); border: 1.5px solid #e2e8f0; border-radius: 8px; cursor: pointer; transition: all 0.2s ease; text-transform: uppercase; letter-spacing: 0.3px;">J</span>
                             </label>
-                            <label class="day-option">
-                                <input type="checkbox" name="filter-day" value="5">
-                                <span class="day-label">V</span>
+                            <label class="day-option" style="position: relative; cursor: pointer;">
+                                <input type="checkbox" name="filter-day" value="5" style="display: none;">
+                                <span class="day-label" style="display: block; padding: 0.75rem 0; text-align: center; font-size: 0.75rem; font-weight: 700; color: #64748b; background: rgba(226, 232, 240, 0.5); backdrop-filter: blur(10px); border: 1.5px solid #e2e8f0; border-radius: 8px; cursor: pointer; transition: all 0.2s ease; text-transform: uppercase; letter-spacing: 0.3px;">V</span>
                             </label>
-                            <label class="day-option">
-                                <input type="checkbox" name="filter-day" value="6">
-                                <span class="day-label">S</span>
+                            <label class="day-option" style="position: relative; cursor: pointer;">
+                                <input type="checkbox" name="filter-day" value="6" style="display: none;">
+                                <span class="day-label" style="display: block; padding: 0.75rem 0; text-align: center; font-size: 0.75rem; font-weight: 700; color: #64748b; background: rgba(226, 232, 240, 0.5); backdrop-filter: blur(10px); border: 1.5px solid #e2e8f0; border-radius: 8px; cursor: pointer; transition: all 0.2s ease; text-transform: uppercase; letter-spacing: 0.3px;">S</span>
                             </label>
-                            <label class="day-option">
-                                <input type="checkbox" name="filter-day" value="0">
-                                <span class="day-label">D</span>
+                            <label class="day-option" style="position: relative; cursor: pointer;">
+                                <input type="checkbox" name="filter-day" value="0" style="display: none;">
+                                <span class="day-label" style="display: block; padding: 0.75rem 0; text-align: center; font-size: 0.75rem; font-weight: 700; color: #64748b; background: rgba(226, 232, 240, 0.5); backdrop-filter: blur(10px); border: 1.5px solid #e2e8f0; border-radius: 8px; cursor: pointer; transition: all 0.2s ease; text-transform: uppercase; letter-spacing: 0.3px;">D</span>
                             </label>
                         </div>
                     </div>
                     
                     <!-- Filtre Heure -->
-                    <div class="filter-section">
-                        <h3 class="filter-section-title">Horaires</h3>
-                        <div class="time-range-filter">
-                            <div class="time-input-group">
-                                <label class="time-label">De</label>
-                                <input type="time" class="time-input" id="filter-time-start" value="08:00">
+                    <div class="filter-section" style="margin-bottom: 1.5rem; padding: 1rem; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border-radius: 12px; border: 1px solid rgba(226, 232, 240, 0.8); transition: all 0.3s ease;">
+                        <h3 class="filter-section-title" style="font-size: 0.875rem; font-weight: 700; color: #1e293b; margin-bottom: 0.75rem; padding-bottom: 0.75rem; border-bottom: 2px solid #e2e8f0; display: flex; align-items: center; gap: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px;">
+                            <span style="display: block; width: 3px; height: 14px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 2px;"></span>
+                            Horaires
+                        </h3>
+                        <div class="time-range-filter" style="display: flex; gap: 0.75rem;">
+                            <div class="time-input-group" style="flex: 1;">
+                                <label class="time-label" style="display: block; font-size: 0.75rem; font-weight: 700; color: #1e293b; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px;">De</label>
+                                <input type="time" class="time-input" id="filter-time-start" value="08:00" style="width: 100%; padding: 0.75rem; border: 2px solid #e2e8f0; border-radius: 8px; background: white; font-size: 0.875rem; font-family: 'Inter', monospace; font-weight: 600; transition: all 0.2s ease; outline: none; color: #334155;">
                             </div>
-                            <div class="time-input-group">
-                                <label class="time-label">À</label>
-                                <input type="time" class="time-input" id="filter-time-end" value="20:00">
+                            <div class="time-input-group" style="flex: 1;">
+                                <label class="time-label" style="display: block; font-size: 0.75rem; font-weight: 700; color: #1e293b; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px;">À</label>
+                                <input type="time" class="time-input" id="filter-time-end" value="20:00" style="width: 100%; padding: 0.75rem; border: 2px solid #e2e8f0; border-radius: 8px; background: white; font-size: 0.875rem; font-family: 'Inter', monospace; font-weight: 600; transition: all 0.2s ease; outline: none; color: #334155;">
                             </div>
                         </div>
                     </div>
                     
+                    <!-- Filtre Statut (pour la vue Matchs) -->
+                    <div class="filter-section" id="filter-section-status" style="margin-bottom: 1.5rem; padding: 1rem; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border-radius: 12px; border: 1px solid rgba(226, 232, 240, 0.8); transition: all 0.3s ease; display: none;">
+                        <h3 class="filter-section-title" style="font-size: 0.875rem; font-weight: 700; color: #1e293b; margin-bottom: 0.75rem; padding-bottom: 0.75rem; border-bottom: 2px solid #e2e8f0; display: flex; align-items: center; gap: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px;">
+                            <span style="display: block; width: 3px; height: 14px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 2px;"></span>
+                            Statut des matchs
+                        </h3>
+                        <div class="filter-options" style="display: flex; flex-direction: column; gap: 0.5rem;">
+                            <label class="filter-option" style="display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 1rem; border-radius: 8px; cursor: pointer; transition: all 0.2s ease; background: white; border: 1.5px solid transparent; position: relative; overflow: hidden;">
+                                <input type="radio" name="filter-status" value="all" checked style="width: 18px; height: 18px; cursor: pointer; accent-color: #667eea; transition: transform 0.2s ease; flex-shrink: 0;">
+                                <span class="filter-option-label" style="flex: 1; font-size: 0.875rem; font-weight: 500; color: #334155; cursor: pointer; transition: color 0.2s ease; line-height: 1.4; display: flex; align-items: center; gap: 0.5rem;">
+                                    <span class="option-icon">⚪</span>
+                                    <span>Tous les matchs</span>
+                                </span>
+                            </label>
+                            <label class="filter-option" style="display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 1rem; border-radius: 8px; cursor: pointer; transition: all 0.2s ease; background: white; border: 1.5px solid transparent; position: relative; overflow: hidden;">
+                                <input type="radio" name="filter-status" value="fixed" style="width: 18px; height: 18px; cursor: pointer; accent-color: #667eea; transition: transform 0.2s ease; flex-shrink: 0;">
+                                <span class="filter-option-label" style="flex: 1; font-size: 0.875rem; font-weight: 500; color: #334155; cursor: pointer; transition: color 0.2s ease; line-height: 1.4; display: flex; align-items: center; gap: 0.5rem;">
+                                    <span class="option-icon">🔒</span>
+                                    <span>Fixés</span>
+                                </span>
+                            </label>
+                            <label class="filter-option" style="display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 1rem; border-radius: 8px; cursor: pointer; transition: all 0.2s ease; background: white; border: 1.5px solid transparent; position: relative; overflow: hidden;">
+                                <input type="radio" name="filter-status" value="scheduled" style="width: 18px; height: 18px; cursor: pointer; accent-color: #667eea; transition: transform 0.2s ease; flex-shrink: 0;">
+                                <span class="filter-option-label" style="flex: 1; font-size: 0.875rem; font-weight: 500; color: #334155; cursor: pointer; transition: color 0.2s ease; line-height: 1.4; display: flex; align-items: center; gap: 0.5rem;">
+                                    <span class="option-icon">✅</span>
+                                    <span>Planifiés</span>
+                                </span>
+                            </label>
+                            <label class="filter-option" style="display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 1rem; border-radius: 8px; cursor: pointer; transition: all 0.2s ease; background: white; border: 1.5px solid transparent; position: relative; overflow: hidden;">
+                                <input type="radio" name="filter-status" value="unscheduled" style="width: 18px; height: 18px; cursor: pointer; accent-color: #667eea; transition: transform 0.2s ease; flex-shrink: 0;">
+                                <span class="filter-option-label" style="flex: 1; font-size: 0.875rem; font-weight: 500; color: #334155; cursor: pointer; transition: color 0.2s ease; line-height: 1.4; display: flex; align-items: center; gap: 0.5rem;">
+                                    <span class="option-icon">❌</span>
+                                    <span>Non planifiés</span>
+                                </span>
+                            </label>
+                            <label class="filter-option" style="display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 1rem; border-radius: 8px; cursor: pointer; transition: all 0.2s ease; background: white; border: 1.5px solid transparent; position: relative; overflow: hidden;">
+                                <input type="radio" name="filter-status" value="entente" style="width: 18px; height: 18px; cursor: pointer; accent-color: #667eea; transition: transform 0.2s ease; flex-shrink: 0;">
+                                <span class="filter-option-label" style="flex: 1; font-size: 0.875rem; font-weight: 500; color: #334155; cursor: pointer; transition: color 0.2s ease; line-height: 1.4; display: flex; align-items: center; gap: 0.5rem;">
+                                    <span class="option-icon">🤝</span>
+                                    <span>Ententes</span>
+                                </span>
+                            </label>
+                        </div>
+                    </div>
+                    
                     <!-- Filtre Conflits -->
-                    <div class="filter-section">
-                        <h3 class="filter-section-title">État</h3>
-                        <div class="filter-options">
-                            <label class="filter-option">
-                                <input type="checkbox" name="filter-state" value="conflict">
-                                <span class="filter-option-label">
+                    <div class="filter-section" style="margin-bottom: 1.5rem; padding: 1rem; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border-radius: 12px; border: 1px solid rgba(226, 232, 240, 0.8); transition: all 0.3s ease;">
+                        <h3 class="filter-section-title" style="font-size: 0.875rem; font-weight: 700; color: #1e293b; margin-bottom: 0.75rem; padding-bottom: 0.75rem; border-bottom: 2px solid #e2e8f0; display: flex; align-items: center; gap: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px;">
+                            <span style="display: block; width: 3px; height: 14px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 2px;"></span>
+                            État
+                        </h3>
+                        <div class="filter-options" style="display: flex; flex-direction: column; gap: 0.5rem;">
+                            <label class="filter-option" style="display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 1rem; border-radius: 8px; cursor: pointer; transition: all 0.2s ease; background: white; border: 1.5px solid transparent; position: relative; overflow: hidden;">
+                                <input type="checkbox" name="filter-state" value="conflict" style="width: 18px; height: 18px; cursor: pointer; accent-color: #667eea; transition: transform 0.2s ease; flex-shrink: 0;">
+                                <span class="filter-option-label" style="flex: 1; font-size: 0.875rem; font-weight: 500; color: #334155; cursor: pointer; transition: color 0.2s ease; line-height: 1.4; display: flex; align-items: center; gap: 0.5rem;">
                                     <span class="option-icon">⚠️</span>
                                     <span>Avec conflits</span>
                                 </span>
                             </label>
-                            <label class="filter-option">
-                                <input type="checkbox" name="filter-state" value="modified">
-                                <span class="filter-option-label">
+                            <label class="filter-option" style="display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 1rem; border-radius: 8px; cursor: pointer; transition: all 0.2s ease; background: white; border: 1.5px solid transparent; position: relative; overflow: hidden;">
+                                <input type="checkbox" name="filter-state" value="modified" style="width: 18px; height: 18px; cursor: pointer; accent-color: #667eea; transition: transform 0.2s ease; flex-shrink: 0;">
+                                <span class="filter-option-label" style="flex: 1; font-size: 0.875rem; font-weight: 500; color: #334155; cursor: pointer; transition: color 0.2s ease; line-height: 1.4; display: flex; align-items: center; gap: 0.5rem;">
                                     <span class="option-icon">✏️</span>
                                     <span>Modifiés</span>
                                 </span>
@@ -426,11 +536,14 @@
                     </div>
                     
                     <!-- Recherche textuelle -->
-                    <div class="filter-section">
-                        <h3 class="filter-section-title">Recherche</h3>
-                        <div class="search-box">
-                            <input type="text" class="search-input" id="filter-search" placeholder="Rechercher...">
-                            <span class="search-icon">🔍</span>
+                    <div class="filter-section" style="margin-bottom: 1.5rem; padding: 1rem; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border-radius: 12px; border: 1px solid rgba(226, 232, 240, 0.8); transition: all 0.3s ease;">
+                        <h3 class="filter-section-title" style="font-size: 0.875rem; font-weight: 700; color: #1e293b; margin-bottom: 0.75rem; padding-bottom: 0.75rem; border-bottom: 2px solid #e2e8f0; display: flex; align-items: center; gap: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px;">
+                            <span style="display: block; width: 3px; height: 14px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 2px;"></span>
+                            Recherche
+                        </h3>
+                        <div class="search-box" style="position: relative;">
+                            <input type="text" class="search-input" id="filter-search" placeholder="Rechercher..." style="width: 100%; padding: 0.75rem 1rem; padding-right: 2.5rem; border: 1.5px solid #e2e8f0; border-radius: 8px; background: white; font-size: 0.875rem; font-weight: 500; transition: all 0.2s ease; outline: none; color: #334155;">
+                            <span class="search-icon" style="position: absolute; right: 1rem; top: 50%; transform: translateY(-50%); font-size: 1rem; pointer-events: none;">🔍</span>
                         </div>
                     </div>
                 </div>
@@ -487,11 +600,10 @@
                     
                     <section class="help-section">
                         <h3>🎨 Thèmes</h3>
-                        <p>Trois thèmes sont disponibles :</p>
+                        <p>Deux thèmes sont disponibles :</p>
                         <ul>
-                            <li><strong>Clair ☀️</strong> : Thème par défaut, optimal pour la journée</li>
-                            <li><strong>Sombre 🌙</strong> : Réduit la fatigue oculaire</li>
-                            <li><strong>France 🇫🇷</strong> : Couleurs tricolores (bleu, blanc, rouge)</li>
+                            <li><strong>Clair ☀️</strong> : Thème moderne et lumineux (par défaut)</li>
+                            <li><strong>Sombre 🌙</strong> : Réduit la fatigue oculaire en environnement peu éclairé</li>
                         </ul>
                     </section>
                     

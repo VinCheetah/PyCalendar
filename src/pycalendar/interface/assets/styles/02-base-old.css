@@ -1,0 +1,297 @@
+/**
+ * PyCalendar Interface - Base Styles
+ * Typography, utilities, and common patterns
+ */
+
+/* ==================== TYPOGRAPHY ==================== */
+
+body {
+    font-size: var(--text-base);
+    line-height: 1.6;
+}
+
+h1 {
+    font-size: var(--text-4xl);
+    font-weight: 800;
+    line-height: 1.2;
+}
+
+h2 {
+    font-size: var(--text-3xl);
+    font-weight: 700;
+    line-height: 1.3;
+}
+
+h3 {
+    font-size: var(--text-2xl);
+    font-weight: 600;
+    line-height: 1.4;
+}
+
+h4 {
+    font-size: var(--text-xl);
+    font-weight: 600;
+    line-height: 1.5;
+}
+
+h5 {
+    font-size: var(--text-lg);
+    font-weight: 500;
+    line-height: 1.5;
+}
+
+h6 {
+    font-size: var(--text-base);
+    font-weight: 500;
+    line-height: 1.5;
+}
+
+small {
+    font-size: var(--text-sm);
+}
+
+/* ==================== UTILITIES ==================== */
+
+.text-center {
+    text-align: center;
+}
+
+.text-right {
+    text-align: right;
+}
+
+.text-left {
+    text-align: left;
+}
+
+.font-bold {
+    font-weight: 700;
+}
+
+.font-semibold {
+    font-weight: 600;
+}
+
+.font-medium {
+    font-weight: 500;
+}
+
+.text-muted {
+    color: var(--gray);
+}
+
+.text-sm {
+    font-size: var(--text-sm);
+}
+
+.text-xs {
+    font-size: var(--text-xs);
+}
+
+/* ==================== FLEX UTILITIES ==================== */
+
+.flex {
+    display: flex;
+}
+
+.flex-col {
+    flex-direction: column;
+}
+
+.flex-wrap {
+    flex-wrap: wrap;
+}
+
+.items-center {
+    align-items: center;
+}
+
+.items-start {
+    align-items: flex-start;
+}
+
+.items-end {
+    align-items: flex-end;
+}
+
+.justify-center {
+    justify-content: center;
+}
+
+.justify-between {
+    justify-content: space-between;
+}
+
+.justify-start {
+    justify-content: flex-start;
+}
+
+.justify-end {
+    justify-content: flex-end;
+}
+
+.gap-1 {
+    gap: var(--spacing-xs);
+}
+
+.gap-2 {
+    gap: var(--spacing-sm);
+}
+
+.gap-3 {
+    gap: var(--spacing-md);
+}
+
+.gap-4 {
+    gap: var(--spacing-lg);
+}
+
+/* ==================== GRID UTILITIES ==================== */
+
+.grid {
+    display: grid;
+}
+
+.grid-cols-2 {
+    grid-template-columns: repeat(2, 1fr);
+}
+
+.grid-cols-3 {
+    grid-template-columns: repeat(3, 1fr);
+}
+
+.grid-cols-4 {
+    grid-template-columns: repeat(4, 1fr);
+}
+
+/* ==================== SPACING UTILITIES ==================== */
+
+.m-0 { margin: 0; }
+.mt-1 { margin-top: var(--spacing-xs); }
+.mt-2 { margin-top: var(--spacing-sm); }
+.mt-3 { margin-top: var(--spacing-md); }
+.mt-4 { margin-top: var(--spacing-lg); }
+
+.mb-1 { margin-bottom: var(--spacing-xs); }
+.mb-2 { margin-bottom: var(--spacing-sm); }
+.mb-3 { margin-bottom: var(--spacing-md); }
+.mb-4 { margin-bottom: var(--spacing-lg); }
+
+.p-0 { padding: 0; }
+.p-1 { padding: var(--spacing-xs); }
+.p-2 { padding: var(--spacing-sm); }
+.p-3 { padding: var(--spacing-md); }
+.p-4 { padding: var(--spacing-lg); }
+
+/* ==================== BORDERS ==================== */
+
+.border {
+    border: 1px solid var(--border);
+}
+
+.border-t {
+    border-top: 1px solid var(--border);
+}
+
+.border-b {
+    border-bottom: 1px solid var(--border);
+}
+
+.border-l {
+    border-left: 1px solid var(--border);
+}
+
+.border-r {
+    border-right: 1px solid var(--border);
+}
+
+.rounded {
+    border-radius: var(--radius-md);
+}
+
+.rounded-sm {
+    border-radius: var(--radius-sm);
+}
+
+.rounded-lg {
+    border-radius: var(--radius-lg);
+}
+
+.rounded-xl {
+    border-radius: var(--radius-xl);
+}
+
+.rounded-full {
+    border-radius: var(--radius-full);
+}
+
+/* ==================== SHADOWS ==================== */
+
+.shadow-sm {
+    box-shadow: var(--shadow-sm);
+}
+
+.shadow {
+    box-shadow: var(--shadow);
+}
+
+.shadow-lg {
+    box-shadow: var(--shadow-lg);
+}
+
+.shadow-xl {
+    box-shadow: var(--shadow-xl);
+}
+
+/* ==================== VISIBILITY ==================== */
+
+.hidden {
+    display: none !important;
+}
+
+.invisible {
+    visibility: hidden;
+}
+
+.visible {
+    visibility: visible;
+}
+
+/* ==================== TRANSITIONS ==================== */
+
+.transition {
+    transition: all var(--transition-base);
+}
+
+.transition-fast {
+    transition: all var(--transition-fast);
+}
+
+.transition-slow {
+    transition: all var(--transition-slow);
+}
+
+/* ==================== SCROLLBAR STYLING ==================== */
+
+* {
+    scrollbar-width: thin;
+    scrollbar-color: var(--gray-light) var(--light);
+}
+
+*::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+    background: var(--light);
+}
+
+*::-webkit-scrollbar-thumb {
+    background: var(--gray-light);
+    border-radius: var(--radius-full);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+    background: var(--gray);
+}

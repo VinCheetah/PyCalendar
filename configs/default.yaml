@@ -27,7 +27,7 @@ greedy:
 
 # Configuration CP-SAT (OR-Tools)
 cpsat:
-  temps_max_secondes: 60  # Minimum time needed for complex models (267+ matches). Lower values may cause UNKNOWN status.
+  temps_max_secondes: 120  # Minimum time needed for complex models (267+ matches). Lower values may cause UNKNOWN status.
   afficher_progression: false  # true = affiche détails du solver, false = silencieux
   niveau_log: 1
   warm_start: true  # Utilise la dernière solution comme point de départ (accélère la résolution)
@@ -72,7 +72,7 @@ contraintes:
   compaction_penalites_par_semaine: [0, 0, 5, 10, 10, 15, 20, 35]  # Pénalité par semaine (indice 0 = semaine 1)
 
   # Overlaps institution (contrainte souple)
-  overlap_institution_actif: true
+  overlap_institution_actif: false
   overlap_institution_poids: 10.0     # Pénalité pour matchs simultanés de même institution
 
   # Ententes (matchs entre institutions spécifiques - pénalité réduite si non planifiées)
@@ -170,7 +170,7 @@ contraintes:
   
   # Ententes (matchs entre institutions spécifiques - pénalité réduite si non planifiés)
   entente_actif: true
-  entente_penalite_non_planif: 20.0  # Pénalité par défaut si match entente non planifié
+  entente_penalite_non_planif: 30.0  # Pénalité par défaut si match entente non planifié
   
   # Contraintes temporelles (matchs à planifier avant/après une semaine - ex: CFE)
   contrainte_temporelle_actif: true

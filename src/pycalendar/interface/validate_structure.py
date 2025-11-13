@@ -48,6 +48,7 @@ EXPECTED_STRUCTURE = {
         '__init__.py',
         'agenda-view.js',
         'pools-view.js',
+        'teams-view.js',
         'cards-view.js',
     ],
     'templates': [

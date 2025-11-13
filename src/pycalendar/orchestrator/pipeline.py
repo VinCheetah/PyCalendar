@@ -32,6 +32,7 @@ class SchedulingPipeline:
         self.ententes = {}
         self.contraintes_temporelles = {}
         self.niveaux_gymnases = {}
+        self.types_poules = {}  # Store pool types for export
     
     def run(self):
         """Execute the complete scheduling pipeline."""
@@ -242,22 +243,27 @@ class SchedulingPipeline:
             return []
     
     def _exclure_matchs_fixes(self, matchs, matchs_fixes):
-        """Exclut les matchs déjà fixés de la liste des matchs à planifier."""
+        """
+        Exclut les matchs déjà fixés de la liste des matchs à planifier.
+        
+        Pour les poules aller-retour, A→B et B→A sont des matchs différents,
+        donc on utilise l'ordre exact des équipes.
+        """
         if not matchs_fixes:
             return matchs
         
-        # Créer un ensemble des paires d'équipes déjà fixées (ordre non important)
-        paires_fixes = set()
+        # Créer un ensemble des matchs fixés avec l'ordre exact (direction compte)
+        matchs_fixes_set = set()
         for match_fixe in matchs_fixes:
-            eq1, eq2 = match_fixe.equipe1.nom, match_fixe.equipe2.nom
-            paires_fixes.add(tuple(sorted([eq1, eq2])))
+            # Utiliser l'ID unique pour être sûr (nom peut avoir duplicates)
+            key = (match_fixe.equipe1.id_unique, match_fixe.equipe2.id_unique)
+            matchs_fixes_set.add(key)
         
         # Filtrer les matchs
         matchs_a_planifier = []
         for match in matchs:
-            eq1, eq2 = match.equipe1.nom, match.equipe2.nom
-            paire = tuple(sorted([eq1, eq2]))
-            if paire not in paires_fixes:
+            key = (match.equipe1.id_unique, match.equipe2.id_unique)
+            if key not in matchs_fixes_set:
                 matchs_a_planifier.append(match)
         
         nb_exclus = len(matchs) - len(matchs_a_planifier)
@@ -267,28 +273,34 @@ class SchedulingPipeline:
         return matchs_a_planifier
     
     def _exclure_creneaux_fixes(self, creneaux, matchs_fixes, gymnases):
-        """Exclut les créneaux occupés par les matchs fixes."""
-        if not matchs_fixes:
-            return creneaux
+        """
+        ANCIEN COMPORTEMENT (INCORRECT):
+        Excluait complètement les créneaux occupés par matchs fixes.
+        → Bloquait les gymnases multi-capacités !
         
-        # Créer un ensemble des créneaux occupés
-        creneaux_occupes = set()
-        for match_fixe in matchs_fixes:
-            meta = match_fixe.metadata
-            creneaux_occupes.add((meta['gymnase'], meta['semaine'], meta['horaire']))
+        NOUVEAU COMPORTEMENT (CORRECT):
+        Ne fait RIEN - les créneaux restent disponibles.
+        La gestion de capacité est faite dans les solveurs qui soustraient
+        les matchs fixés de la capacité disponible.
         
-        # Filtrer les créneaux
-        creneaux_disponibles = []
-        for creneau in creneaux:
-            key = (creneau.gymnase, creneau.semaine, creneau.horaire)
-            if key not in creneaux_occupes:
-                creneaux_disponibles.append(creneau)
+        Cette fonction est conservée pour compatibilité mais devient un no-op.
+        """
+        # Ne rien faire - garder TOUS les créneaux disponibles
+        # Les solveurs gèrent la capacité restante après matchs fixés
         
-        nb_exclus = len(creneaux) - len(creneaux_disponibles)
-        if nb_exclus > 0:
-            print(f"  ℹ️  {nb_exclus} créneaux exclus (occupés par matchs fixes)")
+        # Afficher un message informatif
+        if matchs_fixes:
+            print(f"  ℹ️  {len(matchs_fixes)} matchs fixes seront comptés dans la capacité des gymnases")
+            
+            # Compter combien de créneaux ont des matchs fixés (pour info)
+            creneaux_avec_fixes = set()
+            for match_fixe in matchs_fixes:
+                meta = match_fixe.metadata
+                creneaux_avec_fixes.add((meta['gymnase'], meta['semaine'], meta['horaire']))
+            print(f"  ℹ️  {len(creneaux_avec_fixes)} créneaux affectés par des matchs fixes")
         
-        return creneaux_disponibles
+        # Retourner TOUS les créneaux sans exclusion
+        return creneaux
     
     def _integrer_matchs_fixes(self, solution, matchs_fixes, gymnases):
         """Intègre les matchs fixes dans la solution finale."""
@@ -338,31 +350,54 @@ class SchedulingPipeline:
         print("⚙️  Génération des matchs...")
         
         # Load pool types
-        types_poules = self.source.charger_types_poules()
+        self.types_poules = self.source.charger_types_poules()
         
         # Display pool types summary
-        if types_poules:
-            nb_aller_retour = sum(1 for t in types_poules.values() if t == 'Aller-Retour')
-            nb_classique = len(types_poules) - nb_aller_retour
+        if self.types_poules:
+            nb_aller_retour = sum(1 for t in self.types_poules.values() if t == 'Aller-Retour')
+            nb_classique = len(self.types_poules) - nb_aller_retour
             if nb_aller_retour > 0:
                 print(f"   Types: {nb_classique} poule(s) Classique, {nb_aller_retour} poule(s) Aller-Retour")
         
         # Generate matches with per-pool types
-        generator = MultiPoolGenerator(types_poules if types_poules else False)
+        generator = MultiPoolGenerator(self.types_poules if self.types_poules else False)
         matchs = generator.generer_tous_matchs(poules)
+        
+        # Marquer les matchs d'entente
+        if self.ententes:
+            nb_ententes = 0
+            for match in matchs:
+                inst1 = match.equipe1.institution
+                inst2 = match.equipe2.institution
+                # Créer une clé triée comme dans le chargement des ententes
+                cle = tuple(sorted([inst1, inst2]))
+                if cle in self.ententes:
+                    match.metadata['is_entente'] = True
+                    nb_ententes += 1
+            if nb_ententes > 0:
+                print(f"   {nb_ententes} match(s) d'entente identifié(s)")
         
         print(f"✓ {len(matchs)} matchs générés")
         return matchs
     
     def _resoudre(self, matchs, creneaux, gymnases, matchs_fixes=None):
-        """Solve the scheduling problem with optional warm start."""
+        """Solve the scheduling problem with optional warm start.
+        
+        Args:
+            matchs: Matchs à planifier (sans les matchs fixés)
+            creneaux: Créneaux disponibles (sans ceux occupés par matchs fixés)
+            gymnases: Dictionnaire des gymnases
+            matchs_fixes: Matchs déjà planifiés/fixés (pour calcul des pénalités)
+        """
         print(f"🧮 Résolution avec algorithme: {self.config.strategie.upper()}\n")
         
         gymnases_dict = {g.nom: g for g in gymnases}
         
         if self.config.strategie == "greedy":
             solver = GreedySolver(self.config, self.groupes_non_simultaneite, self.ententes, self.contraintes_temporelles, self.niveaux_gymnases)
-            solution = solver.solve(matchs, creneaux, gymnases_dict, self.obligations_presence)
+            # Les matchs fixés sont passés au solver mais ne seront pas replanifiés
+            # Ils seront utilisés pour initialiser le solution_state
+            solution = solver.solve(matchs, creneaux, gymnases_dict, self.obligations_presence, matchs_fixes)
             
             return solution
         
@@ -370,7 +405,7 @@ class SchedulingPipeline:
             if not CPSAT_AVAILABLE:
                 print("⚠️  OR-Tools non installé, basculement vers Greedy")
                 solver = GreedySolver(self.config, self.groupes_non_simultaneite, self.ententes, self.contraintes_temporelles, self.niveaux_gymnases)
-                return solver.solve(matchs, creneaux, gymnases_dict, self.obligations_presence)
+                return solver.solve(matchs, creneaux, gymnases_dict, self.obligations_presence, matchs_fixes)
             
             solver = CPSATSolver(self.config, self.groupes_non_simultaneite, self.ententes, self.contraintes_temporelles, self.niveaux_gymnases)
             try:
@@ -378,15 +413,16 @@ class SchedulingPipeline:
                 use_warm_start = getattr(self.config, 'cpsat_warm_start', True)
                 solution = solver.solve(matchs, creneaux, gymnases_dict, 
                                        self.obligations_presence,
-                                       use_warm_start=use_warm_start)
+                                       use_warm_start=use_warm_start,
+                                       matchs_fixes=matchs_fixes)
                 
                 return solution
                 
             except Exception as e:
                 if self.config.fallback_greedy:
                     print(f"⚠️  CP-SAT a échoué ({e}), basculement vers Greedy")
-                    solver = GreedySolver(self.config, self.groupes_non_simultaneite, self.ententes)
-                    return solver.solve(matchs, creneaux, gymnases_dict, self.obligations_presence)
+                    solver = GreedySolver(self.config, self.groupes_non_simultaneite, self.ententes, self.contraintes_temporelles, self.niveaux_gymnases)
+                    return solver.solve(matchs, creneaux, gymnases_dict, self.obligations_presence, matchs_fixes)
                 raise
         
         else:
@@ -432,7 +468,8 @@ class SchedulingPipeline:
                 fixed_matches=matchs_fixes,
                 equipes=equipes,  # Passer les objets Equipe complets
                 gymnases=gymnases,  # Passer les objets Gymnase complets
-                creneaux=creneaux  # Passer TOUS les créneaux (disponibles + occupés)
+                creneaux=creneaux,  # Passer TOUS les créneaux (disponibles + occupés)
+                types_poules=self.types_poules  # Passer les types de poules
             )
             
             # Validation automatique après sauvegarde
@@ -519,7 +556,7 @@ class SchedulingPipeline:
         # Générer l'interface HTML interactive
         html_path = self.config.fichier_sortie.replace('.xlsx', '.html')
         generator = InterfaceGenerator()
-        html_file = generator.generate(solution, html_path, self.config)
+        html_file = generator.generate(solution, html_path, self.config, types_poules=self.types_poules)
         
         print(f"\n🌐 Ouvrez le calendrier dans votre navigateur:")
         print(f"   file://{html_file}")

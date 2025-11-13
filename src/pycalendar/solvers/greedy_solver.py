@@ -5,7 +5,7 @@ from typing import List, Dict, Optional, Set
 from pycalendar.core.models import Match, Creneau, Gymnase, Solution
 from pycalendar.core.config import Config
 from pycalendar.constraints.base import ConstraintValidator
-from pycalendar.constraints.venue_constraints import VenueCapacityConstraint, VenueAvailabilityConstraint
+from pycalendar.constraints.venue_constraints import VenueCapacityConstraint, VenueAvailabilityConstraint, VenuePresenceObligationConstraint
 from pycalendar.constraints.team_constraints import (TeamAvailabilityConstraint, MaxMatchesPerWeekConstraint, 
                                           TeamNotPlayingSimultaneouslyConstraint)
 from pycalendar.constraints.schedule_constraints import (MinSpacingConstraint, LoadBalancingConstraint,
@@ -169,16 +169,19 @@ class GreedySolver(BaseSolver):
     
     def _calculer_penalite_niveau_gymnase(self, match: Match, creneau: Creneau) -> float:
         """
-        Calcule la pénalité/bonus pour les niveaux de gymnase.
+        Calcule la pénalité pour les niveaux de gymnase.
+        
+        Pénalise les assignations inappropriées de matchs selon le niveau du gymnase.
+        Valeurs positives = pénalité (augmente le coût, à éviter).
         
         Args:
             match: Le match à planifier
             creneau: Le créneau candidat
             
         Returns:
-            Pénalité finale (plus petit = meilleur, valeurs négatives = bonus)
+            Pénalité finale (valeur positive = pénalité, 0 = neutre)
         """
-        if not self.config.bonus_niveau_gymnases_haut or not self.config.bonus_niveau_gymnases_bas or not self.niveaux_gymnases:
+        if not self.config.penalite_niveau_gymnases_haut or not self.config.penalite_niveau_gymnases_bas or not self.niveaux_gymnases:
             return 0.0
         
         # Déterminer le niveau du match
@@ -191,36 +194,41 @@ class GreedySolver(BaseSolver):
         if not niveau_gymnase:
             return 0.0
         
-        # Calculer le bonus (négatif = bonus)
-        bonus = 0
-        if niveau_gymnase == 'Haut niveau' and niveau_match < len(self.config.bonus_niveau_gymnases_haut):
-            bonus = self.config.bonus_niveau_gymnases_haut[niveau_match]
-        elif niveau_gymnase == 'Bas niveau' and niveau_match < len(self.config.bonus_niveau_gymnases_bas):
-            bonus = self.config.bonus_niveau_gymnases_bas[niveau_match]
+        # Calculer la pénalité selon le niveau du gymnase et du match
+        penalite = 0.0
+        if niveau_gymnase == 'Haut niveau' and niveau_match < len(self.config.penalite_niveau_gymnases_haut):
+            penalite = self.config.penalite_niveau_gymnases_haut[niveau_match]
+        elif niveau_gymnase == 'Bas niveau' and niveau_match < len(self.config.penalite_niveau_gymnases_bas):
+            penalite = self.config.penalite_niveau_gymnases_bas[niveau_match]
         
-        return -bonus  # Négatif car bonus = réduction de pénalité
+        return penalite  # Retourne directement la pénalité (positif = mauvais)
     
     def solve(self, matchs: List[Match], creneaux: List[Creneau], 
-             gymnases: Dict[str, Gymnase], obligations_presence: Dict[str, str] = {}) -> Solution:
+             gymnases: Dict[str, Gymnase], obligations_presence: Dict[str, str] = {}, 
+             matchs_fixes: Optional[List[Match]] = None) -> Solution:
         """Solve using greedy algorithm with multiple attempts.
         
         Args:
             matchs: List of matches to schedule
             creneaux: List of available time slots
             gymnases: Dict of venues
-            obligations_presence: Optional dict of venue -> required institution
+            obligations_presence: Équipes qui doivent jouer dans un gymnase spécifique
+            matchs_fixes: Fixed matches (already scheduled) to consider for penalties
+            
+        Returns:
+            Best solution found
         """
+        self.validator = self._build_validator()
         
-        self.validator.add_constraint(VenueCapacityConstraint(gymnases))
-        self.validator.add_constraint(VenueAvailabilityConstraint(gymnases))
-        
-        # Ajouter la contrainte d'obligation de présence si fournie
         if obligations_presence:
-            from pycalendar.constraints.venue_constraints import VenuePresenceObligationConstraint
             self.validator.add_constraint(VenuePresenceObligationConstraint(
                 obligations=obligations_presence,
                 weight=self.config.poids_indisponibilite
             ))
+        
+        # Les matchs fixés ne doivent pas être dans la liste matchs (ils sont déjà exclus par le pipeline)
+        # Mais on les utilise pour initialiser le solution_state
+        matchs_fixes_list = matchs_fixes or []
         
         best_solution = None
         best_score = float('inf')
@@ -229,7 +237,7 @@ class GreedySolver(BaseSolver):
             if self.config.afficher_progression and self.config.niveau_log >= 1:
                 print(f"  Essai {essai + 1}/{self.config.nb_essais}...", end=" ")
             
-            solution = self._solve_once(matchs.copy(), creneaux.copy(), gymnases)
+            solution = self._solve_once(matchs.copy(), creneaux.copy(), gymnases, matchs_fixes_list)
             
             if solution.est_complete() or solution.score < best_score:
                 best_solution = solution
@@ -244,8 +252,15 @@ class GreedySolver(BaseSolver):
         return best_solution
     
     def _solve_once(self, matchs: List[Match], creneaux: List[Creneau], 
-                   gymnases: Dict[str, Gymnase]) -> Solution:
-        """Single greedy solve attempt."""
+                   gymnases: Dict[str, Gymnase], matchs_fixes: Optional[List[Match]] = None) -> Solution:
+        """Single greedy solve attempt.
+        
+        Args:
+            matchs: Matches to schedule
+            creneaux: Available time slots
+            gymnases: Dict of venues
+            matchs_fixes: Fixed matches (already scheduled) to consider for penalties
+        """
         
         # Trier les matchs pour placer les ententes en dernier (priorité plus faible)
         if self.config.entente_actif:
@@ -259,7 +274,8 @@ class GreedySolver(BaseSolver):
         
         random.shuffle(creneaux)
         
-        solution_state = self._create_solution_state()
+        # Créer l'état initial en incluant les matchs fixés
+        solution_state = self._create_solution_state(matchs_fixes or [])
         matchs_planifies = []
         matchs_non_planifies = []
         total_penalty = 0.0

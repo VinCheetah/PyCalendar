@@ -30,11 +30,20 @@ class MatchCardRenderer {
         if (match.is_external) classes.push('match-external');
         if (isDraggable && !match.is_fixed) classes.push('match-draggable');
         
-        // Genre
+        // Genre - Add proper classes for color coding
         const genre = match.equipe1_genre || match.equipe2_genre;
         if (genre) {
-            classes.push(genre === 'M' ? 'match-male' : 'match-female');
+            if (genre === 'M') {
+                classes.push('match-male', 'male');
+            } else if (genre === 'F') {
+                classes.push('match-female', 'female');
+            } else if (genre === 'X') {
+                classes.push('mixed');
+            }
         }
+        
+        // Niveau/Catégorie - Extract from match data
+        const category = this.extractCategory(match);
         
         // Pénalités
         const hasPenalties = match.penalties && match.penalties.total > 0;
@@ -50,48 +59,52 @@ class MatchCardRenderer {
         const equipe1Data = this.dataManager ? this.dataManager.getEquipe(match.equipe1_id) : null;
         const equipe2Data = this.dataManager ? this.dataManager.getEquipe(match.equipe2_id) : null;
         
-        return `
+        const html = `
             <div class="${classes.join(' ')}" 
                  data-match-id="${match.match_id}"
+                 data-category="${category}"
+                 data-genre="${genre || ''}"
+                 data-penalties="${match.penalties?.total || 0}"
                  ${isDraggable && !match.is_fixed ? 'draggable="true"' : ''}>
                 
-                <div class="match-card-content" title="${this.buildMatchTooltip(match, equipe1Data, equipe2Data)}">
+                <div class="match-card-content" title="${this.buildMatchTooltip(match, equipe1Data, equipe2Data)}" style="display: flex; flex-direction: column; height: 100%; font-size: 0.7rem;">
                     
-                    <div class="match-header">
-                        <div class="match-header-left">
+                    <div class="match-header" style="margin-bottom: 0.3rem; padding-bottom: 0.3rem; border-bottom: 1px solid rgba(255, 255, 255, 0.25); display: flex; justify-content: space-between; align-items: flex-start;">
+                        <div class="match-header-left" style="display: flex; align-items: center; gap: 0.3rem; flex-wrap: wrap;">
                             ${this.renderMatchBadges(match)}
                             ${this.renderGenreIndicator(genre)}
+                            ${this.renderCompactCategory(match)}
                         </div>
-                        <div class="match-header-right">
+                        <div class="match-header-right" style="display: flex; align-items: center; gap: 0.3rem; flex-wrap: wrap;">
                             ${conflicts && conflicts.hasConflict ? this.renderConflictBadge(conflicts) : ''}
-                            ${match.horaire ? `<span class="match-time">${match.horaire}</span>` : ''}
+                            ${match.horaire ? `<span class="match-time" style="font-size: 0.625rem; font-weight: 800; padding: 0.15rem 0.4rem; background: rgba(255, 255, 255, 0.3); border-radius: 4px; font-family: 'Roboto Mono', monospace; letter-spacing: 0.03em; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15); border: 1px solid rgba(255, 255, 255, 0.2);">${match.horaire}</span>` : ''}
                         </div>
                     </div>
                     
-                    <div class="match-teams">
-                        ${this.renderTeam(
+                    <div class="match-teams" style="display: flex; flex-direction: column; gap: 0.3rem; flex: 1;">
+                        ${this.renderTeamCompact(
                             match.equipe1_nom, 
-                            match.equipe1_num, 
-                            match.equipe1_institution, 
+                            match.equipe1_num,
                             equipe1Data,
-                            isCompact
+                            match
                         )}
-                        <div class="match-vs">vs</div>
-                        ${this.renderTeam(
+                        <div class="match-vs" style="font-size: 0.625rem; font-weight: 900; margin: 0.3rem 0; opacity: 0.8; text-transform: uppercase; letter-spacing: 0.1em; color: rgba(255, 255, 255, 0.9); text-align: center; font-family: 'Roboto', sans-serif;">vs</div>
+                        ${this.renderTeamCompact(
                             match.equipe2_nom, 
-                            match.equipe2_num, 
-                            match.equipe2_institution, 
+                            match.equipe2_num,
                             equipe2Data,
-                            isCompact
+                            match
                         )}
                     </div>
                     
-                    ${!isCompact ? this.renderMatchDetails(match) : ''}
+                    ${this.renderCompactMatchInfo(match)}
                     
                 </div>
-                ${hasPenalties ? this.renderPenaltyIndicator(penalties) : ''}
+                ${hasPenalties ? this.renderPenaltyIndicator(match.penalties) : ''}
             </div>
         `;
+        
+        return html;
     }
     
     /**
@@ -109,6 +122,38 @@ class MatchCardRenderer {
                     <span class="team-name">${displayName}</span>
                 </div>
                 ${!isCompact && institution ? `<span class="team-institution">${this.shortenInstitution(institution)}</span>` : ''}
+            </div>
+        `;
+    }
+    
+    /**
+     * Rendu compact d'une équipe (sans institution, plus petit)
+     */
+    renderTeamCompact(nom, num, equipeData, match) {
+        const displayName = this.shortenName(nom);
+        const displayNum = num ? `#${num}` : '';
+        
+        // Horaires préférés - afficher SEULEMENT si l'horaire n'est PAS préféré
+        let prefTimeDisplay = '';
+        
+        if (equipeData && equipeData.horaires_preferes && equipeData.horaires_preferes.length > 0) {
+            const matchTime = match.horaire;
+            const preferredTime = equipeData.horaires_preferes[0]; // Premier horaire préféré
+            const hasPreferredTime = matchTime && matchTime.includes(preferredTime);
+            
+            if (!hasPreferredTime) {
+                // L'horaire n'est PAS préféré - afficher l'horaire préféré
+                prefTimeDisplay = `<span class="pref-time" style="font-size: 0.625rem; font-weight: 700; padding: 0.15rem 0.4rem; background: rgba(255, 223, 0, 0.25); border-radius: 4px; display: inline-flex; align-items: center; gap: 0.15rem; border: 1px solid rgba(255, 223, 0, 0.4); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2), 0 0 8px rgba(255, 223, 0, 0.3); font-family: 'Roboto Mono', monospace; letter-spacing: 0.03em;" title="Horaire préféré">⏰${preferredTime}</span>`;
+            }
+        }
+        
+        return `
+            <div class="team-info-compact" style="display: flex; flex-direction: row; align-items: center; gap: 0.3rem; width: 100%;">
+                ${displayNum ? `<span class="team-num-compact" style="font-size: 0.65rem; font-weight: 800; background: rgba(255, 255, 255, 0.25); padding: 0.15rem 0.35rem; border-radius: 4px; letter-spacing: 0.03em; font-family: 'Roboto Mono', 'Courier New', monospace; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15); border: 1px solid rgba(255, 255, 255, 0.15);">${displayNum}</span>` : ''}
+                <div class="team-content" style="display: flex; flex-direction: column; gap: 0.15rem; flex: 1; min-width: 0;">
+                    <span class="team-name-compact" style="font-size: 0.75rem; font-weight: 700; line-height: 1.3; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3); letter-spacing: 0.02em; font-family: 'Inter', 'Segoe UI', -apple-system, sans-serif; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${displayName}</span>
+                    ${prefTimeDisplay}
+                </div>
             </div>
         `;
     }
@@ -150,7 +195,40 @@ class MatchCardRenderer {
         const icon = genre === 'M' ? '♂️' : genre === 'F' ? '♀️' : '⚥';
         const label = genre === 'M' ? 'Masculin' : genre === 'F' ? 'Féminin' : 'Mixte';
         
-        return `<span class="genre-indicator" title="${label}">${icon}</span>`;
+        return `<span class="genre-indicator" style="font-size: 0.8rem; filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.3)); margin-right: 0.15rem;" title="${label}">${icon}</span>`;
+    }
+    
+    /**
+     * Catégorie/Niveau compact
+     */
+    renderCompactCategory(match) {
+        const category = this.extractCategory(match);
+        if (!category) return '';
+        
+        return `<span class="category-compact" style="font-size: 0.65rem; font-weight: 900; padding: 0.15rem 0.4rem; background: rgba(255, 255, 255, 0.35); border-radius: 4px; text-transform: uppercase; letter-spacing: 0.08em; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2); font-family: 'Roboto', 'Arial', sans-serif; border: 1px solid rgba(255, 255, 255, 0.2);" title="Niveau">${category}</span>`;
+    }
+    
+    /**
+     * Informations compactes du match (poule + score + horaires préférés)
+     */
+    renderCompactMatchInfo(match) {
+        const info = [];
+        
+        // Poule
+        if (match.poule && match.poule !== 'nan' && match.poule !== 'null') {
+            info.push(`<span class="info-poule" style="font-weight: 800; padding: 0.15rem 0.4rem; background: rgba(255, 255, 255, 0.3); border-radius: 4px; text-transform: uppercase; letter-spacing: 0.05em; font-family: 'Roboto', sans-serif; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15); border: 1px solid rgba(255, 255, 255, 0.2);">${match.poule}</span>`);
+        }
+        
+        // Score si disponible - vérifier tous les champs nécessaires
+        if (match.score && match.score.has_score && 
+            match.score.equipe1 !== null && match.score.equipe1 !== undefined &&
+            match.score.equipe2 !== null && match.score.equipe2 !== undefined) {
+            info.push(`<span class="info-score" style="font-weight: 900; padding: 0.2rem 0.5rem; background: rgba(255, 255, 255, 0.4); border-radius: 5px; letter-spacing: 0.08em; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25); font-family: 'Roboto Mono', monospace; font-size: 0.7rem; border: 1px solid rgba(255, 255, 255, 0.25);">${match.score.equipe1}-${match.score.equipe2}</span>`);
+        }
+        
+        if (info.length === 0) return '';
+        
+        return `<div class="match-info-compact" style="display: flex; gap: 0.4rem; align-items: center; justify-content: center; margin-top: 0.4rem; padding-top: 0.4rem; border-top: 1px solid rgba(255, 255, 255, 0.3); font-size: 0.625rem;">${info.join(' ')}</div>`;
     }
     
     /**
@@ -160,20 +238,20 @@ class MatchCardRenderer {
         const badges = [];
         
         if (match.is_fixed) {
-            badges.push('<span class="match-badge badge-fixed" title="Match fixé">📌</span>');
+            badges.push('<span class="match-badge badge-fixed" style="font-size: 0.7rem; padding: 0.15rem 0.3rem; border-radius: 4px; background: rgba(255, 255, 255, 0.25); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);" title="Match fixé">📌</span>');
         }
         
         if (match.is_external) {
-            badges.push('<span class="match-badge badge-external" title="Match externe">🔗</span>');
+            badges.push('<span class="match-badge badge-external" style="font-size: 0.7rem; padding: 0.15rem 0.3rem; border-radius: 4px; background: rgba(255, 255, 255, 0.25); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);" title="Match externe">🔗</span>');
         }
         
         if (match.is_entente) {
-            badges.push('<span class="match-badge badge-entente" title="Entente">🤝</span>');
+            badges.push('<span class="match-badge badge-entente" style="font-size: 0.7rem; padding: 0.15rem 0.3rem; border-radius: 4px; background: rgba(255, 255, 255, 0.25); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);" title="Entente">🤝</span>');
         }
         
         if (badges.length === 0) return '';
         
-        return `<div class="match-badges">${badges.join('')}</div>`;
+        return `<div class="match-badges" style="display: flex; gap: 0.25rem;">${badges.join('')}</div>`;
     }
     
     /**
@@ -413,6 +491,61 @@ class MatchCardRenderer {
         }
         
         return name.substring(0, 15) + '...';
+    }
+    
+    /**
+    /**
+     * Extrait la catégorie/niveau du match (A1, A2, A3, A4, CFE, CFU)
+     * Cherche dans le nom des équipes ou dans les données du match
+     */
+    extractCategory(match) {
+        // 1. Essayer d'extraire depuis le champ poule (ex: "VBFA1PA" -> "A1")
+        if (match.poule) {
+            // Chercher A1-A4
+            const pouleMatch = match.poule.match(/A([1-4])/i);
+            if (pouleMatch) {
+                return `A${pouleMatch[1]}`;
+            }
+            
+            // Chercher CFE ou CFU
+            const cfeMatch = match.poule.match(/CF[EU]/i);
+            if (cfeMatch) {
+                return cfeMatch[0].toUpperCase();
+            }
+        }
+        
+        // 2. Essayer d'extraire depuis le nom de l'équipe
+        const teamNames = [match.equipe1_nom, match.equipe2_nom].join(' ');
+        
+        // Chercher A1, A2, A3, A4
+        const categoryMatch = teamNames.match(/A([1-4])/i);
+        if (categoryMatch) {
+            return `A${categoryMatch[1]}`;
+        }
+        
+        // Chercher CFE ou CFU
+        const cfeMatch = teamNames.match(/CF[EU]/i);
+        if (cfeMatch) {
+            return cfeMatch[0].toUpperCase();
+        }
+        
+        // 3. Si le match a un champ category/niveau
+        if (match.category) {
+            const cat = match.category.toUpperCase();
+            if (cat.match(/^(A[1-4]|CFE|CFU)$/)) {
+                return cat;
+            }
+        }
+        
+        if (match.niveau) {
+            const niv = match.niveau.toUpperCase();
+            if (niv.match(/^(A[1-4]|CFE|CFU)$/)) {
+                return niv;
+            }
+        }
+        
+        // Par défaut
+        return '';
     }
 }
 

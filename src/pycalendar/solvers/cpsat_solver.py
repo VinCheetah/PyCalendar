@@ -322,7 +322,8 @@ class CPSATSolver(BaseSolver):
     
     def solve(self, matchs: List[Match], creneaux: List[Creneau], 
              gymnases: Dict[str, Gymnase], obligations_presence: Optional[Dict[str, str]] = None,
-             use_warm_start: bool = True, solution_store = None) -> Solution:
+             use_warm_start: bool = True, solution_store = None, 
+             matchs_fixes: Optional[List[Match]] = None) -> Solution:
         """
         Solve using CP-SAT constraint programming with optional warm start.
         
@@ -333,6 +334,7 @@ class CPSATSolver(BaseSolver):
             obligations_presence: Contraintes de présence par gymnase
             use_warm_start: Si True, tente d'utiliser une solution précédente comme point de départ
             solution_store: Instance de SolutionStore (créée automatiquement si None)
+            matchs_fixes: Matchs déjà planifiés/fixés (pour calcul des contraintes)
             
         Returns:
             Solution trouvée
@@ -340,6 +342,37 @@ class CPSATSolver(BaseSolver):
         
         if self.config.afficher_progression:
             print("CP-SAT solver - Création du modèle...")
+        
+        if obligations_presence is None:
+            obligations_presence = {}
+        
+        # Compter les matchs fixes par équipe/semaine et par créneau
+        # pour les contraintes de max matchs par semaine et capacité des gymnases
+        matchs_fixes_par_equipe_semaine = {}
+        matchs_fixes_par_creneau = {}  # Nouveau: compte matchs fixés par créneau (semaine, gymnase, horaire)
+        if matchs_fixes:
+            for match_fixe in matchs_fixes:
+                if match_fixe.metadata and 'semaine' in match_fixe.metadata:
+                    semaine = match_fixe.metadata['semaine']
+                    # Compter par équipe/semaine
+                    for equipe_id in [match_fixe.equipe1.id_unique, match_fixe.equipe2.id_unique]:
+                        key = (equipe_id, semaine)
+                        matchs_fixes_par_equipe_semaine[key] = matchs_fixes_par_equipe_semaine.get(key, 0) + 1
+                    
+                    # Compter par créneau pour gérer la capacité
+                    if 'horaire' in match_fixe.metadata and 'gymnase' in match_fixe.metadata:
+                        # Normaliser l'horaire (strip whitespace)
+                        horaire_normalise = match_fixe.metadata['horaire'].strip()
+                        gymnase_normalise = match_fixe.metadata['gymnase'].strip()
+                        creneau_key = (semaine, gymnase_normalise, horaire_normalise)
+                        matchs_fixes_par_creneau[creneau_key] = matchs_fixes_par_creneau.get(creneau_key, 0) + 1
+        
+        # Debug: afficher les matchs fixés par créneau
+        if matchs_fixes_par_creneau and self.config.afficher_progression:
+            print(f"\n📌 Matchs fixés détectés sur créneaux:")
+            for key, count in matchs_fixes_par_creneau.items():
+                semaine, gym, horaire = key
+                print(f"   S{semaine}, {gym}, {horaire}: {count} match(s) fixé(s)")
         
         if obligations_presence is None:
             obligations_presence = {}
@@ -370,21 +403,51 @@ class CPSATSolver(BaseSolver):
         for i in range(len(matchs)):
             model.Add(sum(assignment_vars[(i, j)] for j in range(len(creneaux_valides))) == match_assigned[i])
         
-        # CONTRAINTE 2: Capacité des gymnases (avec support de capacité réduite)
+        # CONTRAINTE 2: Capacité des gymnases (avec support de capacité réduite et matchs fixés)
+        capacites_debug = []  # Pour debug
         for j in range(len(creneaux_valides)):
             creneau = creneaux_valides[j]
             gymnase = gymnases.get(creneau.gymnase)
             if gymnase:
                 # Utiliser la capacité disponible (qui peut être réduite)
                 capacite_disponible = gymnase.get_capacite_disponible(creneau.semaine, creneau.horaire)
-                model.Add(sum(assignment_vars[(i, j)] for i in range(len(matchs))) <= capacite_disponible)
+                
+                # Soustraire le nombre de matchs fixés déjà placés sur ce créneau
+                # Normaliser pour assurer la correspondance
+                creneau_key = (creneau.semaine, creneau.gymnase.strip(), creneau.horaire.strip())
+                matchs_fixes_sur_creneau = matchs_fixes_par_creneau.get(creneau_key, 0)
+                capacite_restante = capacite_disponible - matchs_fixes_sur_creneau
+                
+                # Debug
+                if matchs_fixes_sur_creneau > 0:
+                    capacites_debug.append({
+                        'creneau': f"S{creneau.semaine}, {creneau.gymnase}, {creneau.horaire}",
+                        'capacite_dispo': capacite_disponible,
+                        'matchs_fixes': matchs_fixes_sur_creneau,
+                        'capacite_restante': capacite_restante
+                    })
+                
+                # S'assurer que la capacité restante est positive
+                if capacite_restante > 0:
+                    model.Add(sum(assignment_vars[(i, j)] for i in range(len(matchs))) <= capacite_restante)
+                else:
+                    # Pas de capacité restante, interdire tous les matchs sur ce créneau
+                    for i in range(len(matchs)):
+                        model.Add(assignment_vars[(i, j)] == 0)
+        
+        # Afficher le debug des capacités
+        if capacites_debug and self.config.afficher_progression:
+            print(f"\n🏟️  Capacités réduites par matchs fixés:")
+            for info in capacites_debug:
+                print(f"   {info['creneau']}: {info['capacite_dispo']} - {info['matchs_fixes']} = {info['capacite_restante']}")
         
         # CONTRAINTE 3: Disponibilité des équipes (DURE)
+        # Vérifier la disponibilité avec le gymnase pour tenir compte des disponibilités anticipées
         for i, match in enumerate(matchs):
             for j, creneau in enumerate(creneaux_valides):
-                if not match.equipe1.est_disponible(creneau.semaine, creneau.horaire):
+                if not match.equipe1.est_disponible(creneau.semaine, creneau.horaire, creneau.gymnase):
                     model.Add(assignment_vars[(i, j)] == 0)
-                if not match.equipe2.est_disponible(creneau.semaine, creneau.horaire):
+                if not match.equipe2.est_disponible(creneau.semaine, creneau.horaire, creneau.gymnase):
                     model.Add(assignment_vars[(i, j)] == 0)
         
         # CONTRAINTE 3bis: Contraintes temporelles (mode dur si activé)
@@ -431,6 +494,9 @@ class CPSATSolver(BaseSolver):
         
         for equipe_id in equipes_uniques:
             for semaine in range(self.config.semaine_min, self.config.nb_semaines + 1):
+                # Compter les matchs fixés déjà planifiés pour cette équipe/semaine
+                matchs_fixes_count = matchs_fixes_par_equipe_semaine.get((equipe_id, semaine), 0)
+                
                 # Trouver tous les créneaux valides de cette semaine
                 indices_semaine_valides = [j for j, c in enumerate(creneaux_valides) if c.semaine == semaine]
                 
@@ -441,9 +507,10 @@ class CPSATSolver(BaseSolver):
                         for j in indices_semaine_valides:
                             vars_equipe_semaine.append(assignment_vars[(i, j)])
                 
-                # Limiter le nombre de matchs
+                # Limiter le nombre de matchs (en tenant compte des matchs déjà fixés)
                 if vars_equipe_semaine:
-                    model.Add(sum(vars_equipe_semaine) <= max_matchs_semaine)
+                    limite = max(0, max_matchs_semaine - matchs_fixes_count)
+                    model.Add(sum(vars_equipe_semaine) <= limite)
         
         # CONTRAINTE 6: Obligations de présence
         for i, match in enumerate(matchs):
@@ -476,8 +543,8 @@ class CPSATSolver(BaseSolver):
                 # Match entente : bonus réduit = pénalité faible si non planifié
                 bonus = int(self._get_penalite_entente(match))
             else:
-                # Match normal : grand bonus = forte pénalité si non planifié
-                bonus = 10000
+                # Match normal : bonus configurable = pénalité si non planifié
+                bonus = int(self.config.penalite_match_non_planif)
             objective_terms.append(bonus * match_assigned[i])
         
         # Pénalités pour préférences horaires (sophistiquée avec distance)
@@ -524,9 +591,10 @@ class CPSATSolver(BaseSolver):
                     # Ajouter la pénalité (négative car on maximise)
                     objective_terms.append(-int(penalty) * assignment_vars[(i, j)])
         
-        # Bonus pour gymnases par niveau (classification haut/bas niveau)
-        # Applique un bonus positif quand un match est assigné à un gymnase de niveau approprié
-        if self.niveaux_gymnases and (self.config.bonus_niveau_gymnases_haut or self.config.bonus_niveau_gymnases_bas):
+        # Pénalités pour gymnases par niveau (classification haut/bas niveau)
+        # Applique une pénalité quand un match est assigné à un gymnase inapproprié
+        # Valeurs positives = pénalité (augmente le coût, à éviter)
+        if self.niveaux_gymnases and (self.config.penalite_niveau_gymnases_haut or self.config.penalite_niveau_gymnases_bas):
             for i, match in enumerate(matchs):
                 # Déterminer le niveau du match (basé sur la poule: A1=0, A2=1, A3=2, A4=3)
                 niveau_match = self._get_niveau_match(match)
@@ -539,18 +607,19 @@ class CPSATSolver(BaseSolver):
                     if not niveau_gymnase:
                         continue
                     
-                    # Calculer le bonus selon le niveau du gymnase et du match
-                    bonus = 0
-                    if niveau_gymnase == 'Haut niveau' and niveau_match < len(self.config.bonus_niveau_gymnases_haut):
-                        bonus = self.config.bonus_niveau_gymnases_haut[niveau_match]
-                    elif niveau_gymnase == 'Bas niveau' and niveau_match < len(self.config.bonus_niveau_gymnases_bas):
-                        bonus = self.config.bonus_niveau_gymnases_bas[niveau_match]
+                    # Calculer la pénalité selon le niveau du gymnase et du match
+                    penalite = 0
+                    if niveau_gymnase == 'Haut niveau' and niveau_match < len(self.config.penalite_niveau_gymnases_haut):
+                        penalite = self.config.penalite_niveau_gymnases_haut[niveau_match]
+                    elif niveau_gymnase == 'Bas niveau' and niveau_match < len(self.config.penalite_niveau_gymnases_bas):
+                        penalite = self.config.penalite_niveau_gymnases_bas[niveau_match]
                     
-                    # Ajouter le bonus à l'objectif (négatif car on minimise, donc -bonus pour encourager)
-                    # Exemple: bonus=10 pour A1 en haut niveau -> on veut favoriser cette assignation
-                    # En minimisation, on ajoute -10 pour réduire le coût
-                    if bonus != 0:
-                        objective_terms.append(-int(bonus) * assignment_vars[(i, j)])
+                    # Ajouter la pénalité à l'objectif avec signe NÉGATIF (on maximise l'objectif global)
+                    # Pénalité positive = contribution négative = à éviter
+                    # Exemple: penalite=10 pour A1 en bas niveau -> objective_terms.append(-10) -> on veut éviter
+                    if penalite != 0:
+                        objective_terms.append(-int(penalite) * assignment_vars[(i, j)])
+
 
         
         # CONTRAINTE SOUPLE: Espacement entre matchs d'une même équipe
@@ -762,6 +831,19 @@ class CPSATSolver(BaseSolver):
         solver.parameters.max_time_in_seconds = self.config.temps_max_secondes
         solver.parameters.log_search_progress = self.config.afficher_progression
         
+        # Configuration pour améliorer la recherche
+        solver.parameters.num_search_workers = 8  # Utiliser plusieurs threads pour exploration parallèle
+        solver.parameters.relative_gap_limit = 0.0  # Ne pas s'arrêter avant le temps max
+        solver.parameters.absolute_gap_limit = 0.0  # Continuer jusqu'au temps max
+        
+        # Log pour débugger
+        if self.config.afficher_progression:
+            print(f"\n🔧 Configuration CP-SAT:")
+            print(f"   Temps max: {solver.parameters.max_time_in_seconds}s")
+            print(f"   Workers: {solver.parameters.num_search_workers}")
+            print(f"   Relative gap limit: {solver.parameters.relative_gap_limit}")
+            print(f"   Absolute gap limit: {solver.parameters.absolute_gap_limit}")
+        
         # Callback pour capturer les solutions intermédiaires
         class SolutionPrinter(cp_model.CpSolverSolutionCallback):
             def __init__(self, show_progress: bool):
@@ -795,7 +877,28 @@ class CPSATSolver(BaseSolver):
         if self.config.afficher_progression:
             print("\nCP-SAT solver - Résolution...")
         
+        import time
+        start_time = time.time()
         status = solver.Solve(model, solution_printer)
+        elapsed_time = time.time() - start_time
+        
+        # Afficher les statistiques du solver
+        print(f"\n⏱️  Statistiques de résolution:")
+        print(f"   Temps écoulé: {elapsed_time:.2f}s / {self.config.temps_max_secondes}s")
+        print(f"   Statut: {solver.StatusName(status)}")
+        print(f"   Branches: {solver.NumBranches()}")
+        print(f"   Conflits: {solver.NumConflicts()}")
+        print(f"   Temps utilisé: {solver.WallTime():.2f}s")
+        
+        # Vérifier si le temps max a été atteint
+        if elapsed_time >= self.config.temps_max_secondes * 0.95:
+            print(f"   ⚠️  Temps maximum atteint ! Le solver a utilisé presque tout le temps alloué.")
+        elif elapsed_time < self.config.temps_max_secondes * 0.1:
+            print(f"   ℹ️  Le solver s'est arrêté rapidement (< 10% du temps max)")
+            if status == cp_model.OPTIMAL:
+                print(f"      → Solution optimale prouvée")
+            else:
+                print(f"      → Vérifiez s'il y a des problèmes de contraintes")
         
         # Afficher le résumé de l'évolution des solutions
         solutions = solution_printer.get_solutions()

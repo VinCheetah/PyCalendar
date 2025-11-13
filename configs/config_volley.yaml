@@ -9,8 +9,8 @@ fichiers:
 
 # Paramètres de planification (seulement valeurs différentes des défauts)
 planification:
-  semaine_min: 3    # Défaut: 1 - Commence la planification à la semaine 2
-  nb_semaines: 14
+  semaine_min: 5    # Défaut: 1 - Commence la planification à la semaine 2
+  nb_semaines: 13
   strategie: "cpsat"  # Défaut: "greedy" - Force l'utilisation de CP-SAT
 
 # Configuration Greedy (fallback)
@@ -19,15 +19,20 @@ greedy:
 
 # Configuration CP-SAT (OR-Tools)
 cpsat:
-  temps_max_secondes: 600    # Minimum ~45-60s needed to find feasible solution for 267 matches
+  temps_max_secondes: 400    # Minimum ~45-60s needed to find feasible solution for 267 matches
   warm_start: false  # Disabled: causes issues with solver status
   warm_start_file: "volley"  # Solutions spécifiques au volley
 
 contraintes:
-  compaction_penalites_par_semaine: [0, 0, 5, 0, 8, 10, 15, 3, 4, 5, 3, 3, 10, 3]  # Pénalité par semaine (indice 0 = semaine 1)
-  # Bonus pour gymnases par niveau (classification haut/bas niveau)
-  bonus_niveau_gymnases_haut: [10, 8, 5, 1]  # Bonus par niveau de match (A1=10, A2=8, A3=5, A4=1) si gymnase haut niveau
-  bonus_niveau_gymnases_bas: [8, 6, 4, 2]    # Bonus par niveau de match (A1=8, A2=6, A3=4, A4=2) si gymnase bas niveau
+  compaction_penalites_par_semaine: [0, 0, 5, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3]  # Pénalité par semaine (indice 0 = semaine 1)
+  # Pénalités pour gymnases par niveau (classification haut/bas niveau)
+  # Valeurs positives = pénalité (augmente le coût, à éviter)
+  # Plus la valeur est élevée, plus on veut ÉVITER cette assignation
+  penalite_niveau_gymnases_haut: [-5, -3, -1, 0]  # Pénalité par niveau de match (A1=0, A2=3, A3=5, A4=6) si gymnase haut niveau
+                                                # A1 en haut niveau: 0 (parfait), A4 en haut niveau: 6 (à éviter)
+  penalite_niveau_gymnases_bas: [8, 5, 2, 1]   # Pénalité par niveau de match (A1=10, A2=8, A3=5, A4=3) si gymnase bas niveau
+                                                # A1 en bas niveau: 10 (très mauvais), A4 en bas niveau: 3 (acceptable)
+
 
 # Gestion du calendrier avec dates réelles
 calendrier:

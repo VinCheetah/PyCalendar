@@ -121,9 +121,25 @@ class CardsView {
             
             // Filtre par institution
             if (this.selectedFilters.institution) {
-                const equipes = this.dataManager.getEquipesByIds(match.equipes);
-                const hasInstitution = equipes.some(e => e.institution === this.selectedFilters.institution);
-                if (!hasInstitution) return false;
+                const equipe1Id = match.equipe1_id || match.equipes?.[0];
+                const equipe2Id = match.equipe2_id || match.equipes?.[1];
+                const equipes = this.dataManager.getData()?.entities?.equipes;
+                if (equipes) {
+                    const equipe1 = equipes.find(e => e.id === equipe1Id);
+                    const equipe2 = equipes.find(e => e.id === equipe2Id);
+                    const hasInstitution = (equipe1?.institution === this.selectedFilters.institution) ||
+                                          (equipe2?.institution === this.selectedFilters.institution);
+                    if (!hasInstitution) return false;
+                }
+            }
+            
+            // Filtre par équipe - support des IDs multiples (groupe M+F)
+            if (this.selectedFilters.equipe) {
+                const equipeIds = this.selectedFilters.equipe.split(',');
+                const equipe1Id = match.equipe1_id || match.equipes?.[0];
+                const equipe2Id = match.equipe2_id || match.equipes?.[1];
+                const hasEquipe = equipeIds.includes(equipe1Id) || equipeIds.includes(equipe2Id);
+                if (!hasEquipe) return false;
             }
             
             // Filtre par poule
@@ -268,7 +284,14 @@ class CardsView {
                 colorClass = match.genre === 'M' ? 'color-male' : 'color-female';
                 break;
             case 'level':
-                colorClass = poule ? `color-level-${poule.niveau || 1}` : 'color-neutral';
+                if (poule && poule.niveau) {
+                    // Extraire le numéro du niveau: "A1" → "1", "A2" → "2", etc.
+                    const niveauMatch = poule.niveau.match(/A?(\d)/);
+                    const niveauNum = niveauMatch ? niveauMatch[1] : '1';
+                    colorClass = `color-level-${niveauNum}`;
+                } else {
+                    colorClass = 'color-neutral';
+                }
                 break;
             case 'institution':
                 // Hash simple du nom d'institution pour couleur consistante

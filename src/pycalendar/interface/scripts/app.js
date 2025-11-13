@@ -14,6 +14,7 @@ document.addEventListener('DOMContentLoaded', () => {
 function initializeApp() {
     try {
         loadSavedTheme();
+        loadSavedPalette();
 
         const solutionData = loadSolutionData();
         if (!solutionData) return;
@@ -74,11 +75,22 @@ function initializeViews() {
     const viewConfigs = [
         { name: 'agenda', constructor: 'AgendaView', containerId: 'agenda-view' },
         { name: 'pools', constructor: 'PoolsView', containerId: 'pools-view' },
-        { name: 'cards', constructor: 'CardsView', containerId: 'cards-view' }
+        { name: 'teams', constructor: 'TeamsView', containerId: 'teams-view' },
+        { name: 'matches', constructor: 'MatchesView', containerId: 'matches-view' },
+        { name: 'penalties', constructor: 'PenaltiesView', containerId: 'penalties-view' }
     ];
 
     viewConfigs.forEach(config => {
         const container = document.getElementById(config.containerId);
+        
+        // DEBUG: Plus de détails sur le problème
+        console.log(`Initializing ${config.name}:`, {
+            constructor: config.constructor,
+            constructorExists: !!window[config.constructor],
+            containerId: config.containerId,
+            containerExists: !!container
+        });
+        
         if (window[config.constructor] && container) {
             const viewInstance = new window[config.constructor](window.dataManager, container);
             if (typeof viewInstance.init === 'function') {
@@ -86,6 +98,12 @@ function initializeViews() {
             }
             window[`${config.name}View`] = viewInstance;
         } else {
+            if (!window[config.constructor]) {
+                console.error(`❌ Constructor ${config.constructor} not found in window`);
+            }
+            if (!container) {
+                console.error(`❌ Container #${config.containerId} not found in DOM`);
+            }
             console.warn(`Vue ${config.name} ou son conteneur non trouvé.`);
         }
     });
@@ -100,6 +118,12 @@ function initializeViewOptions() {
     }
     if (window.poolsView) {
         window.viewOptionsManager.registerView('pools', window.poolsView);
+    }
+    if (window.teamsView) {
+        window.viewOptionsManager.registerView('teams', window.teamsView);
+    }
+    if (window.matchesView) {
+        window.viewOptionsManager.registerView('matches', window.matchesView);
     }
     // Enregistrer d'autres vues ici à l'avenir...
 }
@@ -120,9 +144,11 @@ function initializeFilters() {
     window.filterPanel = new FilterPanel(window.dataManager, filtersContainer);
     window.filterPanel.onChange((filters) => {
         // Appliquer les filtres à toutes les vues enregistrées
-        ['agendaView', 'poolsView', 'cardsView'].forEach(viewName => {
+        ['agendaView', 'poolsView', 'teamsView', 'matchesView'].forEach(viewName => {
             if (window[viewName] && typeof window[viewName].setFilters === 'function') {
                 window[viewName].setFilters(filters);
+            } else if (window[viewName] && typeof window[viewName].updateFilters === 'function') {
+                window[viewName].updateFilters(filters);
             }
         });
     });
@@ -173,8 +199,14 @@ function setupEventListeners() {
         });
     }
     
-    const themeToggle = document.getElementById('theme-toggle');
-    if (themeToggle) themeToggle.addEventListener('click', toggleTheme);
+    // Gestion des boutons de thème
+    setupThemeControls();
+    
+    // Gestion des boutons de palette
+    setupPaletteControls();
+    
+    // Gestion du niveau d'animations (si checkbox existe)
+    setupAnimationControls();
     
     // Gestion des sidebars (collapse/expand)
     setupSidebarControls();
@@ -194,15 +226,39 @@ function setupSidebarControls() {
     const sidebarLeft = document.querySelector('.sidebar-left');
     const sidebarRight = document.querySelector('.sidebar-right');
     
+    // Fonction helper pour toggle une sidebar
+    function toggleSidebar(sidebar, btnCollapse, side) {
+        if (!sidebar) return;
+        
+        const isCollapsed = sidebar.classList.contains('collapsed');
+        
+        if (isCollapsed) {
+            // Expand
+            sidebar.classList.remove('collapsed');
+            if (btnCollapse) {
+                btnCollapse.querySelector('span').textContent = side === 'left' ? '◀' : '▶';
+                btnCollapse.setAttribute('title', 'Réduire');
+            }
+        } else {
+            // Collapse
+            sidebar.classList.add('collapsed');
+            if (btnCollapse) {
+                btnCollapse.querySelector('span').textContent = side === 'left' ? '▶' : '◀';
+                btnCollapse.setAttribute('title', 'Développer');
+            }
+        }
+        
+        // Sauvegarder l'état
+        localStorage.setItem(`sidebar-${side}-collapsed`, !isCollapsed);
+        
+        // Mettre à jour le layout
+        setTimeout(() => updateGridColumns(), 50);
+    }
+    
+    // Setup sidebar gauche
     if (btnCollapseLeft && sidebarLeft) {
         btnCollapseLeft.addEventListener('click', () => {
-            sidebarLeft.classList.toggle('collapsed');
-            const isCollapsed = sidebarLeft.classList.contains('collapsed');
-            btnCollapseLeft.querySelector('span').textContent = isCollapsed ? '▶' : '◀';
-            btnCollapseLeft.setAttribute('title', isCollapsed ? 'Développer' : 'Réduire');
-            
-            // Sauvegarder l'état
-            localStorage.setItem('sidebar-left-collapsed', isCollapsed);
+            toggleSidebar(sidebarLeft, btnCollapseLeft, 'left');
         });
         
         // Restaurer l'état sauvegardé
@@ -217,24 +273,14 @@ function setupSidebarControls() {
     // Bouton pour réafficher la sidebar gauche
     if (btnShowLeft && sidebarLeft) {
         btnShowLeft.addEventListener('click', () => {
-            sidebarLeft.classList.remove('collapsed');
-            if (btnCollapseLeft) {
-                btnCollapseLeft.querySelector('span').textContent = '◀';
-                btnCollapseLeft.setAttribute('title', 'Réduire');
-            }
-            localStorage.setItem('sidebar-left-collapsed', 'false');
+            toggleSidebar(sidebarLeft, btnCollapseLeft, 'left');
         });
     }
     
+    // Setup sidebar droite
     if (btnCollapseRight && sidebarRight) {
         btnCollapseRight.addEventListener('click', () => {
-            sidebarRight.classList.toggle('collapsed');
-            const isCollapsed = sidebarRight.classList.contains('collapsed');
-            btnCollapseRight.querySelector('span').textContent = isCollapsed ? '◀' : '▶';
-            btnCollapseRight.setAttribute('title', isCollapsed ? 'Développer' : 'Réduire');
-            
-            // Sauvegarder l'état
-            localStorage.setItem('sidebar-right-collapsed', isCollapsed);
+            toggleSidebar(sidebarRight, btnCollapseRight, 'right');
         });
         
         // Restaurer l'état sauvegardé
@@ -249,14 +295,21 @@ function setupSidebarControls() {
     // Bouton pour réafficher la sidebar droite
     if (btnShowRight && sidebarRight) {
         btnShowRight.addEventListener('click', () => {
-            sidebarRight.classList.remove('collapsed');
-            if (btnCollapseRight) {
-                btnCollapseRight.querySelector('span').textContent = '▶';
-                btnCollapseRight.setAttribute('title', 'Réduire');
-            }
-            localStorage.setItem('sidebar-right-collapsed', 'false');
+            toggleSidebar(sidebarRight, btnCollapseRight, 'right');
         });
     }
+    
+    // Ajouter support du clavier (Ctrl+B pour gauche, Ctrl+Shift+B pour droite)
+    document.addEventListener('keydown', (e) => {
+        if (e.ctrlKey && e.key === 'b') {
+            e.preventDefault();
+            if (e.shiftKey) {
+                toggleSidebar(sidebarRight, btnCollapseRight, 'right');
+            } else {
+                toggleSidebar(sidebarLeft, btnCollapseLeft, 'left');
+            }
+        }
+    });
 }
 
 /**
@@ -267,113 +320,166 @@ function setupSidebarResize() {
     const resizeHandleRight = document.getElementById('resize-handle-right');
     const sidebarLeft = document.querySelector('.sidebar-left');
     const sidebarRight = document.querySelector('.sidebar-right');
-    const mainLayout = document.querySelector('.main-layout');
+    
+    const MIN_WIDTH = 250;
+    const MAX_WIDTH = 600;
+    const DEFAULT_LEFT_WIDTH = 280;
+    const DEFAULT_RIGHT_WIDTH = 320;
     
     let isResizing = false;
+    let currentSidebar = null;
     let currentHandle = null;
+    let startX = 0;
+    let startWidth = 0;
     
-    // Récupérer les largeurs sauvegardées
-    const savedLeftWidth = localStorage.getItem('sidebar-left-width') || '320px';
-    const savedRightWidth = localStorage.getItem('sidebar-right-width') || '280px';
-    
-    if (sidebarLeft && !sidebarLeft.classList.contains('collapsed')) {
-        sidebarLeft.style.width = savedLeftWidth;
-    }
-    if (sidebarRight && !sidebarRight.classList.contains('collapsed')) {
-        sidebarRight.style.width = savedRightWidth;
-    }
-    
-    // Mettre à jour le grid-template-columns
-    updateGridColumns();
-    
+    // Fonction pour mettre à jour le grid layout
     function updateGridColumns() {
+        const mainLayout = document.querySelector('.main-layout');
         if (!mainLayout) return;
         
         const leftWidth = sidebarLeft && !sidebarLeft.classList.contains('collapsed') 
-            ? sidebarLeft.style.width || savedLeftWidth 
+            ? (sidebarLeft.offsetWidth || DEFAULT_LEFT_WIDTH) + 'px'
             : '0px';
         const rightWidth = sidebarRight && !sidebarRight.classList.contains('collapsed') 
-            ? sidebarRight.style.width || savedRightWidth 
+            ? (sidebarRight.offsetWidth || DEFAULT_RIGHT_WIDTH) + 'px'
             : '0px';
         
-        mainLayout.style.gridTemplateColumns = `${leftWidth} 4px 1fr 4px ${rightWidth}`;
+        const leftHandle = leftWidth !== '0px' ? '4px' : '0px';
+        const rightHandle = rightWidth !== '0px' ? '4px' : '0px';
+        
+        mainLayout.style.gridTemplateColumns = `${leftWidth} ${leftHandle} 1fr ${rightHandle} ${rightWidth}`;
     }
     
-    function startResize(e, handle) {
+    // Exposer globalement pour être appelée par d'autres fonctions
+    window.updateGridColumns = updateGridColumns;
+    
+    // Restaurer les largeurs sauvegardées
+    function restoreSidebarWidths() {
+        const savedLeftWidth = localStorage.getItem('sidebar-left-width');
+        const savedRightWidth = localStorage.getItem('sidebar-right-width');
+        
+        if (sidebarLeft && savedLeftWidth) {
+            const width = parseInt(savedLeftWidth);
+            if (width >= MIN_WIDTH && width <= MAX_WIDTH) {
+                sidebarLeft.style.width = width + 'px';
+            }
+        }
+        
+        if (sidebarRight && savedRightWidth) {
+            const width = parseInt(savedRightWidth);
+            if (width >= MIN_WIDTH && width <= MAX_WIDTH) {
+                sidebarRight.style.width = width + 'px';
+            }
+        }
+        
+        updateGridColumns();
+    }
+    
+    // Restaurer au chargement
+    restoreSidebarWidths();
+    
+    // Double-clic pour reset à la largeur par défaut
+    function setupDoubleClickReset(handle, sidebar, defaultWidth) {
+        if (!handle || !sidebar) return;
+        
+        handle.addEventListener('dblclick', () => {
+            sidebar.style.width = defaultWidth + 'px';
+            localStorage.setItem(`sidebar-${sidebar.classList.contains('sidebar-left') ? 'left' : 'right'}-width`, defaultWidth);
+            updateGridColumns();
+            
+            // Animation de feedback
+            handle.style.transform = 'scaleX(2)';
+            setTimeout(() => {
+                handle.style.transform = '';
+            }, 200);
+        });
+    }
+    
+    setupDoubleClickReset(resizeHandleLeft, sidebarLeft, DEFAULT_LEFT_WIDTH);
+    setupDoubleClickReset(resizeHandleRight, sidebarRight, DEFAULT_RIGHT_WIDTH);
+    
+    // Démarrer le resize
+    function startResize(e, handle, sidebar) {
+        if (!sidebar || sidebar.classList.contains('collapsed')) return;
+        
         isResizing = true;
         currentHandle = handle;
+        currentSidebar = sidebar;
+        startX = e.clientX;
+        startWidth = sidebar.offsetWidth;
+        
         handle.classList.add('resizing');
-        document.body.style.cursor = 'col-resize';
-        document.body.style.userSelect = 'none';
+        document.body.classList.add('resizing');
+        
         e.preventDefault();
     }
     
+    // Arrêter le resize
     function stopResize() {
         if (!isResizing) return;
         
         isResizing = false;
+        
         if (currentHandle) {
             currentHandle.classList.remove('resizing');
         }
-        document.body.style.cursor = '';
-        document.body.style.userSelect = '';
+        
+        document.body.classList.remove('resizing');
+        
+        // Sauvegarder la largeur finale
+        if (currentSidebar) {
+            const side = currentSidebar.classList.contains('sidebar-left') ? 'left' : 'right';
+            localStorage.setItem(`sidebar-${side}-width`, currentSidebar.offsetWidth);
+        }
+        
         currentHandle = null;
-        
-        // Sauvegarder les largeurs
-        if (sidebarLeft) {
-            localStorage.setItem('sidebar-left-width', sidebarLeft.style.width);
-        }
-        if (sidebarRight) {
-            localStorage.setItem('sidebar-right-width', sidebarRight.style.width);
-        }
+        currentSidebar = null;
     }
     
+    // Effectuer le resize
     function resize(e) {
-        if (!isResizing) return;
+        if (!isResizing || !currentSidebar) return;
         
-        if (currentHandle === resizeHandleLeft && sidebarLeft) {
-            const newWidth = e.clientX;
-            if (newWidth >= 250 && newWidth <= 600) {
-                sidebarLeft.style.width = newWidth + 'px';
-                updateGridColumns();
-            }
-        } else if (currentHandle === resizeHandleRight && sidebarRight) {
-            const newWidth = window.innerWidth - e.clientX;
-            if (newWidth >= 250 && newWidth <= 600) {
-                sidebarRight.style.width = newWidth + 'px';
-                updateGridColumns();
-            }
-        }
+        const isLeft = currentSidebar.classList.contains('sidebar-left');
+        const delta = isLeft ? (e.clientX - startX) : (startX - e.clientX);
+        const newWidth = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, startWidth + delta));
+        
+        currentSidebar.style.width = newWidth + 'px';
+        updateGridColumns();
     }
     
-    // Event listeners pour le resize
-    if (resizeHandleLeft) {
-        resizeHandleLeft.addEventListener('mousedown', (e) => startResize(e, resizeHandleLeft));
+    // Event listeners pour sidebar gauche
+    if (resizeHandleLeft && sidebarLeft) {
+        resizeHandleLeft.addEventListener('mousedown', (e) => {
+            startResize(e, resizeHandleLeft, sidebarLeft);
+        });
     }
     
-    if (resizeHandleRight) {
-        resizeHandleRight.addEventListener('mousedown', (e) => startResize(e, resizeHandleRight));
+    // Event listeners pour sidebar droite
+    if (resizeHandleRight && sidebarRight) {
+        resizeHandleRight.addEventListener('mousedown', (e) => {
+            startResize(e, resizeHandleRight, sidebarRight);
+        });
     }
     
+    // Event listeners globaux
     document.addEventListener('mousemove', resize);
     document.addEventListener('mouseup', stopResize);
     
-    // Mettre à jour les colonnes quand on collapse/expand
-    const observer = new MutationObserver(() => {
+    // Mettre à jour le layout au resize de la fenêtre
+    window.addEventListener('resize', () => {
         updateGridColumns();
     });
     
-    if (sidebarLeft) {
-        observer.observe(sidebarLeft, { attributes: true, attributeFilter: ['class'] });
-    }
-    if (sidebarRight) {
-        observer.observe(sidebarRight, { attributes: true, attributeFilter: ['class'] });
-    }
+    // Mettre à jour le layout après un court délai (pour laisser le temps aux animations)
+    setTimeout(() => {
+        updateGridColumns();
+    }, 100);
 }
 
 /**
  * Bascule vers une nouvelle vue.
- * @param {string} viewName - Le nom de la vue à afficher ('agenda', 'pools', etc.).
+ * @param {string} viewName - Le nom de la vue à afficher ('agenda', 'pools', 'matches', etc.).
  */
 function switchView(viewName) {
     // Met à jour l'état actif des boutons de navigation
@@ -386,6 +492,12 @@ function switchView(viewName) {
         container.classList.toggle('active', container.dataset.viewContent === viewName);
     });
 
+    // Affiche/masque le filtre de statut selon la vue
+    const statusFilter = document.getElementById('filter-section-status');
+    if (statusFilter) {
+        statusFilter.style.display = viewName === 'matches' ? 'block' : 'none';
+    }
+
     // Met à jour les options dans la barre latérale
     window.viewOptionsManager.switchView(viewName);
 
@@ -397,12 +509,101 @@ function switchView(viewName) {
 }
 
 /**
- * Gère le basculement du thème (clair/sombre).
+ * ==================== GESTION DU THÈME ET DES ANIMATIONS ====================
  */
-function toggleTheme() {
-    const newTheme = document.body.classList.contains('dark-theme') ? 'light' : 'dark';
-    setTheme(newTheme);
-    localStorage.setItem('pycalendar-theme', newTheme);
+
+/**
+ * Configure les boutons de sélection de thème.
+ */
+function setupThemeControls() {
+    const themeButtons = document.querySelectorAll('.theme-btn');
+    
+    themeButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const theme = btn.dataset.theme;
+            if (theme) {
+                setTheme(theme);
+                
+                // Mettre à jour les boutons actifs
+                themeButtons.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+            }
+        });
+    });
+}
+
+/**
+ * Configure les boutons de sélection de palette de couleurs.
+ */
+function setupPaletteControls() {
+    const paletteButtons = document.querySelectorAll('.palette-btn');
+    
+    paletteButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const palette = btn.dataset.palette;
+            if (palette) {
+                setPalette(palette);
+                
+                // Mettre à jour les boutons actifs
+                paletteButtons.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+            }
+        });
+    });
+}
+
+/**
+ * Applique une palette de couleurs à l'application.
+ * @param {string} palette - 'purple', 'ocean', 'sunset', ou 'forest'
+ */
+function setPalette(palette) {
+    const html = document.documentElement;
+    html.setAttribute('data-palette', palette);
+    localStorage.setItem('pycalendar-palette', palette);
+}
+
+/**
+ * Charge la palette depuis le localStorage au démarrage.
+ */
+function loadSavedPalette() {
+    const savedPalette = localStorage.getItem('pycalendar-palette') || 'purple';
+    setPalette(savedPalette);
+    
+    // Mettre à jour le bouton actif
+    const activeBtn = document.querySelector(`.palette-btn[data-palette="${savedPalette}"]`);
+    if (activeBtn) {
+        document.querySelectorAll('.palette-btn').forEach(btn => btn.classList.remove('active'));
+        activeBtn.classList.add('active');
+    }
+}
+
+/**
+ * Configure les contrôles du niveau d'animation.
+ */
+function setupAnimationControls() {
+    const animCheckbox = document.getElementById('opt-animations');
+    
+    if (animCheckbox) {
+        animCheckbox.addEventListener('change', () => {
+            const level = animCheckbox.checked ? 1 : 0;
+            setAnimationLevel(level);
+        });
+        
+        // Charger le niveau sauvegardé
+        const savedLevel = localStorage.getItem('pycalendar-animation-level') || '1';
+        setAnimationLevel(parseInt(savedLevel));
+        animCheckbox.checked = savedLevel !== '0';
+    }
+}
+
+/**
+ * Applique un niveau d'animation à l'application.
+ * @param {number} level - 0 (none), 1 (subtle), 2 (moderate), 3 (dynamic)
+ */
+function setAnimationLevel(level) {
+    const html = document.documentElement;
+    html.setAttribute('data-animation-level', level.toString());
+    localStorage.setItem('pycalendar-animation-level', level.toString());
 }
 
 /**
@@ -411,20 +612,23 @@ function toggleTheme() {
 function loadSavedTheme() {
     const savedTheme = localStorage.getItem('pycalendar-theme') || 'light';
     setTheme(savedTheme);
+    
+    // Mettre à jour le bouton actif
+    const activeBtn = document.querySelector(`.theme-btn[data-theme="${savedTheme}"]`);
+    if (activeBtn) {
+        document.querySelectorAll('.theme-btn').forEach(btn => btn.classList.remove('active'));
+        activeBtn.classList.add('active');
+    }
 }
 
 /**
  * Applique un thème à l'application.
- * @param {string} theme - 'light' ou 'dark'.
+ * @param {string} theme - 'light' ou 'dark'
  */
 function setTheme(theme) {
-    document.body.classList.toggle('dark-theme', theme === 'dark');
-    document.body.classList.toggle('light-theme', theme === 'light');
-    
-    const themeIcon = document.getElementById('theme-icon');
-    if (themeIcon) {
-        themeIcon.textContent = theme === 'dark' ? '☀️' : '🌙';
-    }
+    const html = document.documentElement;
+    html.setAttribute('data-theme', theme);
+    localStorage.setItem('pycalendar-theme', theme);
 }
 
 /**

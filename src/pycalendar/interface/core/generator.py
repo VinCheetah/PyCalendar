@@ -31,7 +31,8 @@ class InterfaceGenerator:
         solution: Union[Solution, Path, str, Dict],
         output_path: str,
         config: Optional[Config] = None,
-        solution_name: str = "solution"
+        solution_name: str = "solution",
+        types_poules: Optional[Dict[str, str]] = None
     ) -> str:
         """
         Generate complete HTML interface.
@@ -41,6 +42,7 @@ class InterfaceGenerator:
             output_path: Path where to save HTML file
             config: Configuration object (optional)
             solution_name: Name of the solution (for modifications tracking)
+            types_poules: Dictionary {poule_name: type} where type is 'Classique' or 'Aller-Retour' (optional)
             
         Returns:
             Absolute path to generated HTML file
@@ -73,7 +75,7 @@ class InterfaceGenerator:
             
         elif isinstance(solution, Solution):
             # Legacy Solution object - format it
-            solution_data = DataFormatter.format_solution(solution, config)
+            solution_data = DataFormatter.format_solution(solution, config, types_poules=types_poules)
             
         else:
             raise TypeError(f"Invalid solution type: {type(solution)}")
@@ -130,24 +132,25 @@ class InterfaceGenerator:
             'styles/02-base.css',
             'styles/03-layout.css',
             'styles/04-enhancements.css',  # Visual enhancements & animations
-            'styles/05-backgrounds-france.css',  # Backgrounds français renforcés
+            'styles/05-backgrounds-france.css',  # Theme decorations
             
             # Component styles
             'styles/components/match-card.css',
-            'styles/components/filters.css',  # Filtres complets (fusion de base + enhanced)
+            'styles/components/filters.css',
             'styles/components/modals.css',
             'styles/components/loading.css',
             'styles/components/tabs.css',
             'styles/components/views.css',
-            'styles/components/view-options.css',  # Options de vue latérales
+            'styles/components/view-options.css',
             
             # View styles
-            'styles/views/agenda-view.css',  # Vue agenda complète et optimisée
-            'styles/views/pools-view.css',  # Design magnifique pour la vue Poules
+            'styles/views/agenda-view.css',
+            'styles/views/pools-view.css',
+            'styles/views/penalties-view.css',  # Vue Pénalités
             
             # Themes (last)
             'styles/themes/default-light.css',
-            'styles/themes/france.css',
+            'styles/themes/dark.css',
         ]
         
         combined_css = []
@@ -198,7 +201,9 @@ class InterfaceGenerator:
             'views/agenda-grid.js',
             'views/agenda/agenda-view.js',
             'views/pools-view.js',
-            'views/cards-view.js',
+            'views/teams-view.js',
+            'views/matches-view.js',
+            'views/penalties-view.js',  # Vue Pénalités
             
             # Application initialization (loaded last)
             'app.js',
@@ -218,6 +223,24 @@ class InterfaceGenerator:
         
         return '\n'.join(combined_js)
     
+    def _sanitize_json_data(self, data):
+        """
+        Nettoie les données pour assurer un JSON valide.
+        Remplace inf, -inf et NaN par des valeurs JSON valides.
+        """
+        import math
+        
+        if isinstance(data, dict):
+            return {k: self._sanitize_json_data(v) for k, v in data.items()}
+        elif isinstance(data, list):
+            return [self._sanitize_json_data(item) for item in data]
+        elif isinstance(data, float):
+            if math.isinf(data):
+                return 999999999 if data > 0 else -999999999  # Grande valeur au lieu de inf
+            elif math.isnan(data):
+                return None
+        return data
+    
     def _assemble_html(
         self,
         template: str,
@@ -231,6 +254,9 @@ class InterfaceGenerator:
         # Inject CSS
         css_block = f'<style>\n{css}\n</style>'
         html = template.replace('<!-- CSS_PLACEHOLDER -->', css_block)
+        
+        # Sanitize data to ensure valid JSON (replace inf, nan, etc.)
+        solution_data = self._sanitize_json_data(solution_data)
         
         # Inject solution data as JSON
         solution_json = json.dumps(solution_data, ensure_ascii=False, indent=2)

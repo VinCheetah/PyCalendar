@@ -4,6 +4,7 @@ import pandas as pd
 from typing import List
 from pathlib import Path
 from pycalendar.core.models import Solution, Match
+from pycalendar.core.utils import determiner_genre_match
 
 
 class ExcelExporter:
@@ -103,20 +104,21 @@ class ExcelExporter:
         """
         Create DataFrame with Matchs_Fixes format for easy copy-paste.
         Format: Equipe_1, Equipe_2, Genre, Poule, Semaine, Horaire, Gymnase, Score, Type_Competition, Remarques
-        Tri: Semaine → Genre (F puis M) → Catégorie (A1, A2, A3, A4)
+        Tri: Semaine → Genre (F puis M puis X) → Catégorie (A1, A2, A3, A4)
         """
         data = []
         
         for match in matchs:
-            # Extraire le genre (F ou M) depuis le nom de la poule
-            # Format poule: VB + genre (F/M) + catégorie (A1-A4) + poule (PA, PB, etc.)
-            # Exemples: VBFA1PA (Volley Féminin A1 Poule A), VBMA2PB (Volley Masculin A2 Poule B)
-            genre = 'M'  # Par défaut Hommes
-            if match.poule and len(match.poule) >= 4:
-                if match.poule[2] == 'F':  # 3ème caractère = F ou M
-                    genre = 'F'
-                elif match.poule[2] == 'M':
-                    genre = 'M'
+            # Déterminer le genre du match
+            # Priorité 1: genre_fixe (pour les matchs fixes avec genre explicite)
+            # Priorité 2: détermination normale basée sur les équipes et la poule
+            genre_fixe = match.metadata.get('genre_fixe') if match.metadata else None
+            if genre_fixe and genre_fixe in ['M', 'F']:
+                genre = genre_fixe
+            else:
+                equipe1_genre = match.equipe1.genre.upper() if match.equipe1.genre else ""
+                equipe2_genre = match.equipe2.genre.upper() if match.equipe2.genre else ""
+                genre = determiner_genre_match(equipe1_genre, equipe2_genre, match.poule)
             
             # Extraire la catégorie (A1, A2, A3, A4) depuis le nom de la poule
             categorie = 'A1'  # Par défaut
@@ -135,6 +137,14 @@ class ExcelExporter:
             eq1_nom = match.equipe1.nom_complet.replace(' [F]', '').replace(' [M]', '').strip()
             eq2_nom = match.equipe2.nom_complet.replace(' [F]', '').replace(' [M]', '').strip()
             
+            # Récupérer le score depuis les metadata si disponible
+            score = match.metadata.get('score', '') if match.metadata.get('fixe', False) else ''
+            type_comp = match.metadata.get('type_competition', 'Acad')
+            remarques = match.metadata.get('remarques', '')
+            
+            # Ordre de tri pour le genre: F=0, M=1, X=2
+            ordre_genre = {'F': 0, 'M': 1, 'X': 2}.get(genre, 2)
+            
             row = {
                 'Equipe_1': eq1_nom,
                 'Equipe_2': eq2_nom,
@@ -143,19 +153,19 @@ class ExcelExporter:
                 'Semaine': match.creneau.semaine if match.creneau else '',
                 'Horaire': match.creneau.horaire if match.creneau else '',
                 'Gymnase': match.creneau.gymnase if match.creneau else '',
-                'Score': '',  # Vide car match à jouer
-                'Type_Competition': 'Acad',  # Par défaut
-                'Remarques': '',
+                'Score': score or '',  # Score depuis metadata si match fixe
+                'Type_Competition': type_comp,
+                'Remarques': remarques,
                 # Colonnes de tri (seront supprimées après)
                 '_categorie': categorie,
-                '_ordre_genre': 0 if genre == 'F' else 1,  # F avant M
+                '_ordre_genre': ordre_genre,
             }
             
             data.append(row)
         
         df = pd.DataFrame(data)
         
-        # Tri: Semaine → Genre (F puis M) → Catégorie (A1, A2, A3, A4) → Horaire → Equipe_1
+        # Tri: Semaine → Genre (F puis M puis X) → Catégorie (A1, A2, A3, A4) → Horaire → Equipe_1
         if not df.empty:
             df = df.sort_values(
                 by=['Semaine', '_ordre_genre', '_categorie', 'Horaire', 'Equipe_1'],

@@ -1,24 +1,25 @@
 /**
- * AgendaGridView - Vue agenda avec colonnes adaptatives
+ * AgendaGridView - Vue agenda avec axe temporel vertical et colonnes par gymnase
  * 
- * Fonctionnalités principales de la vue agenda.
+ * Architecture:
+ * - Axe vertical: Horaires de 13h à 23h
+ * - Colonnes horizontales: Une par gymnase
+ * - Matchs positionnés absolument selon leur horaire
+ * - Matchs simultanés placés côte à côte
  */
 class AgendaGridView {
     constructor(dataManager, container) {
         this.dataManager = dataManager;
         this.container = container;
         
-        // Modules utilitaires
-        this.viewManager = new AgendaViewManager(dataManager);
-        this.slotManager = new SlotManager();
+        // Renderer pour les cartes de matchs
         this.cardRenderer = new MatchCardRenderer(dataManager);
-        this.availableSlotsManager = new AvailableSlotsManager();
+        
+        // Drag & drop
         this.dragDropManager = new DragDropManager(
             dataManager,
             window.modificationManager
         );
-        
-        // Callbacks du drag & drop
         this.dragDropManager.onModification = () => this.render();
         
         // Filtres actifs
@@ -30,22 +31,252 @@ class AgendaGridView {
             gender: ''
         };
         
-        // Options d'affichage
-        this.displayOptions = {
-            matchColor: 'by-venue',
-            cardSize: 'md',
-            showVenues: true,
-            showTimes: true,
-            showPools: true,
-            showTeams: true,
-            showConflicts: false,
-            compactMode: false,
-            highlightWeekends: true,
-            animations: true,
-            gridDensity: 'normal',
-            timeFormat: '24h'
-        };
+        // Mode d'affichage : 'week' (par journée) ou 'venue' (par gymnase)
+        this.displayMode = 'week'; // Par défaut : navigation par journée
         
+        // Mode de coloration des matchs
+        this.colorCodingMode = 'none'; // Par défaut : pas de coloration
+        
+        // Affichage des créneaux libres
+        this.showEmptySlots = false; // Par défaut : masqués
+        
+        // Navigation par journée (mode 'week')
+        this.currentWeekIndex = 0;
+        this.weeks = []; // Liste des journées disponibles
+        
+        // Navigation par gymnase (mode 'venue')
+        this.currentVenueIndex = 0;
+        this.venues = []; // Liste des gymnases disponibles
+        
+        // Configuration des colonnes
+        this.columnMinWidth = 200; // Largeur minimale par colonne en pixels
+        
+        // Date de début du championnat (J1 = jeudi 16 octobre 2025)
+        this.championshipStartDate = new Date(2025, 9, 16); // Mois 9 = octobre (0-indexed)
+    }
+    
+    /**
+     * Calcule la date du jeudi pour une journée donnée
+     * @param {number} weekNumber - Numéro de la journée (J1, J2, etc.)
+     * @returns {{date: Date, label: string}} - Date du jeudi et label formaté
+     */
+    getWeekDates(weekNumber) {
+        // Calculer le jeudi de cette journée
+        const matchDate = new Date(this.championshipStartDate);
+        matchDate.setDate(matchDate.getDate() + (weekNumber - 1) * 7);
+        
+        return {
+            date: matchDate,
+            label: this.formatDate(matchDate)
+        };
+    }
+    
+    /**
+     * Formate une date de manière concise
+     * @param {Date} date - Date à formater
+     * @returns {string} - Format "16 oct." ou "3 déc."
+     */
+    formatDate(date) {
+        const months = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin',
+                       'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+        
+        const day = date.getDate();
+        const month = months[date.getMonth()];
+        
+        return `${day} ${month}`;
+    }
+    
+    /**
+     * Retourne la configuration des options d'affichage pour le panneau latéral
+     * @returns {Object} Configuration pour ViewOptionsManager
+     */
+    getDisplayOptions() {
+        return {
+            title: "Options d'affichage",
+            options: [
+                {
+                    type: 'button-group',
+                    id: 'agenda-navigation-mode',
+                    label: 'Navigation par',
+                    values: [
+                        { value: 'week', text: '📅 Journée' },
+                        { value: 'venue', text: '🏛️ Gymnase' }
+                    ],
+                    default: this.displayMode,
+                    action: (value) => {
+                        this.setDisplayMode(value);
+                    }
+                },
+                {
+                    type: 'button-group',
+                    id: 'agenda-color-coding',
+                    label: 'Coloration des matchs',
+                    values: [
+                        { value: 'none', text: '🎨 Aucune' },
+                        { value: 'genre', text: '👥 Genre' },
+                        { value: 'niveau', text: '🎯 Niveau (A1-A4)' },
+                        { value: 'penalite', text: '⚠️ Pénalités' },
+                        { value: 'statut', text: '✅ Statut' }
+                    ],
+                    default: this.colorCodingMode || 'none',
+                    action: (value) => {
+                        this.setColorCoding(value);
+                    }
+                },
+                {
+                    type: 'checkbox',
+                    id: 'agenda-show-empty-slots',
+                    label: 'Créneaux libres',
+                    description: 'Afficher les créneaux horaires disponibles',
+                    default: this.showEmptySlots,
+                    action: (value) => {
+                        this.setShowAvailableSlots(value);
+                    }
+                }
+            ]
+        };
+    }
+    
+    /**
+     * Change le mode de coloration des matchs
+     * @param {string} mode - 'none', 'genre', 'niveau', 'penalite', ou 'statut'
+     */
+    setColorCoding(mode) {
+        const validModes = ['none', 'genre', 'niveau', 'penalite', 'statut'];
+        if (!validModes.includes(mode)) {
+            console.warn(`Mode de coloration invalide: ${mode}`);
+            return;
+        }
+        
+        this.colorCodingMode = mode;
+        
+        // Appliquer les classes de coloration sur le container
+        const container = document.querySelector('.agenda-view-container');
+        if (container) {
+            // Retirer toutes les classes de coloration
+            container.classList.remove('color-none', 'color-genre', 'color-niveau', 'color-penalite', 'color-statut');
+            // Ajouter la nouvelle classe
+            container.classList.add(`color-${mode}`);
+        }
+        
+        // Re-rendre la vue pour appliquer les changements
+        this.render();
+        
+        // FORCER l'application des couleurs via JavaScript (fallback si CSS ne fonctionne pas)
+        setTimeout(() => this.applyColorCoding(), 50);
+    }
+    
+    /**
+     * Applique les couleurs directement via JavaScript (fallback)
+     */
+    applyColorCoding() {
+        if (!this.colorCodingMode || this.colorCodingMode === 'none') return;
+        
+        const cards = document.querySelectorAll('.match-card');
+        
+        cards.forEach(card => {
+            let background = null;
+            
+            if (this.colorCodingMode === 'genre') {
+                if (card.classList.contains('male') || card.classList.contains('match-male')) {
+                    // Bleu dynamique avec reflets clairs
+                    background = 'linear-gradient(135deg, #60a5fa 0%, #3b82f6 50%, #2563eb 100%)';
+                } else if (card.classList.contains('female') || card.classList.contains('match-female')) {
+                    // Rose vibrant avec reflets
+                    background = 'linear-gradient(135deg, #f472b6 0%, #ec4899 50%, #db2777 100%)';
+                } else if (card.classList.contains('mixed')) {
+                    // Violet énergique
+                    background = 'linear-gradient(135deg, #a78bfa 0%, #8b5cf6 50%, #7c3aed 100%)';
+                }
+            } else if (this.colorCodingMode === 'niveau') {
+                const category = card.getAttribute('data-category');
+                const categoryLower = category ? category.toLowerCase() : '';
+                if (categoryLower === 'a1') {
+                    // Violet royal premium (A1 = élite)
+                    background = 'linear-gradient(135deg, #a855f7 0%, #9333ea 40%, #7c3aed 100%)';
+                } else if (categoryLower === 'a2') {
+                    // Bleu indigo profond
+                    background = 'linear-gradient(135deg, #6366f1 0%, #4f46e5 50%, #4338ca 100%)';
+                } else if (categoryLower === 'a3') {
+                    // Bleu ciel dynamique
+                    background = 'linear-gradient(135deg, #38bdf8 0%, #0ea5e9 50%, #0284c7 100%)';
+                } else if (categoryLower === 'a4') {
+                    // Teal aqua frais
+                    background = 'linear-gradient(135deg, #2dd4bf 0%, #14b8a6 50%, #0d9488 100%)';
+                }
+            } else if (this.colorCodingMode === 'penalite') {
+                const penalties = parseInt(card.getAttribute('data-penalties') || '0');
+                if (penalties === 0) {
+                    // Vert émeraude positif
+                    background = 'linear-gradient(135deg, #34d399 0%, #10b981 50%, #059669 100%)';
+                } else if (penalties <= 5) {
+                    // Orange ambre attention
+                    background = 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 50%, #d97706 100%)';
+                } else {
+                    // Rouge corail alerte
+                    background = 'linear-gradient(135deg, #f87171 0%, #ef4444 50%, #dc2626 100%)';
+                }
+            } else if (this.colorCodingMode === 'statut') {
+                if (card.classList.contains('match-fixed')) {
+                    // Violet améthyste (fixé)
+                    background = 'linear-gradient(135deg, #a78bfa 0%, #8b5cf6 50%, #7c3aed 100%)';
+                } else if (card.classList.contains('match-conflict-critical')) {
+                    // Rouge rubis critique
+                    background = 'linear-gradient(135deg, #f87171 0%, #ef4444 50%, #dc2626 100%)';
+                } else if (card.classList.contains('match-conflict-warning')) {
+                    // Orange topaze warning
+                    background = 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 50%, #d97706 100%)';
+                } else {
+                    // Bleu saphir flexible
+                    background = 'linear-gradient(135deg, #60a5fa 0%, #3b82f6 50%, #2563eb 100%)';
+                }
+            }
+            
+            if (background) {
+                card.style.background = background;
+                card.style.color = 'white';
+            }
+        });
+    }
+    
+    /**
+     * Change le mode d'affichage
+     * @param {string} mode - 'week' pour navigation par journée, 'venue' pour navigation par gymnase
+     */
+    setDisplayMode(mode) {
+        if (mode !== 'week' && mode !== 'venue') {
+            console.warn(`Mode d'affichage invalide: ${mode}`);
+            return;
+        }
+        
+        this.displayMode = mode;
+        
+        // Réinitialiser l'index de navigation
+        if (mode === 'week') {
+            this.currentWeekIndex = 0;
+        } else {
+            this.currentVenueIndex = 0;
+        }
+        
+        // Re-rendre la vue
+        this.render();
+    }
+    
+    /**
+     * Active/désactive l'affichage des créneaux libres
+     * @param {boolean} show - true pour afficher, false pour masquer
+     */
+    setShowAvailableSlots(show) {
+        this.showEmptySlots = show;
+        console.log(`🔄 Créneaux libres: ${show ? 'AFFICHÉS' : 'MASQUÉS'}`);
+        this.render();
+    }
+    
+    /**
+     * Alias pour compatibilité
+     */
+    toggleEmptySlots(show) {
+        this.setShowAvailableSlots(show);
     }
     
     /**
@@ -83,6 +314,17 @@ class AgendaGridView {
             filtered = filtered.filter(m => m.gymnase === this.filters.venue);
         }
         
+        // Filtre par équipe - support des IDs multiples (groupe M+F)
+        if (this.filters.equipe) {
+            const equipeIds = this.filters.equipe.split(',');
+            filtered = filtered.filter(m => {
+                const equipe1Id = m.equipe1_id || m.equipes?.[0];
+                const equipe2Id = m.equipe2_id || m.equipes?.[1];
+                return equipeIds.includes(equipe1Id) || equipeIds.includes(equipe2Id);
+            });
+        }
+        
+        // Filtre par équipe (recherche texte - ancienne méthode)
         if (this.filters.team) {
             filtered = filtered.filter(m =>
                 m.equipe1_nom.toLowerCase().includes(this.filters.team.toLowerCase()) ||
@@ -94,66 +336,175 @@ class AgendaGridView {
     }
     
     /**
-     * Calcule le nombre maximum de matchs + créneaux disponibles au même horaire pour chaque colonne
-     * @param {Array} columns - Les colonnes à analyser
-     * @param {Array} matches - Les matchs filtrés
-     * @returns {Map} - Map avec columnId => maxSimultaneousSlots
+     * Organise les matchs par semaine
      */
-    calculateMaxSimultaneousSlotsPerColumn(columns, matches) {
-        const maxSlotsMap = new Map();
+    organizeMatchesByWeek(matches) {
+        const weekMap = new Map();
         
-        columns.forEach(column => {
-            const columnMatches = this.viewManager.getMatchesForColumn(column, matches);
-            const matchesByTime = this.groupMatchesByExactTime(columnMatches);
+        matches.forEach(match => {
+            // Utiliser le champ 'semaine' directement
+            const weekNumber = match.semaine;
+            if (!weekNumber) return;
             
-            let maxSlots = 0;
-            matchesByTime.forEach(group => {
-                // Compter les matchs existants
-                let slotsAtThisTime = group.matches.length;
-                
-                // Ajouter les créneaux disponibles si activés
-                if (this.availableSlotsManager.showAvailableSlots) {
-                    const capacity = column.capacity || 1;
-                    const available = this.availableSlotsManager.calculateAvailable(group.matches, capacity);
-                    slotsAtThisTime += available;
-                }
-                
-                maxSlots = Math.max(maxSlots, slotsAtThisTime);
-            });
+            const weekKey = `W${String(weekNumber).padStart(2, '0')}`;
             
-            // Assurer un minimum de 1
-            maxSlots = Math.max(1, maxSlots);
-            maxSlotsMap.set(column.id, maxSlots);
+            if (!weekMap.has(weekKey)) {
+                weekMap.set(weekKey, {
+                    key: weekKey,
+                    weekNumber: weekNumber,
+                    matches: []
+                });
+            }
+            
+            weekMap.get(weekKey).matches.push(match);
         });
         
-        return maxSlotsMap;
+        // Convertir en tableau et trier par numéro de semaine
+        const weeks = Array.from(weekMap.values()).sort((a, b) => 
+            a.weekNumber - b.weekNumber
+        );
+        
+        return weeks;
+    }
+    
+    /**
+     * Organise les matchs par gymnase
+     * @param {Array} matches - Liste des matchs
+     * @returns {Array} Tableau d'objets {venueName, matches[]}
+     */
+    organizeMatchesByVenue(matches) {
+        const venueMap = new Map();
+        
+        matches.forEach(match => {
+            const venueName = match.gymnase;
+            if (!venueName) return;
+            
+            if (!venueMap.has(venueName)) {
+                venueMap.set(venueName, {
+                    venueName: venueName,
+                    matches: []
+                });
+            }
+            
+            venueMap.get(venueName).matches.push(match);
+        });
+        
+        // Convertir en tableau et trier alphabétiquement
+        const venues = Array.from(venueMap.values()).sort((a, b) => 
+            a.venueName.localeCompare(b.venueName)
+        );
+        
+        return venues;
+    }
+    
+    /**
+     * Calcule le numéro de semaine ISO 8601
+     */
+    getWeekNumber(date) {
+        const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+        const dayNum = d.getUTCDay() || 7;
+        d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+        const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+        return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+    }
+    
+    /**
+     * Retourne le lundi de la semaine
+     */
+    getWeekStartDate(date) {
+        const d = new Date(date);
+        const day = d.getDay();
+        const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+        return new Date(d.setDate(diff));
+    }
+    
+    /**
+     * Formate le label d'une journée avec la date
+     * @param {Object} week - Objet semaine avec weekNumber et matches
+     * @returns {string} - Format "J2 (23 oct.)"
+     */
+    formatWeekLabel(week) {
+        const weekDates = this.getWeekDates(week.weekNumber);
+        return `J${week.weekNumber} (${weekDates.label})`;
     }
 
     /**
-     * Rend la vue
+     * Rend la vue agenda complète
      */
     render() {
         try {
             const data = this.dataManager.getData();
+            
             if (!data || !data.matches) {
+                console.error('❌ [AgendaGrid] Aucune donnée disponible');
                 this.container.innerHTML = '<div class="empty-state">Aucune donnée disponible</div>';
                 return;
             }
             
             const allMatches = data.matches.scheduled || [];
+            
             const filteredMatches = this.filterMatches(allMatches);
             
-            // Calculer la plage horaire dynamique
-            this.viewManager.calculateTimeRange(filteredMatches);
+            if (filteredMatches.length === 0) {
+                this.container.innerHTML = '<div class="empty-state">Aucun match ne correspond aux filtres sélectionnés</div>';
+                return;
+            }
             
-            // Obtenir les colonnes selon le mode d'affichage
-            const columns = this.viewManager.getColumns(filteredMatches);
+            // ═══════════════════════════════════════════════════════════════
+            // DUAL MODE LOGIC: Organiser selon le mode d'affichage
+            // ═══════════════════════════════════════════════════════════════
+            let matchesToDisplay = [];
             
-            // Calculer le max de slots simultanés par colonne
-            this.maxSlotsPerColumn = this.calculateMaxSimultaneousSlotsPerColumn(columns, filteredMatches);
+            if (this.displayMode === 'week') {
+                // MODE JOURNÉE: Organiser par semaine, naviguer entre J1, J2, J4...
+                this.weeks = this.organizeMatchesByWeek(filteredMatches);
+                
+                if (this.weeks.length === 0) {
+                    this.container.innerHTML = '<div class="empty-state">Aucun match trouvé</div>';
+                    return;
+                }
+                
+                // Valider l'index de journée
+                if (this.currentWeekIndex >= this.weeks.length) {
+                    this.currentWeekIndex = this.weeks.length - 1;
+                }
+                if (this.currentWeekIndex < 0) {
+                    this.currentWeekIndex = 0;
+                }
+                
+                const currentWeek = this.weeks[this.currentWeekIndex];
+                matchesToDisplay = currentWeek.matches;
+                console.log('🔍 [AgendaGrid] Journée courante:', currentWeek.key, 'matchs:', matchesToDisplay.length);
+                
+            } else if (this.displayMode === 'venue') {
+                // MODE GYMNASE: Organiser par gymnase, naviguer entre BESSON, LAENNEC...
+                this.venues = this.organizeMatchesByVenue(filteredMatches);
+                console.log('🔍 [AgendaGrid] Mode Gymnase - Nombre de gymnases:', this.venues.length);
+                
+                if (this.venues.length === 0) {
+                    this.container.innerHTML = '<div class="empty-state">Aucun match trouvé</div>';
+                    return;
+                }
+                
+                // Valider l'index de gymnase
+                if (this.currentVenueIndex >= this.venues.length) {
+                    this.currentVenueIndex = this.venues.length - 1;
+                }
+                if (this.currentVenueIndex < 0) {
+                    this.currentVenueIndex = 0;
+                }
+                
+                const currentVenue = this.venues[this.currentVenueIndex];
+                matchesToDisplay = currentVenue.matches;
+                console.log('🔍 [AgendaGrid] Gymnase courant:', currentVenue.key, 'matchs:', matchesToDisplay.length);
+            }
             
-            // Générer le HTML
-            this.container.innerHTML = this.generateHTML(filteredMatches, columns, data);
+            // ═══════════════════════════════════════════════════════════════
+            // GÉNÉRATION DU HTML (commun aux deux modes)
+            // ═══════════════════════════════════════════════════════════════
+            const html = this.generateAgendaView(matchesToDisplay, data);
+            
+            this.container.innerHTML = html;
             
             // Initialiser le drag & drop
             this.dragDropManager.initializeDragDrop(this.container);
@@ -161,326 +512,1226 @@ class AgendaGridView {
             // Attacher les événements
             this.attachEvents();
             
+            // Synchroniser le scroll horizontal des en-têtes avec les colonnes
+            this.syncHeaderScroll();
+            
+            // Réappliquer les couleurs si un mode de coloration est actif
+            if (this.colorCodingMode && this.colorCodingMode !== 'none') {
+                setTimeout(() => this.applyColorCoding(), 50);
+            }
+            
+            console.log('✅ [AgendaGrid] render() terminé avec succès');
+            
         } catch (error) {
+            console.error('❌ [AgendaGrid] Erreur dans render():', error);
             this.container.innerHTML = `
                 <div class="error-state">
                     <h3>⚠️ Erreur d'affichage</h3>
                     <p>${error.message}</p>
+                    <pre>${error.stack}</pre>
                     <button onclick="location.reload()">Recharger la page</button>
                 </div>
             `;
         }
     }
-    
+
+
     /**
-     * Génère le HTML complet
+     * Génère la vue agenda complète avec axe temporel et colonnes de gymnases
      */
-    generateHTML(matches, columns, data) {
+    generateAgendaView(matches, data) {
+        // Paramètres de temps
+        const minHour = 14;
+        const maxHour = 23;
+        const pixelsPerHour = 120;
+        const matchDuration = 2; // Durée réelle du match
+        const matchDisplayHeight = 2; // Hauteur affichée = durée complète (2h)
+        const totalHeight = (maxHour - minHour) * pixelsPerHour;
+        
+        // ═══════════════════════════════════════════════════════════════
+        // DUAL MODE: Générer les colonnes selon le mode d'affichage
+        // ═══════════════════════════════════════════════════════════════
+        let columnsHTML = '';
+        let venues = [];
+        let containerClass = '';
+        
+        // Déclarer les variables qui seront utilisées pour les en-têtes
+        let columnWidths;
+        let venueMaxSimultaneous;
+        let matchesByVenue;
+        let weekMaxSimultaneous;
+        let matchesByWeek;
+        
+        if (this.displayMode === 'week') {
+            // MODE JOURNÉE: Colonnes = Gymnases
+            venues = this.getVenuesWithCapacity(matches, data);
+            matchesByVenue = this.groupMatchesByVenue(matches);
+            
+            // Calculer le nombre maximum de slots nécessaires par gymnase
+            // Si showEmptySlots, inclure les créneaux disponibles dans le calcul
+            if (this.showEmptySlots) {
+                venueMaxSimultaneous = this.calculateMaxSlotsWithAvailable(matchesByVenue);
+            } else {
+                venueMaxSimultaneous = this.calculateMaxSimultaneousMatches(matchesByVenue);
+            }
+            
+            // Utiliser les largeurs calculées directement
+            const effectiveWidths = new Map();
+            venues.forEach(venue => {
+                effectiveWidths.set(venue.id, venueMaxSimultaneous.get(venue.id) || 1);
+            });
+            
+            // Calculer les largeurs proportionnelles pour chaque gymnase
+            columnWidths = this.calculateColumnWidths(effectiveWidths);
+            
+            console.log('🔍 [AgendaGrid] Mode Journée - Gymnases:', venues.length);
+            
+            columnsHTML = venues.map(venue => {
+                const widthInfo = columnWidths.get(venue.id) || { width: this.columnMinWidth, widthPerSlot: 200 };
+                return this.generateVenueColumnWithWidth(
+                    venue, 
+                    matchesByVenue.get(venue.id) || [], 
+                    venueMaxSimultaneous.get(venue.id) || 1,
+                    widthInfo.width,
+                    widthInfo.widthPerSlot,
+                    minHour,
+                    maxHour,  // AJOUT: Passer maxHour pour les créneaux libres
+                    pixelsPerHour,
+                    matchDisplayHeight,
+                    totalHeight,
+                    this.showEmptySlots  // NOUVEAU: Passer l'option créneaux libres
+                );
+            }).join('');
+            
+            containerClass = 'venues-container';
+            
+        } else if (this.displayMode === 'venue') {
+            // MODE GYMNASE: Colonnes = Journées
+            const weeks = this.getWeeksFromMatches(matches);
+            matchesByWeek = this.groupMatchesByWeek(matches);
+            weekMaxSimultaneous = this.calculateMaxSimultaneousMatchesByWeek(matchesByWeek);
+            
+            // Calculer les largeurs proportionnelles pour chaque journée
+            columnWidths = this.calculateColumnWidths(weekMaxSimultaneous);
+            
+            console.log('🔍 [AgendaGrid] Mode Gymnase - Journées:', weeks.length);
+            
+            columnsHTML = weeks.map(week => {
+                const widthInfo = columnWidths.get(week.weekNumber) || { width: this.columnMinWidth, widthPerSlot: 200 };
+                return this.generateWeekColumnWithWidth(
+                    week,
+                    matchesByWeek.get(week.weekNumber) || [],
+                    weekMaxSimultaneous.get(week.weekNumber) || 1,
+                    widthInfo.width,
+                    widthInfo.widthPerSlot,
+                    minHour,
+                    pixelsPerHour,
+                    matchDisplayHeight,
+                    totalHeight,
+                    false  // Pas de créneaux libres pour le mode gymnase (colonnes = journées)
+                );
+            }).join('');
+            
+            containerClass = 'weeks-container';
+        }
+        
+        // ═══════════════════════════════════════════════════════════════
+        // Structure HTML commune
+        // ═══════════════════════════════════════════════════════════════
+        
+        // Conserver la classe de coloration si elle est définie
+        const colorClass = this.colorCodingMode && this.colorCodingMode !== 'none' ? ` color-${this.colorCodingMode}` : '';
+        
+        // Générer les en-têtes de colonnes séparément
+        let headersHTML = '';
+        if (this.displayMode === 'week') {
+            headersHTML = venues.map(venue => {
+                const widthInfo = columnWidths.get(venue.id) || { width: this.columnMinWidth, widthPerSlot: 200 };
+                const maxSim = venueMaxSimultaneous.get(venue.id) || 1;
+                return `
+                    <div class="venue-header-cell" style="width: ${widthInfo.width}px; flex-shrink: 0; padding: 0; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; display: flex; flex-direction: column; border-radius: 8px 8px 0 0; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-right: 4px;">
+                        <div class="venue-name" style="font-size: 1.2rem; font-weight: 800; text-transform: uppercase; letter-spacing: 1.5px; text-shadow: 0 2px 4px rgba(0,0,0,0.3); background: rgba(0, 0, 0, 0.15); padding: 0.8rem 1rem; border-bottom: 2px solid rgba(255, 255, 255, 0.15); text-align: center;">${venue.name}</div>
+                        <div class="venue-info" style="display: flex; gap: 0.75rem; font-size: 0.8rem; font-weight: 600; padding: 0.6rem 1rem; justify-content: center; flex-wrap: wrap;">
+                            <span class="venue-capacity" style="display: flex; align-items: center; gap: 0.3rem; background: rgba(255, 255, 255, 0.25); padding: 0.3rem 0.7rem; border-radius: 12px; font-size: 0.75rem; white-space: nowrap;">⚡ Capacité: ${venue.capacity}</span>
+                            <span class="venue-matches" style="display: flex; align-items: center; gap: 0.3rem; background: rgba(255, 255, 255, 0.25); padding: 0.3rem 0.7rem; border-radius: 12px; font-size: 0.75rem; white-space: nowrap;">📊 ${(matchesByVenue.get(venue.id) || []).length} matchs</span>
+                            ${maxSim > 1 ? `<span class="venue-simultaneous" style="display: flex; align-items: center; gap: 0.3rem; background: rgba(255, 215, 0, 0.4); padding: 0.3rem 0.7rem; border-radius: 12px; font-size: 0.75rem; white-space: nowrap; font-weight: 700;">🔀 Max: ${maxSim}</span>` : ''}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        } else {
+            // Mode venue (journées)
+            const weeks = this.getWeeksFromMatches(matches);
+            const matchesByWeek = this.groupMatchesByWeek(matches);
+            headersHTML = weeks.map(week => {
+                const widthInfo = columnWidths.get(week.weekNumber) || { width: this.columnMinWidth, widthPerSlot: 200 };
+                const weekLabel = this.formatWeekLabel(week);
+                const maxSim = weekMaxSimultaneous.get(week.weekNumber) || 1;
+                return `
+                    <div class="week-header-cell" style="width: ${widthInfo.width}px; flex-shrink: 0; padding: 0; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; display: flex; flex-direction: column; border-radius: 8px 8px 0 0; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-right: 4px;">
+                        <div class="week-name" style="font-size: 1.2rem; font-weight: 800; text-transform: uppercase; letter-spacing: 1.5px; text-shadow: 0 2px 4px rgba(0,0,0,0.3); background: rgba(0, 0, 0, 0.15); padding: 0.8rem 1rem; border-bottom: 2px solid rgba(255, 255, 255, 0.15); text-align: center;">${weekLabel}</div>
+                        <div class="week-info" style="display: flex; gap: 0.75rem; font-size: 0.8rem; font-weight: 600; padding: 0.6rem 1rem; justify-content: center; flex-wrap: wrap;">
+                            <span class="week-matches" style="display: flex; align-items: center; gap: 0.3rem; background: rgba(255, 255, 255, 0.25); padding: 0.3rem 0.7rem; border-radius: 12px; font-size: 0.75rem; white-space: nowrap;">📊 ${(matchesByWeek.get(week.weekNumber) || []).length} matchs</span>
+                            ${maxSim > 1 ? `<span class="week-simultaneous" style="display: flex; align-items: center; gap: 0.3rem; background: rgba(255, 215, 0, 0.4); padding: 0.3rem 0.7rem; border-radius: 12px; font-size: 0.75rem; white-space: nowrap; font-weight: 700;">🔀 Max: ${maxSim}</span>` : ''}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+        
         return `
-            <div class="agenda-grid-view">
-                ${this.generateToolbar(matches, columns, data)}
-                ${this.generateGrid(matches, columns)}
+            <div class="agenda-view-container${colorClass}">
+                <!-- Barre de navigation en haut (non-scrollable) -->
+                ${this.generateNavigationBar(matches, venues, data)}
+                
+                <!-- Rangée des en-têtes de colonnes (au-dessus de la grille) -->
+                <div class="agenda-headers-row" style="display: flex; flex-direction: row; background: #fafbfc; padding: 0.5rem 0.5rem 0 0.5rem; overflow: hidden;">
+                    <!-- Espace pour la colonne des horaires -->
+                    <div style="width: 85px; flex-shrink: 0; margin-right: 4px;"></div>
+                    <!-- Container scrollable pour les en-têtes -->
+                    <div class="agenda-headers-scroll" style="overflow-x: auto; overflow-y: hidden; flex: 1;">
+                        <style>
+                            .agenda-headers-scroll::-webkit-scrollbar {
+                                display: none;
+                            }
+                            .agenda-headers-scroll {
+                                -ms-overflow-style: none;
+                                scrollbar-width: none;
+                            }
+                        </style>
+                        <div style="display: flex; flex-direction: row; flex-wrap: nowrap; gap: 0;">
+                            ${headersHTML}
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Zone de contenu (scrollable verticalement uniquement) -->
+                <div class="agenda-scroll-wrapper">
+                    <div class="agenda-grid-container" style="display:flex; flex-direction:row; background:#fafbfc; padding:0.5rem;">
+                        <!-- Colonne des horaires (fixée à gauche) -->
+                        <div class="time-column-fixed" style="width: 85px; flex-shrink: 0; background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); border-right: 3px solid #667eea; box-shadow: 2px 0 8px rgba(0,0,0,0.06); margin-right: 4px; position: sticky; left: 0; z-index: 10;">
+                            ${this.generateTimeScale(minHour, maxHour, pixelsPerHour, totalHeight)}
+                        </div>
+                        
+                        <!-- Colonnes dynamiques selon le mode -->
+                        <div class="${containerClass}" style="display:flex; flex-direction:row; flex-wrap:nowrap; overflow-x:auto; background:#ffffff; padding:0.25rem; gap:0;">
+                            ${columnsHTML}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    /**
+     * Récupère tous les gymnases avec leurs capacités
+     */
+    getVenuesWithCapacity(matches, data) {
+        const venueMap = new Map();
+        const venues = data.entities?.venues || {};
+        
+        // D'abord, ajouter tous les gymnases depuis les entités
+        Object.entries(venues).forEach(([id, venueData]) => {
+            venueMap.set(id, {
+                id: id,
+                name: venueData.nom || id,
+                capacity: venueData.capacite || 1
+            });
+        });
+        
+        // Ensuite, vérifier les matchs pour s'assurer qu'on n'a pas oublié de gymnases
+        matches.forEach(match => {
+            const venueId = match.gymnase; // Utiliser 'gymnase' au lieu de 'gymnase_id'
+            if (venueId && !venueMap.has(venueId)) {
+                venueMap.set(venueId, {
+                    id: venueId,
+                    name: venueId,
+                    capacity: 1
+                });
+            }
+        });
+        
+        return Array.from(venueMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+    }
+
+    /**
+     * Groupe les matchs par gymnase
+     */
+    groupMatchesByVenue(matches) {
+        const grouped = new Map();
+        
+        matches.forEach(match => {
+            const venueId = match.gymnase; // Utiliser 'gymnase' au lieu de 'gymnase_id'
+            if (!venueId) return;
+            
+            if (!grouped.has(venueId)) {
+                grouped.set(venueId, []);
+            }
+            grouped.get(venueId).push(match);
+        });
+        
+        return grouped;
+    }
+
+    /**
+     * Calcule le nombre maximum de matchs simultanés dans chaque gymnase
+     */
+    calculateMaxSimultaneousMatches(matchesByVenue) {
+        const maxSimultaneous = new Map();
+        
+        matchesByVenue.forEach((matches, venueId) => {
+            let max = 1;
+            
+            // Pour chaque match, vérifier combien de matchs se chevauchent
+            matches.forEach(match1 => {
+                const time1 = this.parseTime(match1.horaire);
+                if (!time1) return;
+                
+                const end1 = time1 + 2; // durée de 2h
+                
+                let simultaneous = 1;
+                matches.forEach(match2 => {
+                    if (match1.match_id === match2.match_id) return;
+                    
+                    const time2 = this.parseTime(match2.horaire);
+                    if (!time2) return;
+                    
+                    const end2 = time2 + 2;
+                    
+                    // Vérifier le chevauchement
+                    if (!(end1 <= time2 || time1 >= end2)) {
+                        simultaneous++;
+                    }
+                });
+                
+                max = Math.max(max, simultaneous);
+            });
+            
+            maxSimultaneous.set(venueId, max);
+        });
+        
+        return maxSimultaneous;
+    }
+
+    /**
+     * Calcule le nombre maximum de slots nécessaires (matchs + créneaux libres) par gymnase
+     * Prend en compte à la fois les matchs planifiés ET les créneaux disponibles
+     */
+    calculateMaxSlotsWithAvailable(matchesByVenue) {
+        const maxSlots = new Map();
+        const data = this.dataManager?.getData();
+        
+        if (!data || !data.slots || !data.slots.available) {
+            // Pas de données de slots, revenir au calcul basique
+            return this.calculateMaxSimultaneousMatches(matchesByVenue);
+        }
+        
+        matchesByVenue.forEach((matches, venueId) => {
+            let max = 1;
+            
+            // Filtrer les slots disponibles pour ce gymnase et la semaine courante
+            const currentWeek = this.displayMode === 'week' && this.weeks && this.weeks[this.currentWeekIndex] 
+                ? this.weeks[this.currentWeekIndex].weekNumber 
+                : null;
+            
+            const venueSlots = data.slots.available.filter(slot => {
+                if (slot.gymnase !== venueId) return false;
+                if (currentWeek !== null && slot.semaine !== currentWeek) return false;
+                return true;
+            });
+            
+            // Grouper les slots par horaire
+            const slotsByTime = {};
+            venueSlots.forEach(slot => {
+                const time = this.parseTime(slot.horaire);
+                if (!time) return;
+                if (!slotsByTime[time]) slotsByTime[time] = [];
+                slotsByTime[time].push(slot);
+            });
+            
+            // Pour chaque créneau horaire, calculer matchs + slots disponibles
+            const allTimes = new Set();
+            
+            // Ajouter les horaires des matchs
+            matches.forEach(match => {
+                const time = this.parseTime(match.horaire);
+                if (time) allTimes.add(time);
+            });
+            
+            // Ajouter les horaires des slots
+            Object.keys(slotsByTime).forEach(time => {
+                allTimes.add(parseFloat(time));
+            });
+            
+            // Pour chaque horaire, compter matchs + slots
+            allTimes.forEach(time => {
+                const slotStart = time;
+                const slotEnd = time + 2;
+                
+                // Compter les matchs qui se chevauchent
+                const overlappingMatches = matches.filter(match => {
+                    const matchTime = this.parseTime(match.horaire);
+                    if (!matchTime) return false;
+                    const matchEnd = matchTime + 2;
+                    return !(matchEnd <= slotStart || matchTime >= slotEnd);
+                });
+                
+                // Ajouter le nombre de slots disponibles à cette heure
+                const availableSlots = slotsByTime[time] ? slotsByTime[time].length : 0;
+                
+                const total = overlappingMatches.length + availableSlots;
+                max = Math.max(max, total);
+            });
+            
+            maxSlots.set(venueId, max);
+        });
+        
+        return maxSlots;
+    }
+
+    /**
+     * Parse une heure au format "HH:MM" en nombre décimal
+     */
+    parseTime(timeStr) {
+        if (!timeStr) return null;
+        const [hours, minutes] = timeStr.split(':').map(Number);
+        if (isNaN(hours) || isNaN(minutes)) return null;
+        return hours + minutes / 60;
+    }
+
+    /**
+     * Calcule les largeurs de colonnes de manière proportionnelle
+     * avec un minimum de 200px par colonne
+     * 
+     * @param {Map} maxSimultaneousMap - Map(id -> nombre max de matchs simultanés)
+     * @returns {Map} Map(id -> {width: number, widthPerSlot: number})
+     */
+    calculateColumnWidths(maxSimultaneousMap) {
+        const minColumnWidth = this.columnMinWidth; // 200px
+        const padding = 8; // Réduit de 16 à 8 pour moins d'espace blanc
+        const widths = new Map();
+        
+        // Pour chaque colonne, calculer la largeur par slot en fonction du nombre de matchs simultanés
+        maxSimultaneousMap.forEach((maxSimultaneous, id) => {
+            let widthPerSlot;
+            
+            // Adapter la largeur par slot selon le nombre de matchs simultanés
+            // Plus il y a de matchs simultanés, plus on réduit la largeur par slot
+            if (maxSimultaneous <= 1) {
+                widthPerSlot = 250; // Largeur généreuse pour 1 seul match
+            } else if (maxSimultaneous <= 3) {
+                widthPerSlot = 230; // Largeur confortable
+            } else if (maxSimultaneous <= 6) {
+                widthPerSlot = 200; // Largeur normale
+            } else if (maxSimultaneous <= 10) {
+                widthPerSlot = 170; // Réduction légère
+            } else if (maxSimultaneous <= 15) {
+                widthPerSlot = 150; // Réduction moyenne
+            } else {
+                widthPerSlot = 130; // Réduction importante
+            }
+            
+            // Calculer la largeur totale de la colonne
+            let columnWidth = (maxSimultaneous * widthPerSlot) + padding;
+            
+            // Appliquer le minimum de 200px
+            columnWidth = Math.max(columnWidth, minColumnWidth);
+            
+            widths.set(id, {
+                width: columnWidth,
+                widthPerSlot: widthPerSlot
+            });
+            
+            console.log(`📏 [Column ${id}] maxSimultaneous: ${maxSimultaneous}, widthPerSlot: ${widthPerSlot}px, columnWidth: ${columnWidth}px`);
+        });
+        
+        return widths;
+    }
+
+    /**
+     * ═══════════════════════════════════════════════════════════════
+     * MÉTHODES POUR MODE GYMNASE (colonnes = journées)
+     * ═══════════════════════════════════════════════════════════════
+     */
+
+    /**
+     * Récupère toutes les journées présentes dans les matchs
+     */
+    getWeeksFromMatches(matches) {
+        const weekSet = new Set();
+        matches.forEach(match => {
+            if (match.semaine) {
+                weekSet.add(match.semaine);
+            }
+        });
+        
+        const weeks = Array.from(weekSet).sort((a, b) => a - b).map(weekNum => ({
+            weekNumber: weekNum,
+            label: this.formatWeekLabel({ weekNumber: weekNum })
+        }));
+        
+        return weeks;
+    }
+
+    /**
+     * Groupe les matchs par journée (semaine)
+     */
+    groupMatchesByWeek(matches) {
+        const grouped = new Map();
+        
+        matches.forEach(match => {
+            const weekNum = match.semaine;
+            if (!weekNum) return;
+            
+            if (!grouped.has(weekNum)) {
+                grouped.set(weekNum, []);
+            }
+            grouped.get(weekNum).push(match);
+        });
+        
+        return grouped;
+    }
+
+    /**
+     * Calcule le nombre maximum de matchs simultanés dans chaque journée
+     */
+    calculateMaxSimultaneousMatchesByWeek(matchesByWeek) {
+        const maxSimultaneous = new Map();
+        
+        matchesByWeek.forEach((matches, weekNum) => {
+            let max = 1;
+            
+            matches.forEach(match1 => {
+                const time1 = this.parseTime(match1.horaire);
+                if (!time1) return;
+                
+                const end1 = time1 + 2;
+                let simultaneous = 1;
+                
+                matches.forEach(match2 => {
+                    if (match1.match_id === match2.match_id) return;
+                    
+                    const time2 = this.parseTime(match2.horaire);
+                    if (!time2) return;
+                    
+                    const end2 = time2 + 2;
+                    
+                    if (!(end1 <= time2 || time1 >= end2)) {
+                        simultaneous++;
+                    }
+                });
+                
+                max = Math.max(max, simultaneous);
+            });
+            
+            maxSimultaneous.set(weekNum, max);
+        });
+        
+        return maxSimultaneous;
+    }
+
+    /**
+     * Génère une colonne pour une journée (mode gymnase)
+     */
+    generateWeekColumn(week, matches, maxSimultaneous, minHour, pixelsPerHour, matchDuration, totalHeight) {
+        // Largeur adaptative basée sur le nombre max de matchs simultanés
+        let widthPerSlot;
+        if (maxSimultaneous <= 3) {
+            widthPerSlot = 230;
+        } else if (maxSimultaneous <= 6) {
+            widthPerSlot = 200;
+        } else if (maxSimultaneous <= 10) {
+            widthPerSlot = 170;
+        } else if (maxSimultaneous <= 15) {
+            widthPerSlot = 150;
+        } else {
+            widthPerSlot = 130;
+        }
+        
+        const padding = 4;
+        const columnWidth = Math.max(this.columnMinWidth, (maxSimultaneous * widthPerSlot) + padding);
+        const weekDates = this.getWeekDates(week.weekNumber);
+        
+        console.log(`🔍 [Week ${week.weekNumber}] maxSimultaneous: ${maxSimultaneous}, widthPerSlot: ${widthPerSlot}px, columnWidth: ${columnWidth}px`);
+        
+        return `
+            <div class="week-column" 
+                 data-week="${week.weekNumber}"
+                 data-max-simultaneous="${maxSimultaneous}"
+                 style="width: ${columnWidth}px; flex-shrink: 0; margin-right: 4px;">
+                <!-- En-tête de la journée -->
+                <div class="column-header week-header">
+                    <div class="column-title">${week.label}</div>
+                    <div class="column-subtitle">${weekDates.label}</div>
+                    <div class="column-stats">
+                        <span>📊 ${matches.length} match${matches.length > 1 ? 's' : ''}</span>
+                        ${maxSimultaneous > 1 ? `<span>🔀 Max: ${maxSimultaneous}</span>` : ''}
+                    </div>
+                </div>
+                
+                <!-- Corps avec les matchs -->
+                <div class="column-body" style="height: ${totalHeight}px; position: relative;">
+                    ${this.generateWeekMatches(matches, minHour, pixelsPerHour, matchDuration, maxSimultaneous, widthPerSlot)}
+                </div>
+            </div>
+        `;
+    }
+
+    /**
+     * Génère une colonne pour une journée avec largeur personnalisée (mode gymnase)
+     */
+    generateWeekColumnWithWidth(week, matches, maxSimultaneous, columnWidth, widthPerSlot, minHour, pixelsPerHour, matchDuration, totalHeight) {
+        const weekDates = this.getWeekDates(week.weekNumber);
+        
+        console.log(`🔍 [Week ${week.weekNumber}] maxSimultaneous: ${maxSimultaneous}, widthPerSlot: ${widthPerSlot}px, columnWidth: ${columnWidth}px`);
+        
+        return `
+            <div class="week-column" 
+                 data-week="${week.weekNumber}"
+                 data-max-simultaneous="${maxSimultaneous}"
+                 style="width: ${columnWidth}px; flex-shrink: 0; background: linear-gradient(180deg, #ffffff 0%, #f8f9fa 100%); border-right: 2px solid #e9ecef; margin-right: 4px; border-radius: 0 0 8px 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
+                
+                <!-- Corps avec les matchs (sans en-tête) -->
+                <div class="week-body" style="height: ${totalHeight}px; position: relative; background-image: repeating-linear-gradient(to bottom, transparent 0, transparent 119px, rgba(102, 126, 234, 0.08) 119px, rgba(102, 126, 234, 0.08) 120px);">
+                    ${this.generateWeekMatches(matches, minHour, pixelsPerHour, matchDuration, maxSimultaneous, widthPerSlot)}
+                </div>
+            </div>
+        `;
+    }
+
+    /**
+     * Génère les matchs d'une journée avec positionnement absolu
+     */
+    generateWeekMatches(matches, minHour, pixelsPerHour, matchDuration, maxSimultaneous, widthPerSlot) {
+        if (!matches || matches.length === 0) return '';
+        
+        // Trier les matchs par horaire
+        const sortedMatches = matches.slice().sort((a, b) => {
+            const timeA = this.parseTime(a.horaire) || 0;
+            const timeB = this.parseTime(b.horaire) || 0;
+            return timeA - timeB;
+        });
+        
+        // Assigner un slot horizontal à chaque match
+        const matchSlots = this.assignMatchSlots(sortedMatches);
+        
+        let html = '';
+        sortedMatches.forEach((match, index) => {
+            const time = this.parseTime(match.horaire);
+            if (!time) return;
+            
+            // Position verticale basée sur l'horaire
+            const top = (time - minHour) * pixelsPerHour;
+            const height = matchDuration * pixelsPerHour; // Hauteur complète sans marge
+            
+            // Position horizontale basée sur le slot
+            const slot = matchSlots.get(match.match_id) || 0;
+            const left = slot * widthPerSlot + 2;
+            const width = widthPerSlot - 4;
+            
+            html += `
+                <div class="match-wrapper" style="
+                    position: absolute;
+                    top: ${top}px;
+                    left: ${left}px;
+                    width: ${width}px;
+                    height: ${height}px;
+                ">
+                    ${this.cardRenderer.renderMatchCard(match, false, index, true, null)}
+                </div>
+            `;
+        });
+        
+        return html;
+    }
+
+    /**
+     * Positionne les matchs dans une colonne (gestion des chevauchements)
+     */
+    /**
+     * ═══════════════════════════════════════════════════════════════
+     * FIN MÉTHODES MODE GYMNASE
+     * ═══════════════════════════════════════════════════════════════
+     */
+
+    /**
+     * ÉTAPE 1: Génère la barre de navigation en haut (non-scrollable)
+     * Structure propre avec 3 sections : info gauche, navigation centrale, stats droite
+     */
+    generateNavigationBar(matches, venues, data) {
+        const totalVenues = venues.length;
+        const totalMatches = matches.length;
+        
+        // ═══════════════════════════════════════════════════════════════
+        // DUAL MODE: Informations de navigation selon le mode
+        // ═══════════════════════════════════════════════════════════════
+        let navigationContent = '';
+        
+        if (this.displayMode === 'week') {
+            // MODE JOURNÉE: Naviguer entre J1, J2, J4...
+            const currentWeek = this.weeks[this.currentWeekIndex];
+            const weekLabel = this.formatWeekLabel(currentWeek);
+            const weekDates = this.getWeekDates(currentWeek.weekNumber);
+            
+            const fullDate = weekDates.date.toLocaleDateString('fr-FR', { 
+                weekday: 'long', 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric' 
+            });
+            
+            const prevDisabled = this.currentWeekIndex === 0 ? 'disabled' : '';
+            const nextDisabled = this.currentWeekIndex === this.weeks.length - 1 ? 'disabled' : '';
+            const weekIndicator = `${this.currentWeekIndex + 1}/${this.weeks.length}`;
+            
+            const btnStyle = "padding: 0.75rem 1.25rem; background: linear-gradient(135deg, #667eea, #764ba2); color: white; border: none; border-radius: 12px; cursor: pointer; font-weight: 700; box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3); transition: all 0.2s ease;";
+            const btnDisabledStyle = "padding: 0.75rem 1.25rem; background: linear-gradient(135deg, #adb5bd, #868e96); color: white; border: none; border-radius: 12px; cursor: not-allowed; font-weight: 700; box-shadow: none; opacity: 0.3;";
+            
+            navigationContent = `
+                <button id="prev-week" class="nav-button nav-prev" ${prevDisabled} title="Journée précédente" style="${prevDisabled ? btnDisabledStyle : btnStyle}">
+                    <span class="nav-button-icon" style="font-size: 1.25rem; font-weight: 900;">◀</span>
+                </button>
+                
+                <div class="nav-current-item" style="display: flex; flex-direction: column; align-items: center; gap: 0.5rem; min-width: 350px; padding: 0.75rem 1.5rem; background: white; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08);">
+                    <div class="nav-item-main" style="display: flex; align-items: center; gap: 1rem;">
+                        <span class="nav-item-label" style="font-size: 1.5rem; font-weight: 900; color: #667eea; letter-spacing: 1px;">${weekLabel}</span>
+                        <span class="nav-item-indicator" style="padding: 0.25rem 0.75rem; background: linear-gradient(135deg, #f8f9fa, #e9ecef); border-radius: 20px; font-size: 0.85rem; font-weight: 600; color: #495057;">${weekIndicator}</span>
+                    </div>
+                    <div class="nav-item-subtitle" title="${fullDate}" style="font-size: 0.9rem; color: #6c757d; font-weight: 600;">
+                        ${fullDate}
+                    </div>
+                </div>
+                
+                <button id="next-week" class="nav-button nav-next" ${nextDisabled} title="Journée suivante" style="${nextDisabled ? btnDisabledStyle : btnStyle}">
+                    <span class="nav-button-icon" style="font-size: 1.25rem; font-weight: 900;">▶</span>
+                </button>
+            `;
+            
+        } else if (this.displayMode === 'venue') {
+            // MODE GYMNASE: Naviguer entre BESSON, LAENNEC, DESCARTES...
+            const currentVenue = this.venues[this.currentVenueIndex];
+            const venueName = currentVenue.key;
+            
+            const prevDisabled = this.currentVenueIndex === 0 ? 'disabled' : '';
+            const nextDisabled = this.currentVenueIndex === this.venues.length - 1 ? 'disabled' : '';
+            const venueIndicator = `${this.currentVenueIndex + 1}/${this.venues.length}`;
+            
+            // Compter le nombre de journées différentes dans ce gymnase
+            const uniqueWeeks = new Set(currentVenue.matches.map(m => m.semaine));
+            const weekCount = uniqueWeeks.size;
+            
+            const btnStyle = "padding: 0.75rem 1.25rem; background: linear-gradient(135deg, #667eea, #764ba2); color: white; border: none; border-radius: 12px; cursor: pointer; font-weight: 700; box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3); transition: all 0.2s ease;";
+            const btnDisabledStyle = "padding: 0.75rem 1.25rem; background: linear-gradient(135deg, #adb5bd, #868e96); color: white; border: none; border-radius: 12px; cursor: not-allowed; font-weight: 700; box-shadow: none; opacity: 0.3;";
+            
+            navigationContent = `
+                <button id="prev-venue" class="nav-button nav-prev" ${prevDisabled} title="Gymnase précédent" style="${prevDisabled ? btnDisabledStyle : btnStyle}">
+                    <span class="nav-button-icon" style="font-size: 1.25rem; font-weight: 900;">◀</span>
+                </button>
+                
+                <div class="nav-current-item" style="display: flex; flex-direction: column; align-items: center; gap: 0.5rem; min-width: 350px; padding: 0.75rem 1.5rem; background: white; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08);">
+                    <div class="nav-item-main" style="display: flex; align-items: center; gap: 1rem;">
+                        <span class="nav-item-icon" style="font-size: 1.5rem;">🏛️</span>
+                        <span class="nav-item-label" style="font-size: 1.5rem; font-weight: 900; color: #667eea; letter-spacing: 1px;">${venueName}</span>
+                        <span class="nav-item-indicator" style="padding: 0.25rem 0.75rem; background: linear-gradient(135deg, #f8f9fa, #e9ecef); border-radius: 20px; font-size: 0.85rem; font-weight: 600; color: #495057;">${venueIndicator}</span>
+                    </div>
+                    <div class="nav-item-subtitle" style="font-size: 0.9rem; color: #6c757d; font-weight: 600;">
+                        ${totalMatches} match${totalMatches > 1 ? 's' : ''} • ${weekCount} journée${weekCount > 1 ? 's' : ''}
+                    </div>
+                </div>
+                
+                <button id="next-venue" class="nav-button nav-next" ${nextDisabled} title="Gymnase suivant" style="${nextDisabled ? btnDisabledStyle : btnStyle}">
+                    <span class="nav-button-icon" style="font-size: 1.25rem; font-weight: 900;">▶</span>
+                </button>
+            `;
+        }
+        
+        return `
+            <div class="agenda-navigation-bar" style="display: flex; justify-content: space-between; align-items: center; padding: 1rem 1.5rem; background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%); border-bottom: 3px solid #667eea; box-shadow: 0 4px 12px rgba(0,0,0,0.08); flex-shrink: 0; gap: 2rem; z-index: 100;">
+                <!-- Section gauche: Informations générales -->
+                <div class="nav-section nav-left" style="display: flex; align-items: center; gap: 1rem; min-width: 250px;">
+                    <div class="nav-info-group" style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; background: rgba(102, 126, 234, 0.05); border-radius: 8px; transition: all 0.2s ease;">
+                        <span class="nav-icon" style="font-size: 1.25rem;">🏟️</span>
+                        <span class="nav-label" style="font-size: 0.85rem; color: #6c757d; font-weight: 600;">Gymnases</span>
+                        <span class="nav-value" style="font-size: 1rem; font-weight: 700; color: #667eea;">${totalVenues}</span>
+                    </div>
+                    <div class="nav-info-group" style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; background: rgba(102, 126, 234, 0.05); border-radius: 8px; transition: all 0.2s ease;">
+                        <span class="nav-icon" style="font-size: 1.25rem;">🎯</span>
+                        <span class="nav-label" style="font-size: 0.85rem; color: #6c757d; font-weight: 600;">Matchs</span>
+                        <span class="nav-value" style="font-size: 1rem; font-weight: 700; color: #667eea;">${totalMatches}</span>
+                    </div>
+                </div>
+                
+                <!-- Section centrale: Navigation dynamique selon le mode -->
+                <div class="nav-section nav-center" style="display: flex; align-items: center; gap: 1rem; flex: 1; justify-content: center; min-width: 500px;">
+                    ${navigationContent}
+                </div>
+                
+                <!-- Section droite: Informations horaires et version -->
+                <div class="nav-section nav-right" style="display: flex; align-items: center; gap: 1rem; min-width: 250px; justify-content: flex-end;">
+                    <div class="nav-info-group" style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; background: rgba(102, 126, 234, 0.05); border-radius: 8px; transition: all 0.2s ease;">
+                        <span class="nav-icon" style="font-size: 1.25rem;">🕒</span>
+                        <span class="nav-label" style="font-size: 0.85rem; color: #6c757d; font-weight: 600;">Horaires</span>
+                        <span class="nav-value" style="font-size: 1rem; font-weight: 700; color: #667eea;">14h - 23h</span>
+                    </div>
+                    <div class="nav-version-badge" style="display: flex; align-items: center; gap: 0.35rem; padding: 0.5rem 1rem; background: linear-gradient(135deg, #667eea, #764ba2); color: white; border-radius: 20px; font-weight: 700; box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);">
+                        <span class="version-icon" style="font-size: 1rem;">✨</span>
+                        <span class="version-text" style="font-size: 0.85rem;">v2.0</span>
+                    </div>
+                </div>
             </div>
         `;
     }
     
     /**
-     * Génère la barre d'outils
+     * Génère la toolbar avec statistiques et navigation
+     * @deprecated Utiliser generateNavigationBar à la place (ÉTAPE 1)
      */
-    generateToolbar(matches, columns, data) {
-        const navData = this.viewManager.getNavigationData();
-        const stats = this.viewManager.getViewStats(matches, columns);
+    generateToolbar(matches, venues, data) {
+        const totalVenues = venues.length;
+        const totalMatches = matches.length;
+        
+        // Info sur la semaine courante
+        const currentWeek = this.weeks[this.currentWeekIndex];
+        const weekLabel = this.formatWeekLabel(currentWeek);
+        
+        // Boutons de navigation
+        const prevDisabled = this.currentWeekIndex === 0 ? 'disabled' : '';
+        const nextDisabled = this.currentWeekIndex === this.weeks.length - 1 ? 'disabled' : '';
         
         return `
             <div class="agenda-toolbar">
                 <div class="toolbar-left">
-                    <!-- Navigation semaine (mode gymnase uniquement) -->
-                    ${navData.mode === 'venues' ? `
-                    <div class="toolbar-group toolbar-navigation">
-                        <button id="grid-prev-week" 
-                                class="btn btn-icon btn-secondary" 
-                                ${!navData.hasPrevious ? 'disabled' : ''}
-                                title="Semaine précédente"
-                                aria-label="Semaine précédente">
-                            ◄
-                        </button>
-                        <span class="navigation-label">${navData.currentLabel}</span>
-                        <button id="grid-next-week" 
-                                class="btn btn-icon btn-secondary"
-                                ${!navData.hasNext ? 'disabled' : ''}
-                                title="Semaine suivante"
-                                aria-label="Semaine suivante">
-                            ►
-                        </button>
-                        <span class="navigation-counter">(${navData.index}/${navData.total})</span>
-                    </div>
-                    ` : ''}
+                    <span class="stat-item">
+                        <span class="stat-icon">🏟️</span>
+                        <strong>${totalVenues}</strong> gymnase${totalVenues > 1 ? 's' : ''}
+                    </span>
                 </div>
                 
                 <div class="toolbar-center">
-                    <!-- Statistiques -->
-                    <div class="toolbar-stats">
-                        <span class="stat-item">
-                            <span class="stat-icon">🎯</span>
-                            <strong>${stats.visibleMatches}</strong> match${stats.visibleMatches > 1 ? 's' : ''}
-                        </span>
-                        <span class="stat-separator">•</span>
-                        <span class="stat-item">
-                            <span class="stat-icon">${this.viewManager.displayMode === 'venues' ? '🏟️' : '📅'}</span>
-                            <strong>${stats.totalColumns}</strong> ${this.viewManager.displayMode === 'venues' ? 'gymnase' : 'semaine'}${stats.totalColumns > 1 ? 's' : ''}
-                        </span>
-                        <span class="stat-separator">•</span>
-                        <span class="stat-item">
-                            <span class="stat-icon">🕒</span>
-                            ${stats.timeRange}
-                        </span>
-                        ${stats.totalMatches !== stats.visibleMatches ? `
-                        <span class="stat-separator">•</span>
-                        <span class="stat-item stat-filtered">
-                            (${stats.totalMatches} total)
-                        </span>
-                        ` : ''}
+                    <div class="week-navigation">
+                        <button id="prev-week" class="week-nav-btn" ${prevDisabled}>
+                            ◀ Semaine précédente
+                        </button>
+                        <div class="current-week-info">
+                            <div class="week-label">${weekLabel}</div>
+                            <div class="week-stats">
+                                <span class="stat-icon">🎯</span>
+                                <strong>${totalMatches}</strong> match${totalMatches > 1 ? 's' : ''}
+                            </div>
+                        </div>
+                        <button id="next-week" class="week-nav-btn" ${nextDisabled}>
+                            Semaine suivante ▶
+                        </button>
                     </div>
                 </div>
                 
                 <div class="toolbar-right">
-                    <!-- Toolbar simplifiée - les options sont dans le panneau latéral -->
+                    <span class="stat-item">
+                        <span class="stat-icon">🕒</span>
+                        13h - 23h
+                    </span>
+                    <span class="stat-item" style="background: linear-gradient(135deg, #4ade80, #22c55e); color: white; font-size: 0.75rem; padding: 0.4rem 0.8rem;">
+                        ✨ V2.0
+                    </span>
                 </div>
             </div>
         `;
     }
     
     /**
-     * Génère la grille complète avec les colonnes
+     * Génère l'échelle des horaires (13h à 23h)
      */
-    generateGrid(matches, columns) {
-        // Calculer la largeur de colonne optimisée
-        const minColWidth = 180; // Largeur minimale augmentée pour éviter les coupures
-        const colWidthIncrement = 160; // Augmentation par slot supplémentaire
+    generateTimeScale(minHour, maxHour, pixelsPerHour, totalHeight) {
+        let html = '<div class="time-scale" style="height: ' + totalHeight + 'px; position: relative;">';
         
-        // Paramètres de l'échelle horaire
-        const minHour = this.viewManager.minHour; // ex: 8
-        const maxHour = this.viewManager.maxHour; // ex: 23
-        const pixelsPerHour = 100; // Hauteur augmentée pour plus d'espace vertical
-        const totalHeight = (maxHour - minHour) * pixelsPerHour;
-
-        return `
-            <div class="grid-container" onscroll="window.syncScroll(this)">
-                <div class="time-grid time-grid-continuous">
-                    <!-- En-tête avec colonne des heures + colonnes gymnases/semaines -->
-                    <div class="grid-header" id="grid-header">
-                        <div class="time-column header-cell">Horaire</div>
-                        <div class="header-columns-container">
-                            ${columns.map(col => this.generateColumnHeader(col, minColWidth, colWidthIncrement)).join('')}
-                        </div>
-                    </div>
-                    
-                    <!-- Corps de la grille avec échelle continue -->
-                    <div class="grid-body-continuous" style="position: relative; height: ${totalHeight}px;">
-                        <!-- Colonne des heures (échelle verticale) -->
-                        <div class="time-scale-column" style="height: ${totalHeight}px;">
-                            ${this.generateTimeScale(minHour, maxHour, pixelsPerHour)}
-                        </div>
-                        
-                        <!-- Colonnes de contenu (gymnases/semaines) -->
-                        <div class="columns-container">
-                            ${columns.map((col, idx) => this.generateColumnContent(col, matches, minHour, maxHour, pixelsPerHour, idx, minColWidth, colWidthIncrement)).join('')}
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-    }
-    
-    /**
-     * Génère l'échelle horaire verticale
-     */
-    generateTimeScale(minHour, maxHour, pixelsPerHour) {
-        let html = '';
         for (let hour = minHour; hour <= maxHour; hour++) {
             const top = (hour - minHour) * pixelsPerHour;
             html += `
-                <div class="time-marker" style="position: absolute; top: ${top}px; left: 0; right: 0;">
-                    <span class="time-label">${hour}h</span>
+                <div class="time-marker" style="position: absolute; top: ${top}px; width: 100%;">
+                    <span class="time-label">${hour}:00</span>
                     <div class="time-line"></div>
                 </div>
             `;
         }
+        
+        html += '</div>';
         return html;
     }
     
     /**
-     * Génère le contenu d'une colonne avec matchs positionnés absolument
+     * Génère une colonne pour un gymnase
      */
-    generateColumnContent(column, allMatches, minHour, maxHour, pixelsPerHour, columnIndex, minColWidth, colWidthIncrement) {
-        const columnMatches = this.viewManager.getMatchesForColumn(column, allMatches);
-        
-        // Utiliser le max de slots calculé au lieu de la capacité théorique
-        const maxSlots = this.maxSlotsPerColumn.get(column.id) || 1;
-        const columnWidth = minColWidth + (maxSlots - 1) * colWidthIncrement;
-        
-        return `
-            <div class="column-content" 
-                 data-column="${column.id}"
-                 data-column-index="${columnIndex}"
-                 data-capacity="${column.capacity || 1}"
-                 data-max-slots="${maxSlots}"
-                 style="
-                     position: relative;
-                     width: ${columnWidth}px;
-                     height: 100%;
-                     flex-shrink: 0;
-                     border-right: 1px solid var(--border-color, #dee2e6);
-                 ">
-                ${this.renderColumnMatches(columnMatches, column, minHour, pixelsPerHour)}
-            </div>
-        `;
-    }
-    
-    /**
-     * Rendu des matchs d'une colonne avec positionnement absolu
-     */
-    renderColumnMatches(matches, column, minHour, pixelsPerHour) {
-        if (!matches || matches.length === 0) {
-            return '';
+    generateVenueColumn(venue, matches, maxSimultaneous, minHour, pixelsPerHour, matchDuration, totalHeight) {
+        // Largeur adaptative avec réduction progressive si trop de matchs simultanés
+        let widthPerSlot;
+        if (maxSimultaneous <= 3) {
+            widthPerSlot = 230; // Largeur normale
+        } else if (maxSimultaneous <= 6) {
+            widthPerSlot = 200; // Réduction légère
+        } else if (maxSimultaneous <= 10) {
+            widthPerSlot = 170; // Réduction moyenne
+        } else if (maxSimultaneous <= 15) {
+            widthPerSlot = 150; // Réduction importante
+        } else {
+            widthPerSlot = 130; // Réduction maximale pour beaucoup de matchs
         }
         
-        // Grouper les matchs par horaire exact
-        const matchesByTime = this.groupMatchesByExactTime(matches);
+        const padding = 16; // Padding total de la colonne
+        const columnWidth = (maxSimultaneous * widthPerSlot) + padding;
         
-        let html = '';
-        matchesByTime.forEach(group => {
-            html += this.renderMatchGroup(group, column, minHour, pixelsPerHour);
-        });
+        console.log(`🔍 [Venue ${venue.name}] maxSimultaneous: ${maxSimultaneous}, widthPerSlot: ${widthPerSlot}px, columnWidth: ${columnWidth}px`);
         
-        return html;
-    }
-    
-    /**
-     * Groupe les matchs par horaire exact (heure et minute)
-     */
-    groupMatchesByExactTime(matches) {
-        const groups = new Map();
-        
-        matches.forEach(match => {
-            const timeKey = match.horaire || '00:00'; // ex: "18:00", "19:30"
-            
-            if (!groups.has(timeKey)) {
-                groups.set(timeKey, {
-                    time: timeKey,
-                    matches: []
-                });
-            }
-            groups.get(timeKey).matches.push(match);
-        });
-        
-        const result = Array.from(groups.values());
-        return result;
-    }
-    
-    /**
-     * Rendu d'un groupe de matchs au même horaire
-     */
-    renderMatchGroup(group, column, minHour, pixelsPerHour) {
-        const capacity = column.capacity || 1;
-        const matches = group.matches;
-        
-        // Calculer la position verticale basée sur l'horaire exact
-        const [hours, minutes] = group.time.split(':').map(Number);
-        const fractionalHour = hours + (minutes / 60);
-        const topPosition = (fractionalHour - minHour) * pixelsPerHour;
-        
-        // Calculer la hauteur avec plus d'espace
-        const matchDuration = 2; // heures
-        const matchHeight = matchDuration * pixelsPerHour - 8; // Marge entre les groupes
-        
-        // Détecter les conflits
-        const conflicts = this.slotManager.detectConflicts(matches, capacity);
-        
-        // Calculer la disponibilité
-        const available = this.availableSlotsManager.calculateAvailable(matches, capacity);
-        
-        const isCompact = matches.length >= this.cardRenderer.compactThreshold;
-        
-        // Générer les cartes de matchs
-        const matchCards = matches.map((match, index) => 
-            this.cardRenderer.renderMatchCard(match, isCompact, index, true, conflicts)
-        ).join('');
-        
-        // Générer les cartes disponibles
-        let availableCards = '';
-        if (available > 0 && this.availableSlotsManager.showAvailableSlots) {
-            for (let i = 0; i < available; i++) {
-                availableCards += `
-                    <div class="available-slot-card" 
-                         data-slot-index="${i}"
-                         title="Terrain disponible - Glisser un match ici">
-                        <div class="available-slot-icon">✓</div>
+        return `
+            <div class="venue-column" 
+                 data-venue-id="${venue.id}"
+                 data-capacity="${venue.capacity}"
+                 data-max-simultaneous="${maxSimultaneous}"
+                 style="width: ${columnWidth}px; flex-shrink: 0;">
+                <!-- En-tête du gymnase -->
+                <div class="venue-header">
+                    <div class="venue-name">${venue.name}</div>
+                    <div class="venue-info">
+                        <span class="venue-capacity">⚡ Capacité: ${venue.capacity}</span>
+                        <span class="venue-matches">📊 ${matches.length} matchs</span>
+                        ${maxSimultaneous > 1 ? `<span class="venue-simultaneous">🔀 Max: ${maxSimultaneous}</span>` : ''}
                     </div>
-                `;
-            }
-        }
-        
-        return `
-            <div class="match-group" 
-                 data-time="${group.time}"
-                 data-column="${column.id}"
-                 data-drop-zone="true"
-                 style="
-                     position: absolute;
-                     top: ${topPosition}px;
-                     left: 0;
-                     right: 0;
-                     height: ${matchHeight}px;
-                     padding: 0.25rem;
-                 ">
-                <div class="match-group-content">
-                    ${matchCards}
-                    ${availableCards}
+                </div>
+                
+                <!-- Corps avec les matchs -->
+                <div class="venue-body" style="height: ${totalHeight}px; position: relative;">
+                    ${this.generateVenueMatches(matches, minHour, pixelsPerHour, matchDuration, maxSimultaneous, widthPerSlot)}
                 </div>
             </div>
         `;
     }
     
     /**
-     * Génère l'en-tête d'une colonne
+     * Génère une colonne pour un gymnase avec largeur personnalisée
      */
-    generateColumnHeader(column, minWidth, widthIncrement) {
-        const maxSlots = this.maxSlotsPerColumn.get(column.id) || 1;
-        const columnWidth = minWidth + (maxSlots - 1) * widthIncrement;
+    generateVenueColumnWithWidth(venue, matches, maxSimultaneous, columnWidth, widthPerSlot, minHour, maxHour, pixelsPerHour, matchDuration, totalHeight, showEmptySlots = false) {
+        console.log(`🔍 [Venue ${venue.name}] maxSimultaneous: ${maxSimultaneous}, widthPerSlot: ${widthPerSlot}px, columnWidth: ${columnWidth}px, showEmptySlots: ${showEmptySlots}`);
         
         return `
-            <div class="column-header header-cell" 
-                 style="width: ${columnWidth}px; flex-shrink: 0;"
-                 title="${column.sublabel || ''}">
-                <span class="column-title">${column.label}</span>
-                ${column.sublabel ? `<span class="column-subtitle">${column.sublabel}</span>` : ''}
+            <div class="venue-column" 
+                 data-venue-id="${venue.id}"
+                 data-capacity="${venue.capacity}"
+                 data-max-simultaneous="${maxSimultaneous}"
+                 style="width: ${columnWidth}px; flex-shrink: 0; background: linear-gradient(180deg, #ffffff 0%, #f8f9fa 100%); border-right: 2px solid #e9ecef; margin-right: 4px; border-radius: 0 0 8px 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
+                
+                <!-- Corps avec les matchs et créneaux libres (sans en-tête) -->
+                <div class="venue-body" style="height: ${totalHeight}px; position: relative; background-image: repeating-linear-gradient(to bottom, transparent 0, transparent 119px, rgba(102, 126, 234, 0.08) 119px, rgba(102, 126, 234, 0.08) 120px);">
+                    ${showEmptySlots ? this.generateEmptySlots(matches, venue, minHour, maxHour, pixelsPerHour, widthPerSlot) : ''}
+                    ${this.generateVenueMatches(matches, minHour, pixelsPerHour, matchDuration, maxSimultaneous, widthPerSlot)}
+                </div>
             </div>
         `;
     }
     
     /**
-     * Attache les événements
+     * Génère les créneaux libres pour un gymnase à partir des données slots.available
+     * Utilise les données réelles du JSON au lieu de calculer
      */
-    attachEvents() {
-        // Navigation semaine
-        const prevWeekBtn = this.container.querySelector('#grid-prev-week');
-        if (prevWeekBtn) {
-            prevWeekBtn.addEventListener('click', () => {
-                if (this.viewManager.previousWeek()) {
-                    this.render();
-                }
-            });
+    generateEmptySlots(matches, venue, minHour, maxHour, pixelsPerHour, widthPerSlot) {
+        // Récupérer les slots disponibles depuis les données
+        const data = this.dataManager?.getData();
+        if (!data || !data.slots || !data.slots.available) {
+            console.warn('⚠️ Aucune donnée de slots disponibles');
+            return '';
         }
         
-        const nextWeekBtn = this.container.querySelector('#grid-next-week');
-        if (nextWeekBtn) {
-            nextWeekBtn.addEventListener('click', () => {
-                if (this.viewManager.nextWeek()) {
-                    this.render();
-                }
-            });
+        // Filtrer les slots pour ce gymnase et cette semaine courante
+        const currentWeek = this.displayMode === 'week' && this.weeks && this.weeks[this.currentWeekIndex] 
+            ? this.weeks[this.currentWeekIndex].weekNumber 
+            : null;
+        
+        const venueSlots = data.slots.available.filter(slot => {
+            if (slot.gymnase !== venue.id) return false;
+            // Si on est en mode journée, filtrer par semaine courante
+            if (currentWeek !== null && slot.semaine !== currentWeek) return false;
+            return true;
+        });
+        
+        if (venueSlots.length === 0) {
+            return '';
         }
+        
+        console.log(`🟢 ${venueSlots.length} créneaux libres pour ${venue.name}`);
+        
+        let html = '';
+        const slotDuration = 2; // Durée d'un créneau en heures
+        
+        // Grouper les slots par horaire pour gérer la capacité multiple
+        const slotsByTime = {};
+        venueSlots.forEach(slot => {
+            const time = this.parseTime(slot.horaire);
+            if (!time || time < minHour || time >= maxHour) return;
+            
+            if (!slotsByTime[time]) {
+                slotsByTime[time] = [];
+            }
+            slotsByTime[time].push(slot);
+        });
+        
+        // Pour chaque horaire avec des slots libres
+        Object.entries(slotsByTime).forEach(([timeStr, slots]) => {
+            const time = parseFloat(timeStr);
+            const slotStart = time;
+            const slotEnd = time + slotDuration;
+            
+            // Position verticale
+            const top = (slotStart - minHour) * pixelsPerHour;
+            const height = slotDuration * pixelsPerHour - 10;
+            
+            // Compter combien de matchs occupent déjà ce créneau
+            const overlappingMatches = matches.filter(match => {
+                const matchTime = this.parseTime(match.horaire);
+                if (!matchTime) return false;
+                
+                const matchEnd = matchTime + slotDuration;
+                // Chevauchement si : !(fin1 <= début2 || début1 >= fin2)
+                return !(matchEnd <= slotStart || matchTime >= slotEnd);
+            });
+            
+            const occupiedSlots = overlappingMatches.length;
+            
+            // Afficher chaque slot libre
+            slots.forEach((slot, index) => {
+                const slotIndex = occupiedSlots + index;
+                const left = slotIndex * widthPerSlot + 2;
+                const width = widthPerSlot - 4;
+                
+                html += `
+                    <div class="empty-slot" data-slot-id="${slot.slot_id}" style="
+                        position: absolute;
+                        top: ${top}px;
+                        left: ${left}px;
+                        width: ${width}px;
+                        height: ${height}px;
+                        background: linear-gradient(135deg, 
+                            rgba(34, 197, 94, 0.08) 0%, 
+                            rgba(34, 197, 94, 0.04) 100%);
+                        border: 2px dashed rgba(34, 197, 94, 0.3);
+                        border-radius: 8px;
+                        display: flex;
+                        flex-direction: column;
+                        align-items: center;
+                        justify-content: center;
+                        font-size: 0.75rem;
+                        color: rgba(34, 197, 94, 0.7);
+                        font-weight: 600;
+                        text-align: center;
+                        padding: 0.5rem;
+                        cursor: default;
+                        transition: all 0.2s ease;
+                        z-index: 1;
+                    " onmouseover="this.style.background='linear-gradient(135deg, rgba(34, 197, 94, 0.15) 0%, rgba(34, 197, 94, 0.08) 100%)'; this.style.borderColor='rgba(34, 197, 94, 0.5)'; this.style.transform='scale(1.02)'; this.style.zIndex='3';" onmouseout="this.style.background='linear-gradient(135deg, rgba(34, 197, 94, 0.08) 0%, rgba(34, 197, 94, 0.04) 100%)'; this.style.borderColor='rgba(34, 197, 94, 0.3)'; this.style.transform='scale(1)'; this.style.zIndex='1';">
+                        <div style="font-size: 1.5rem; margin-bottom: 0.25rem;">✓</div>
+                        <div style="font-weight: 700; font-size: 0.8rem;">Disponible</div>
+                        <div style="font-size: 0.7rem; opacity: 0.8; margin-top: 0.25rem;">${this.formatTimeRange(slotStart, slotEnd)}</div>
+                    </div>
+                `;
+            });
+        });
+        
+        return html;
+    }
+    
+    /**
+     * Formate une plage horaire
+     */
+    formatTimeRange(startHour, endHour) {
+        const format = (h) => `${h}h${h === Math.floor(h) ? '00' : '30'}`;
+        return `${format(startHour)} - ${format(endHour)}`;
+    }
+    
+    /**
+     * Génère les matchs d'un gymnase avec positionnement absolu
+     */
+    generateVenueMatches(matches, minHour, pixelsPerHour, matchDuration, maxSimultaneous, widthPerSlot) {
+        if (!matches || matches.length === 0) return '';
+        
+        // Trier les matchs par horaire
+        const sortedMatches = matches.slice().sort((a, b) => {
+            const timeA = this.parseTime(a.horaire) || 0;
+            const timeB = this.parseTime(b.horaire) || 0;
+            return timeA - timeB;
+        });
+        
+        // Assigner un slot horizontal à chaque match
+        const matchSlots = this.assignMatchSlots(sortedMatches);
+        
+        let html = '';
+        sortedMatches.forEach((match, index) => {
+            const time = this.parseTime(match.horaire);
+            if (!time) return;
+            
+            // Position verticale basée sur l'horaire
+            const top = (time - minHour) * pixelsPerHour;
+            const height = matchDuration * pixelsPerHour; // Hauteur complète sans marge
+            
+            // Position horizontale basée sur le slot
+            const slot = matchSlots.get(match.match_id) || 0;
+            const left = slot * widthPerSlot + 2;
+            const width = widthPerSlot - 4;
+            
+            html += `
+                <div class="match-wrapper" style="
+                    position: absolute;
+                    top: ${top}px;
+                    left: ${left}px;
+                    width: ${width}px;
+                    height: ${height}px;
+                ">
+                    ${this.cardRenderer.renderMatchCard(match, false, index, true, null)}
+                </div>
+            `;
+        });
+        
+        return html;
+    }
+    
+    /**
+     * Assigne un slot horizontal à chaque match pour éviter les chevauchements visuels
+     */
+    assignMatchSlots(matches) {
+        const slots = new Map();
+        
+        // Grouper les matchs qui se chevauchent
+        const overlappingGroups = [];
+        
+        matches.forEach(match => {
+            const startTime = this.parseTime(match.horaire);
+            if (!startTime) return;
+            
+            const endTime = startTime + 2; // durée fixe de 2h
+            
+            // Chercher un groupe existant qui chevauche ce match
+            let foundGroup = false;
+            
+            for (let group of overlappingGroups) {
+                // Vérifier si ce match chevauche avec au moins un match du groupe
+                const overlaps = group.matches.some(m => {
+                    const mStart = this.parseTime(m.horaire);
+                    const mEnd = mStart + 2;
+                    // Chevauchement si : !(fin1 <= début2 || début1 >= fin2)
+                    return !(endTime <= mStart || startTime >= mEnd);
+                });
+                
+                if (overlaps) {
+                    group.matches.push(match);
+                    foundGroup = true;
+                    break;
+                }
+            }
+            
+            // Si aucun groupe ne convient, créer un nouveau groupe
+            if (!foundGroup) {
+                overlappingGroups.push({
+                    matches: [match]
+                });
+            }
+        });
+        
+        // Pour chaque groupe, assigner des slots en fonction de l'horaire
+        overlappingGroups.forEach(group => {
+            // Trier les matchs du groupe par horaire
+            const sortedGroupMatches = group.matches.sort((a, b) => {
+                const timeA = this.parseTime(a.horaire) || 0;
+                const timeB = this.parseTime(b.horaire) || 0;
+                return timeA - timeB;
+            });
+            
+            // Assigner les slots séquentiellement
+            const usedSlots = []; // [{slot: number, endTime: number}]
+            
+            sortedGroupMatches.forEach(match => {
+                const startTime = this.parseTime(match.horaire);
+                const endTime = startTime + 2;
+                
+                // Nettoyer les slots qui ont expiré avant ce match
+                const activeSlots = usedSlots.filter(s => s.endTime > startTime);
+                
+                // Trouver le premier slot disponible
+                let slot = 0;
+                while (activeSlots.some(s => s.slot === slot)) {
+                    slot++;
+                }
+                
+                // Assigner ce slot
+                slots.set(match.match_id, slot);
+                activeSlots.push({ slot, endTime });
+                
+                // Mettre à jour usedSlots
+                usedSlots.length = 0;
+                usedSlots.push(...activeSlots);
+            });
+        });
+        
+        return slots;
+    }
+    
+    /**
+     * Attache les événements aux éléments de la vue
+     */
+    attachEvents() {
+        // ═══════════════════════════════════════════════════════════════
+        // DUAL MODE: Navigation selon le mode d'affichage
+        // ═══════════════════════════════════════════════════════════════
+        
+        if (this.displayMode === 'week') {
+            // MODE JOURNÉE: Navigation entre J1, J2, J4...
+            const prevBtn = this.container.querySelector('#prev-week');
+            const nextBtn = this.container.querySelector('#next-week');
+            
+            if (prevBtn) {
+                prevBtn.addEventListener('click', () => {
+                    if (this.currentWeekIndex > 0) {
+                        this.currentWeekIndex--;
+                        console.log(`🔍 [AgendaGrid] Navigation: Journée précédente (index: ${this.currentWeekIndex})`);
+                        this.render();
+                    }
+                });
+            }
+            
+            if (nextBtn) {
+                nextBtn.addEventListener('click', () => {
+                    if (this.currentWeekIndex < this.weeks.length - 1) {
+                        this.currentWeekIndex++;
+                        console.log(`🔍 [AgendaGrid] Navigation: Journée suivante (index: ${this.currentWeekIndex})`);
+                        this.render();
+                    }
+                });
+            }
+            
+        } else if (this.displayMode === 'venue') {
+            // MODE GYMNASE: Navigation entre BESSON, LAENNEC, DESCARTES...
+            const prevBtn = this.container.querySelector('#prev-venue');
+            const nextBtn = this.container.querySelector('#next-venue');
+            
+            if (prevBtn) {
+                prevBtn.addEventListener('click', () => {
+                    if (this.currentVenueIndex > 0) {
+                        this.currentVenueIndex--;
+                        console.log(`🔍 [AgendaGrid] Navigation: Gymnase précédent (index: ${this.currentVenueIndex})`);
+                        this.render();
+                    }
+                });
+            }
+            
+            if (nextBtn) {
+                nextBtn.addEventListener('click', () => {
+                    if (this.currentVenueIndex < this.venues.length - 1) {
+                        this.currentVenueIndex++;
+                        console.log(`🔍 [AgendaGrid] Navigation: Gymnase suivant (index: ${this.currentVenueIndex})`);
+                        this.render();
+                    }
+                });
+            }
+        }
+        
+        // ═══════════════════════════════════════════════════════════════
+        // Événements communs aux deux modes
+        // ═══════════════════════════════════════════════════════════════
         
         // Clic sur les cartes de match
         this.container.querySelectorAll('[data-match-id]').forEach(card => {
@@ -500,105 +1751,41 @@ class AgendaGridView {
     }
     
     /**
-     * Met à jour les filtres externes depuis le panneau latéral
+     * Synchronise le scroll horizontal des en-têtes avec les colonnes
+     */
+    syncHeaderScroll() {
+        const headersScroll = this.container.querySelector('.agenda-headers-scroll');
+        const columnsContainer = this.container.querySelector('.venues-container, .weeks-container');
+        
+        if (!headersScroll || !columnsContainer) {
+            console.warn('⚠️ Impossible de synchroniser le scroll: éléments introuvables');
+            return;
+        }
+        
+        // Supprimer les anciens listeners s'ils existent
+        if (this._scrollSyncHandler) {
+            columnsContainer.removeEventListener('scroll', this._scrollSyncHandler);
+        }
+        
+        // Créer le handler de synchronisation
+        this._scrollSyncHandler = () => {
+            headersScroll.scrollLeft = columnsContainer.scrollLeft;
+        };
+        
+        // Attacher le listener
+        columnsContainer.addEventListener('scroll', this._scrollSyncHandler);
+        
+        console.log('✅ Synchronisation du scroll horizontal activée');
+    }
+    
+    /**
+     * Met à jour les filtres depuis le panneau latéral
      */
     updateFilters(filters) {
         this.filters = { ...this.filters, ...filters };
         this.render();
     }
-    
-    /**
-     * Retourne la configuration des options d'affichage pour cette vue.
-     * Options réellement fonctionnelles et utiles pour la vue Agenda.
-     */
-    getDisplayOptions() {
-        return {
-            title: "Options - Vue Agenda",
-            options: [
-                // Mode d'affichage (gymnase vs semaine) - FONCTIONNEL
-                {
-                    type: 'button-group',
-                    id: 'agenda-display-mode',
-                    label: '📊 Organiser par',
-                    values: [
-                        { value: 'venue', text: 'Gymnase' },
-                        { value: 'week', text: 'Semaine' }
-                    ],
-                    default: this.viewManager.displayMode || 'venue',
-                    action: (value) => {
-                        this.setDisplayMode(value);
-                    }
-                },
-                
-                // Coloration des matchs - NOUVEAU
-                {
-                    type: 'select',
-                    id: 'agenda-color-scheme',
-                    label: '🎨 Coloration des matchs',
-                    values: [
-                        { value: 'none', text: 'Aucune' },
-                        { value: 'by-status', text: 'Par statut' },
-                        { value: 'by-venue', text: 'Par lieu' },
-                        { value: 'by-gender', text: 'Par genre' },
-                        { value: 'by-level', text: 'Par niveau' }
-                    ],
-                    default: this.colorScheme || 'none',
-                    action: (value) => {
-                        this.applyColorScheme(value);
-                    }
-                },
-                
-                // Afficher les créneaux disponibles - FONCTIONNEL
-                {
-                    type: 'checkbox',
-                    id: 'agenda-show-available',
-                    label: '🆓 Afficher créneaux libres',
-                    default: this.availableSlotsManager.showAvailableSlots !== false,
-                    action: (checked) => {
-                        this.setShowAvailableSlots(checked);
-                    }
-                }
-            ]
-        };
-    }
-    
-    /**
-     * Applique un schéma de couleurs aux matchs
-     * @param {string} scheme - Le schéma à appliquer ('none', 'by-status', 'by-venue', etc.)
-     */
-    applyColorScheme(scheme) {
-        this.colorScheme = scheme;
-        
-        // Appliquer l'attribut data-color-scheme sur le conteneur
-        if (scheme === 'none') {
-            this.container.removeAttribute('data-color-scheme');
-        } else {
-            this.container.setAttribute('data-color-scheme', scheme);
-        }
-        
-        // Sauvegarder la préférence
-        localStorage.setItem('agenda-color-scheme', scheme);
-        
-        // Re-render pour appliquer les changements
-        this.render();
-    }
-    
-    /**
-     * Met à jour le mode d'affichage depuis le panneau latéral
-     */
-    setDisplayMode(mode) {
-        this.viewManager.setDisplayMode(mode);
-        this.render();
-    }
-    
-    /**
-     * Met à jour l'affichage des créneaux disponibles depuis le panneau latéral
-     */
-    setShowAvailableSlots(show) {
-        this.availableSlotsManager.setShow(show);
-        this.render();
-    }
 }
 
-// Export
+// Export global
 window.AgendaGridView = AgendaGridView;

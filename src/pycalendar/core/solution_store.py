@@ -177,7 +177,8 @@ class SolutionStore:
                      config: Optional[Config] = None, config_name: str = "unknown", 
                      fixed_matches: Optional[List] = None,
                      equipes: Optional[List] = None, gymnases: Optional[List] = None, 
-                     creneaux: Optional[List] = None) -> Path:
+                     creneaux: Optional[List] = None,
+                     types_poules: Optional[Dict[str, str]] = None) -> Path:
         """
         Sauvegarde une solution au format JSON enrichi.
         
@@ -234,7 +235,8 @@ class SolutionStore:
             config=config,
             equipes=equipes,
             gymnases=gymnases,
-            creneaux_disponibles=creneaux
+            creneaux_disponibles=creneaux,
+            types_poules=types_poules
         )
         
         # Ajouter la signature de configuration
@@ -354,7 +356,8 @@ class SolutionStore:
             match_idx = self._find_match_index(
                 matchs_lookup,
                 assignment["equipe1_id"],
-                assignment["equipe2_id"]
+                assignment["equipe2_id"],
+                matchs
             )
             
             if match_idx is None:
@@ -382,21 +385,30 @@ class SolutionStore:
         
         return hint, stats
     
-    def _create_matchs_lookup(self, matchs: List[Match]) -> Dict[Tuple[str, str], int]:
+    def _create_matchs_lookup(self, matchs: List[Match]) -> Dict[Tuple[str, str], List[int]]:
         """
         Crée un dictionnaire de lookup pour les matchs.
         
+        Pour les poules aller-retour, A→B et B→A sont des matchs différents.
+        Donc on stocke une liste d'indices pour chaque paire.
+        
         Returns:
-            Dict {(equipe1_id, equipe2_id): match_idx}
+            Dict {(equipe1_id, equipe2_id): [match_indices]}
         """
-        lookup = {}
+        from collections import defaultdict
+        lookup = defaultdict(list)
+        
         for idx, match in enumerate(matchs):
-            # Créer clé bidirectionnelle (peu importe l'ordre des équipes)
-            key1 = (match.equipe1.id_unique, match.equipe2.id_unique)
-            key2 = (match.equipe2.id_unique, match.equipe1.id_unique)
-            lookup[key1] = idx
-            lookup[key2] = idx
-        return lookup
+            # Clé directionnelle: l'ordre compte
+            key = (match.equipe1.id_unique, match.equipe2.id_unique)
+            lookup[key].append(idx)
+            
+            # Aussi ajouter la clé inversée pour faciliter la recherche
+            # mais on stocke le même index
+            key_inv = (match.equipe2.id_unique, match.equipe1.id_unique)
+            lookup[key_inv].append(idx)
+        
+        return dict(lookup)
     
     def _create_creneaux_lookup(self, creneaux: List[Creneau]) -> Dict[Tuple, int]:
         """
@@ -411,19 +423,39 @@ class SolutionStore:
         }
     
     def _find_match_index(self, matchs_lookup: Dict, 
-                         eq1_id: str, eq2_id: str) -> Optional[int]:
+                         eq1_id: str, eq2_id: str, matchs: List[Match]) -> Optional[int]:
         """
         Trouve l'index d'un match dans le lookup.
         
+        Pour les poules aller-retour, plusieurs matchs peuvent exister entre deux équipes.
+        On cherche le match exact avec le bon ordre d'équipes (A→B vs B→A).
+        
         Args:
-            matchs_lookup: Dictionnaire de lookup des matchs
+            matchs_lookup: Dictionnaire de lookup des matchs {(eq1, eq2): [indices]}
             eq1_id: ID unique de l'équipe 1
             eq2_id: ID unique de l'équipe 2
+            matchs: Liste complète des matchs (pour vérifier l'ordre)
             
         Returns:
-            Index du match, ou None si non trouvé
+            Index du match avec l'ordre exact, ou None si non trouvé
         """
-        return matchs_lookup.get((eq1_id, eq2_id))
+        indices = matchs_lookup.get((eq1_id, eq2_id), [])
+        
+        if not indices:
+            return None
+        
+        # Si un seul match, le retourner directement
+        if len(indices) == 1:
+            return indices[0]
+        
+        # Sinon, trouver celui avec l'ordre exact
+        for idx in indices:
+            match = matchs[idx]
+            if match.equipe1.id_unique == eq1_id and match.equipe2.id_unique == eq2_id:
+                return idx
+        
+        # Fallback: retourner le premier (ne devrait pas arriver)
+        return indices[0]
     
     def _print_changes(self, changes: Dict[str, bool]):
         """Affiche les changements détectés."""

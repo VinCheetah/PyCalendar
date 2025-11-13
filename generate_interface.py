@@ -17,11 +17,12 @@ def main():
     solution_path = project_root / 'solutions' / 'latest_volley.json'
     
     if not solution_path.exists():
-        print(f"❌ Solution non trouvée: {solution_path}")
+        print(f"❌ Aucune solution trouvée")
+        print(f"   Cherché: {solution_path}")
         return 1
     
-    # Chemin de sortie
-    output_path = project_root / 'interface_volley.html'
+    # Chemin de sortie avec design redesigné
+    output_path = project_root / 'interface.html'
     
     print(f"📥 Chargement de la solution: {solution_path.name}")
     print(f"📤 Génération de l'interface vers: {output_path.name}")

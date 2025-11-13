@@ -141,6 +141,40 @@ class ConfigManager:
                 'Bonus configurables dans le fichier YAML (bonus_preferences_gymnases)'
             ]
         },
+        'Dispos_Gymnases_Equipes': {
+            'colonnes': ['Equipe', 'Genre', 'Horaire_Dispo', 'Gymnase_1', 'Gymnase_2', 'Gymnase_3', 'Gymnase_4', 'Gymnase_5', 'Remarques'],
+            'description': 'Disponibilités anticipées d\'équipes sur gymnases spécifiques',
+            'type': 'manuel',
+            'exemple': {
+                'Equipe': 'LYON 1 (1)',
+                'Genre': 'M',
+                'Horaire_Dispo': '18:00',
+                'Gymnase_1': 'PARC DES SPORTS',
+                'Gymnase_2': 'INSA C',
+                'Gymnase_3': '',
+                'Gymnase_4': '',
+                'Gymnase_5': '',
+                'Remarques': 'Équipe disponible plus tôt sur ces gymnases'
+            },
+            'notes': [
+                'Equipe: Nom exact de l\'équipe sans le genre (Institution (numéro))',
+                'Genre: M (masculin) ou F (féminin) - obligatoire',
+                'Horaire_Dispo: Horaire de disponibilité anticipée (format HH:MM)',
+                '  → Doit être ANTÉRIEUR à l\'horaire préféré général de l\'équipe',
+                '  → Permet à l\'équipe d\'être disponible plus tôt sur les gymnases listés',
+                'Gymnase_1 à 5: Gymnases où la disponibilité anticipée s\'applique',
+                '  → Doivent exister dans la feuille Gymnases',
+                '  → Laisser vide si moins de 5 gymnases concernés',
+                'Remarques: Informations complémentaires (optionnel)',
+                '',
+                '⚠️ IMPORTANT: Cette disponibilité peut être invalidée par:',
+                '  → Les indisponibilités de la feuille Indispos_Equipes',
+                '  → Les indisponibilités de la feuille Indispos_Institutions',
+                '  → Les indisponibilités des gymnases (Indispos_Gymnases)',
+                'Exemple: Une équipe normalement disponible à 20:00 peut jouer à 18:00',
+                '         uniquement sur PARC DES SPORTS et INSA C'
+            ]
+        },
         'Obligation_Presence': {
             'colonnes': ['Gymnase', 'Institution_Obligatoire', 'Remarques'],
             'description': 'Obligation de présence institutionnelle par gymnase (GÉNÉRÉE AUTOMATIQUEMENT)',

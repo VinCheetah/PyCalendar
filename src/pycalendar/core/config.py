@@ -45,9 +45,10 @@ class Config:
     nb_preferences_gymnases: int  # Nombre de gymnases préférés configurables (défaut: 5)
     bonus_preferences_gymnases: List[float]  # Bonus par rang [rang1, rang2, ...]
     
-    # Bonus pour gymnases par niveau (classification haut/bas niveau)
-    bonus_niveau_gymnases_haut: List[float]  # Bonus par niveau de match pour gymnases haut niveau
-    bonus_niveau_gymnases_bas: List[float]  # Bonus par niveau de match pour gymnases bas niveau
+    # Pénalités pour gymnases par niveau (classification haut/bas niveau)
+    # Valeurs positives = pénalités (augmentent le coût)
+    penalite_niveau_gymnases_haut: List[float]  # Pénalité par niveau de match pour gymnases haut niveau
+    penalite_niveau_gymnases_bas: List[float]  # Pénalité par niveau de match pour gymnases bas niveau
     
     # Spacing constraint (list of penalties by weeks of rest)
     penalites_espacement_repos: List[float]
@@ -67,6 +68,9 @@ class Config:
     overlap_institution_actif: bool
     overlap_institution_poids: float
     overlap_institution_institutions: List[str]  # Liste des institutions à surveiller (vide = toutes)
+    
+    # Match scheduling (bonus/penalties for scheduled vs unscheduled matches)
+    penalite_match_non_planif: float  # Pénalité si match normal non planifié (CP-SAT uniquement)
     
     # Ententes (specific institution pairs - reduced penalty when unscheduled)
     entente_penalite_non_planif: float  # Pénalité par défaut si match entente non planifié
@@ -198,9 +202,12 @@ class Config:
             config_dict['nb_preferences_gymnases'] = ct['nb_preferences_gymnases']
             config_dict['bonus_preferences_gymnases'] = ct['bonus_preferences_gymnases']
             
-            # Bonus pour gymnases par niveau (classification haut/bas niveau)
-            config_dict['bonus_niveau_gymnases_haut'] = ct['bonus_niveau_gymnases_haut']
-            config_dict['bonus_niveau_gymnases_bas'] = ct['bonus_niveau_gymnases_bas']
+            # Pénalités pour gymnases par niveau (classification haut/bas niveau)
+            # Support des anciens noms (bonus_*) pour rétrocompatibilité
+            config_dict['penalite_niveau_gymnases_haut'] = ct.get('penalite_niveau_gymnases_haut', 
+                                                                    ct.get('bonus_niveau_gymnases_haut', [0, 2, 5, 7]))
+            config_dict['penalite_niveau_gymnases_bas'] = ct.get('penalite_niveau_gymnases_bas',
+                                                                   ct.get('bonus_niveau_gymnases_bas', [10, 8, 5, 3]))
             
             config_dict['penalite_avant_horaire_min'] = ct['penalite_avant_horaire_min']
             config_dict['penalite_avant_horaire_min_deux'] = ct['penalite_avant_horaire_min_deux']
@@ -219,6 +226,9 @@ class Config:
             config_dict['overlap_institution_actif'] = ct['overlap_institution_actif']
             config_dict['overlap_institution_poids'] = ct['overlap_institution_poids']
             config_dict['overlap_institution_institutions'] = ct.get('overlap_institution_institutions', [])
+            
+            # Match scheduling (bonus/penalties for scheduled vs unscheduled matches)
+            config_dict['penalite_match_non_planif'] = ct.get('penalite_match_non_planif', 10000.0)
             
             # Ententes (paires d'institutions spécifiques)
             config_dict['entente_actif'] = ct['entente_actif']
@@ -292,7 +302,13 @@ class Config:
                 # Nouvelles préférences de gymnase
                 'nb_preferences_gymnases': self.nb_preferences_gymnases,
                 'bonus_preferences_gymnases': self.bonus_preferences_gymnases,
+                # Pénalités pour gymnases par niveau (classification haut/bas niveau)
+                'penalite_niveau_gymnases_haut': self.penalite_niveau_gymnases_haut,
+                'penalite_niveau_gymnases_bas': self.penalite_niveau_gymnases_bas,
                 'penalite_avant_horaire_min': self.penalite_avant_horaire_min,
+                'penalite_avant_horaire_min_deux': self.penalite_avant_horaire_min_deux,
+                'penalite_horaire_diviseur': self.penalite_horaire_diviseur,
+                'penalite_horaire_tolerance': self.penalite_horaire_tolerance,
                 'max_matchs_par_equipe_par_semaine': self.max_matchs_par_equipe_par_semaine,
                 'penalites_espacement_repos': self.penalites_espacement_repos,
                 # Compaction temporelle
@@ -302,6 +318,8 @@ class Config:
                 'overlap_institution_actif': self.overlap_institution_actif,
                 'overlap_institution_poids': self.overlap_institution_poids,
                 'overlap_institution_institutions': self.overlap_institution_institutions,
+                # Match scheduling (bonus/penalties for scheduled vs unscheduled matches)
+                'penalite_match_non_planif': self.penalite_match_non_planif,
                 # Ententes (paires d'institutions spécifiques)
                 'entente_actif': self.entente_actif,
                 'entente_penalite_non_planif': self.entente_penalite_non_planif,

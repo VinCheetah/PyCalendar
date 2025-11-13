@@ -23,7 +23,10 @@ class VenueCapacityConstraint(Constraint):
         # Utiliser la capacité disponible (qui peut être réduite par des indisponibilités partielles)
         capacite_disponible = gymnase.get_capacite_disponible(creneau.semaine, creneau.horaire)
         
-        if matchs_au_creneau >= capacite_disponible:
+        # Vérifier s'il reste de la place pour un nouveau match
+        # matchs_au_creneau inclut déjà les matchs fixés et les matchs déjà planifiés
+        # On veut ajouter 1 match, donc: matchs_au_creneau + 1 <= capacite_disponible
+        if matchs_au_creneau + 1 > capacite_disponible:
             return False, self.weight
         
         return True, 0.0
