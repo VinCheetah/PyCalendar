@@ -146,7 +146,6 @@ class InterfaceGenerator:
             # View styles
             'styles/views/agenda-view.css',
             'styles/views/pools-view.css',
-            'styles/views/penalties-view.css',  # Vue Pénalités
             
             # Themes (last)
             'styles/themes/default-light.css',
@@ -185,6 +184,7 @@ class InterfaceGenerator:
             # Features
             'features/drag-drop-manager.js',  # Drag & drop des matchs
             'features/enhanced-filter-system.js',  # Système de filtres amélioré
+            'features/horaire-timeline.js',  # Extension timeline horaire interactive
             
             # Core modules (order matters!)
             'core/data-manager.js',
@@ -203,7 +203,6 @@ class InterfaceGenerator:
             'views/pools-view.js',
             'views/teams-view.js',
             'views/matches-view.js',
-            'views/penalties-view.js',  # Vue Pénalités
             
             # Application initialization (loaded last)
             'app.js',

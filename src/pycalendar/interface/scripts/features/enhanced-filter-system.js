@@ -10,12 +10,14 @@ class EnhancedFilterSystem {
             week: null,
             pool: null,
             institution: null,
-            equipe: null,  // NOUVEAU: filtre par équipe
+            equipe: null,
             venue: null,
-            days: [],
-            timeStart: null,
-            timeEnd: null,
-            states: [],
+            horaireStart: null,  // Nouveau: début de plage
+            horaireEnd: null,    // Nouveau: fin de plage
+            days: [],            // Jours de la semaine
+            timeStart: null,     // Heure de début
+            timeEnd: null,       // Heure de fin
+            states: [],          // États des matchs
             search: '',
             status: 'all' // Pour la vue Matchs: 'all', 'fixed', 'scheduled', 'unscheduled', 'entente'
         };
@@ -23,7 +25,14 @@ class EnhancedFilterSystem {
         this.callbacks = [];
         this.initialized = false;
         
-        console.log('🔍 EnhancedFilterSystem: Initialisation avec filtre équipe');
+        // Variables pour la timeline
+        this.availableHoraires = [];
+        this.minMinutes = 0;
+        this.maxMinutes = 0;
+        this.horaireStart = 0;
+        this.horaireEnd = 0;
+        
+        console.log('🔍 EnhancedFilterSystem: Initialisation avec timeline horaire');
     }
     
     /**
@@ -87,34 +96,12 @@ class EnhancedFilterSystem {
             if (radio) radio.checked = true;
         }
         
-        // Selects
-        ['week', 'pool', 'institution', 'equipe', 'venue'].forEach(key => {
+        // Selects (institution, pool, venue, week, equipe, horaire)
+        ['week', 'pool', 'institution', 'equipe', 'venue', 'horaire'].forEach(key => {
             const select = document.getElementById(`filter-${key}`);
             if (select && this.filters[key]) {
                 select.value = this.filters[key];
             }
-        });
-        
-        // Days
-        this.filters.days.forEach(day => {
-            const checkbox = document.querySelector(`input[name="filter-day"][value="${day}"]`);
-            if (checkbox) checkbox.checked = true;
-        });
-        
-        // Time
-        if (this.filters.timeStart) {
-            const input = document.getElementById('filter-time-start');
-            if (input) input.value = this.filters.timeStart;
-        }
-        if (this.filters.timeEnd) {
-            const input = document.getElementById('filter-time-end');
-            if (input) input.value = this.filters.timeEnd;
-        }
-        
-        // States
-        this.filters.states.forEach(state => {
-            const checkbox = document.querySelector(`input[name="filter-state"][value="${state}"]`);
-            if (checkbox) checkbox.checked = true;
         });
         
         // Search
@@ -252,12 +239,35 @@ class EnhancedFilterSystem {
             });
         }
         
+        // Horaires - Timeline interactive
+        const horaires = new Set();
+        if (data.matches?.scheduled) {
+            data.matches.scheduled.forEach(match => {
+                if (match.horaire) {
+                    horaires.add(match.horaire);
+                }
+            });
+        }
+        
+        // Convertir les horaires en minutes depuis minuit pour faciliter les calculs
+        this.availableHoraires = Array.from(horaires).sort().map(h => {
+            const [hours, minutes] = h.split(':').map(Number);
+            return {
+                time: h,
+                minutes: hours * 60 + minutes
+            };
+        });
+        
+        // Initialiser la timeline avec les horaires disponibles
+        this.initHoraireTimeline();
+        
         console.log('📊 Options de filtres peuplées:', {
             institutions: institutions.size,
             equipes: data.entities?.equipes?.length || 0,
             poules: data.entities?.poules?.length || 0,
             gymnases: data.entities?.gymnases?.length || 0,
-            semaines: weeks.size
+            semaines: weeks.size,
+            horaires: horaires.size
         });
     }
     
@@ -519,42 +529,15 @@ class EnhancedFilterSystem {
             });
         }
         
-        // Day checkboxes
-        document.querySelectorAll('input[name="filter-day"]').forEach(checkbox => {
-            checkbox.addEventListener('change', () => {
-                this.filters.days = Array.from(
-                    document.querySelectorAll('input[name="filter-day"]:checked')
-                ).map(cb => cb.value);
-                this.apply();
-            });
-        });
-        
-        // Time inputs
-        const timeStart = document.getElementById('filter-time-start');
-        if (timeStart) {
-            timeStart.addEventListener('change', (e) => {
-                this.filters.timeStart = e.target.value || null;
+        // Horaire select (NOUVEAU - simplifié)
+        const horaireSelect = document.getElementById('filter-horaire');
+        if (horaireSelect) {
+            horaireSelect.addEventListener('change', (e) => {
+                this.filters.horaire = e.target.value || null;
+                console.log('🕐 Filtre horaire changé:', this.filters.horaire);
                 this.apply();
             });
         }
-        
-        const timeEnd = document.getElementById('filter-time-end');
-        if (timeEnd) {
-            timeEnd.addEventListener('change', (e) => {
-                this.filters.timeEnd = e.target.value || null;
-                this.apply();
-            });
-        }
-        
-        // State checkboxes
-        document.querySelectorAll('input[name="filter-state"]').forEach(checkbox => {
-            checkbox.addEventListener('change', () => {
-                this.filters.states = Array.from(
-                    document.querySelectorAll('input[name="filter-state"]:checked')
-                ).map(cb => cb.value);
-                this.apply();
-            });
-        });
         
         // Search input (avec debounce)
         const searchInput = document.getElementById('filter-search');
@@ -611,6 +594,9 @@ class EnhancedFilterSystem {
         if (window.poolsView && typeof window.poolsView.setFilters === 'function') {
             window.poolsView.setFilters(this.filters);
         }
+        if (window.teamsView && typeof window.teamsView.setFilters === 'function') {
+            window.teamsView.setFilters(this.filters);
+        }
         if (window.matchesView && typeof window.matchesView.updateFilters === 'function') {
             window.matchesView.updateFilters(this.filters);
         }
@@ -622,22 +608,7 @@ class EnhancedFilterSystem {
      * Efface tous les filtres
      */
     clear() {
-        console.log('🧹 Réinitialisation des filtres (avec équipe)');
-        // Reset filters object
-        this.filters = {
-            gender: null,
-            week: null,
-            pool: null,
-            institution: null,
-            equipe: null,
-            venue: null,
-            days: [],
-            timeStart: null,
-            timeEnd: null,
-            states: [],
-            search: '',
-            status: 'all'
-        };
+        console.log('🧹 Réinitialisation des filtres (avec timeline horaire)');
         
         // Reset UI
         // Gender
@@ -654,19 +625,32 @@ class EnhancedFilterSystem {
             if (select) select.value = '';
         });
         
-        // Checkboxes
-        document.querySelectorAll('input[name="filter-day"]').forEach(cb => cb.checked = false);
-        document.querySelectorAll('input[name="filter-state"]').forEach(cb => cb.checked = false);
-        
-        // Time
-        const timeStart = document.getElementById('filter-time-start');
-        if (timeStart) timeStart.value = '08:00';
-        const timeEnd = document.getElementById('filter-time-end');
-        if (timeEnd) timeEnd.value = '20:00';
+        // Reset timeline horaire à la plage complète
+        if (this.availableHoraires && this.availableHoraires.length > 0) {
+            this.horaireStart = this.minMinutes;
+            this.horaireEnd = this.maxMinutes;
+            this.updateHoraireDisplay();
+        }
         
         // Search
         const searchInput = document.getElementById('filter-search');
         if (searchInput) searchInput.value = '';
+        
+        // Reset filters object APRÈS avoir réinitialisé la timeline
+        // Car updateHoraireDisplay() définit horaireStart et horaireEnd
+        this.filters.gender = null;
+        this.filters.week = null;
+        this.filters.pool = null;
+        this.filters.institution = null;
+        this.filters.equipe = null;
+        this.filters.venue = null;
+        this.filters.days = [];
+        this.filters.timeStart = null;
+        this.filters.timeEnd = null;
+        this.filters.states = [];
+        // horaireStart et horaireEnd sont déjà définis par updateHoraireDisplay()
+        this.filters.search = '';
+        this.filters.status = 'all';
         
         // Apply
         this.apply();
@@ -731,6 +715,11 @@ class EnhancedFilterSystem {
             tags.push(this.createTag(`🏟️ ${this.filters.venue}`, 'venue'));
         }
         
+        // Plage horaire - toujours affichée si définie
+        if (this.filters.horaireStart && this.filters.horaireEnd) {
+            tags.push(this.createTag(`⏰ ${this.filters.horaireStart} → ${this.filters.horaireEnd}`, 'horaire'));
+        }
+        
         if (this.filters.days.length > 0) {
             const dayNames = {
                 'mon': 'Lun', 'tue': 'Mar', 'wed': 'Mer',
@@ -783,9 +772,8 @@ class EnhancedFilterSystem {
         if (this.filters.institution) count++;
         if (this.filters.equipe) count++;
         if (this.filters.venue) count++;
-        if (this.filters.days.length > 0) count++;
-        if (this.filters.timeStart || this.filters.timeEnd) count++;
-        if (this.filters.states.length > 0) count++;
+        // Le filtre horaire est toujours actif (affiche toujours une plage)
+        if (this.filters.horaireStart && this.filters.horaireEnd) count++;
         if (this.filters.search) count++;
         return count;
     }
@@ -858,20 +846,33 @@ class EnhancedFilterSystem {
                 }
             }
             
-            // Days (nécessite jour de la semaine dans match.jour ou match.date)
-            if (this.filters.days.length > 0) {
-                // TODO: implémenter le filtre par jour
-            }
-            
-            // Time range
-            if (this.filters.timeStart && match.heure) {
-                if (match.heure < this.filters.timeStart) {
-                    return false;
-                }
-            }
-            if (this.filters.timeEnd && match.heure) {
-                if (match.heure > this.filters.timeEnd) {
-                    return false;
+            // Plage horaire (NOUVEAU - filtrage par plage avec chevauchement de créneaux)
+            if (this.filters.horaireStart && this.filters.horaireEnd) {
+                // Si le match n'a pas d'horaire, on le garde visible (matchs non planifiés ou ententes)
+                if (!match.horaire) {
+                    // Match sans horaire = visible
+                } else {
+                    // Convertir l'horaire du match en minutes
+                    const [hours, minutes] = match.horaire.split(':').map(Number);
+                    const matchStartMinutes = hours * 60 + minutes;
+                    
+                    // Durée standard d'un match (ajuster selon vos besoins, ex: 90 minutes)
+                    const matchDuration = 90;
+                    const matchEndMinutes = matchStartMinutes + matchDuration;
+                    
+                    // Convertir la plage sélectionnée en minutes
+                    const [startHours, startMinutes] = this.filters.horaireStart.split(':').map(Number);
+                    const [endHours, endMinutes] = this.filters.horaireEnd.split(':').map(Number);
+                    const rangeStart = startHours * 60 + startMinutes;
+                    const rangeEnd = endHours * 60 + endMinutes;
+                    
+                    // Le match est visible si son créneau chevauche la plage sélectionnée
+                    // Chevauchement = le début du match est avant la fin de la plage ET la fin du match est après le début de la plage
+                    const overlaps = matchStartMinutes < rangeEnd && matchEndMinutes > rangeStart;
+                    
+                    if (!overlaps) {
+                        return false;
+                    }
                 }
             }
             

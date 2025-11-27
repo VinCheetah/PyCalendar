@@ -384,12 +384,17 @@ class ImporteurMatchsExternes:
                 'HALLE - C.BESSON': 'BESSON',
                 'HALLE - C. BESSON': 'BESSON',
                 'GYMNASE DESCARTES': 'DESCARTES',
-                'GYMNASE ESA': 'ESA',
+                'ENS DESCARTES': 'DESCARTES',
+                'DESCARTES': 'DESCARTES',
+                'CENTRALE': 'ECL',
+                'GYMNASE CENTRALE': 'ECL',
                 'GYMNASE CENTRALE LYON': 'ECL',
+                'GYMNASE ESA': 'ESA',
                 'COMPET C (HAUT) - LEON JOUHAUX': 'L. J. HAUT',
                 'HALLE LYON 2': 'LYON 2 HC',
                 'HALLE - 3D': 'LAENNEC',
                 'LAENNEC': 'LAENNEC',
+                'CSU GRENOBLE': 'GRENOBLE',
             }
         return self._mapping_gymnases
     
@@ -424,24 +429,21 @@ class ImporteurMatchsExternes:
         
         return self._equipes_mixtes
     
-    def ajouter_genre_equipe(self, nom_equipe: str, poule: str) -> str:
+    def ajouter_genre_equipe(self, nom_equipe: str, genre: str) -> str:
         """
         Ajoute le genre entre crochets si l'équipe existe en F et M.
         
         Args:
             nom_equipe: Nom de l'équipe
-            poule: Code de la poule (pour extraire le genre)
+            genre: Genre ('F' ou 'M')
             
         Returns:
             Nom de l'équipe avec [F] ou [M] si mixte
         """
         equipes_mixtes = self.charger_equipes_mixtes()
         
-        if nom_equipe in equipes_mixtes:
-            # Extraire le genre de la poule
-            genre = poule[2] if len(poule) > 2 else None
-            if genre in ['F', 'M']:
-                return f"{nom_equipe} [{genre}]"
+        if nom_equipe in equipes_mixtes and genre in ['F', 'M']:
+            return f"{nom_equipe} [{genre}]"
         
         return nom_equipe
     
@@ -661,13 +663,16 @@ class ImporteurMatchsExternes:
             'Equipe 1': 'Equipe_1',
             'Equipe 2': 'Equipe_2',
             'Poule': 'Poule',
+            'Sexe': 'Genre',
             'Hre Déb': 'Horaire',
             'Lieu': 'Gymnase',
             'Résultats': 'Score',
             'Commentaire': 'Remarques',
             # Format alternatif (underscores)
+            'Résultat': 'Score',
             'Equipe_1': 'Equipe_1',
             'Equipe_2': 'Equipe_2',
+            'Genre': 'Genre',
             'Score': 'Score',
             'Remarques': 'Remarques',
             'Gymnase': 'Gymnase',
@@ -783,27 +788,85 @@ class ImporteurMatchsExternes:
             
             df_config['Horaire'] = df_config['Horaire'].apply(formater_horaire)
         
-        # Nettoyer les équipes (enlever espaces superflus)
+        # Nettoyer et normaliser les équipes
+        def normaliser_nom_equipe(nom_equipe: str) -> str:
+            """
+            Normalise le nom d'une équipe :
+            - Enlève les espaces superflus
+            - Corrige "INP G" en "INPG"
+            - Ajoute "(1)" si l'équipe n'a pas de numéro entre parenthèses
+            """
+            if pd.isna(nom_equipe):
+                return ''
+            
+            # Nettoyer les espaces
+            nom = str(nom_equipe).strip()
+            
+            # Correction spécifique : "INP G" -> "INPG"
+            nom = nom.replace('INP G', 'INPG')
+            
+            # Vérifier si l'équipe a déjà un numéro entre parenthèses
+            # Pattern: (1), (2), etc.
+            import re
+            if not re.search(r'\(\d+\)', nom):
+                # Pas de numéro trouvé, ajouter "(1)"
+                nom = f"{nom} (1)"
+            
+            return nom
+        
         for col in ['Equipe_1', 'Equipe_2']:
             if col in df_config.columns:
-                df_config[col] = df_config[col].astype(str).str.strip()
+                df_config[col] = df_config[col].apply(normaliser_nom_equipe)
         
-        # Nettoyer les poules et extraire le genre
+        # Nettoyer les poules
         if 'Poule' in df_config.columns:
             df_config['Poule'] = df_config['Poule'].astype(str).str.strip()
+        
+        # Gérer le genre : priorité à la colonne Genre (Sexe), avec vérification via la poule
+        def determiner_genre(row):
+            """
+            Détermine le genre en priorité depuis la colonne Genre,
+            avec vérification de cohérence avec la poule si disponible.
+            """
+            genre_colonne = None
+            genre_poule = None
             
-            # Extraire le genre depuis la poule (3ème caractère)
-            def extraire_genre(poule):
-                if pd.isna(poule) or not str(poule).strip():
-                    return ''
-                poule_str = str(poule).strip()
+            # 1. Extraire le genre depuis la colonne Genre si elle existe
+            if 'Genre' in row and pd.notna(row['Genre']):
+                genre_str = str(row['Genre']).strip().upper()
+                if genre_str in ['F', 'FEMININ', 'FÉMININ', 'FEMME', 'FILLE']:
+                    genre_colonne = 'F'
+                elif genre_str in ['M', 'MASCULIN', 'HOMME', 'GARCON', 'GARÇON']:
+                    genre_colonne = 'M'
+            
+            # 2. Extraire le genre depuis la poule si elle existe (3ème caractère)
+            if 'Poule' in row and pd.notna(row['Poule']):
+                poule_str = str(row['Poule']).strip()
                 if len(poule_str) >= 3:
                     genre_char = poule_str[2]
                     if genre_char in ['F', 'M']:
-                        return genre_char
-                return ''
+                        genre_poule = genre_char
             
-            df_config['Genre'] = df_config['Poule'].apply(extraire_genre)
+            # 3. Décision finale avec vérification de cohérence
+            if genre_colonne and genre_poule:
+                # Les deux sont disponibles : vérifier la cohérence
+                if genre_colonne != genre_poule:
+                    print(f"   ⚠️  Incohérence de genre détectée pour poule '{row.get('Poule', '')}': "
+                          f"colonne='{genre_colonne}' vs poule='{genre_poule}' - Utilisation de la colonne")
+                return genre_colonne
+            elif genre_colonne:
+                # Priorité à la colonne
+                return genre_colonne
+            elif genre_poule:
+                # Fallback sur la poule
+                return genre_poule
+            else:
+                # Aucune information disponible
+                return ''
+        
+        # Appliquer la fonction de détermination du genre
+        if 'Genre' in df_config.columns or 'Poule' in df_config.columns:
+            df_config['Genre'] = df_config.apply(determiner_genre, axis=1)
         else:
             df_config['Genre'] = ''
         
@@ -822,6 +885,42 @@ class ImporteurMatchsExternes:
         if 'Score' in df_config.columns:
             df_config['Score'] = df_config['Score'].apply(self._parser_score)
         
+        # Déterminer le type de compétition depuis la poule
+        # et ajuster la poule pour CFE/CFU (vider la poule, garder juste le type)
+        def determiner_type_competition(poule):
+            """
+            Détermine le type de compétition depuis le code de poule.
+            - CFE* ou CFU* -> CFE ou CFU
+            - Sinon -> Acad
+            """
+            if pd.isna(poule) or not str(poule).strip():
+                return 'Acad'
+            
+            poule_str = str(poule).strip().upper()
+            
+            if poule_str.startswith('CFE'):
+                return 'CFE'
+            elif poule_str.startswith('CFU'):
+                return 'CFU'
+            else:
+                return 'Acad'
+        
+        if 'Poule' in df_config.columns:
+            # D'abord déterminer le type de compétition depuis la poule originale
+            df_config['Type_Competition'] = df_config['Poule'].apply(determiner_type_competition)
+            
+            # Ensuite, pour les matchs CFE et CFU, vider la poule
+            # (seul Type_Competition compte pour ces compétitions)
+            def ajuster_poule(row):
+                if row['Type_Competition'] in ['CFE', 'CFU']:
+                    return ''
+                else:
+                    return row['Poule']
+            
+            df_config['Poule'] = df_config.apply(ajuster_poule, axis=1)
+        else:
+            df_config['Type_Competition'] = 'Acad'
+        
         # Ajouter les colonnes manquantes avec valeurs par défaut
         colonnes_requises = [
             'Equipe_1', 'Equipe_2', 'Genre', 'Poule', 'Semaine', 'Horaire',
@@ -830,12 +929,14 @@ class ImporteurMatchsExternes:
         
         for col in colonnes_requises:
             if col not in df_config.columns:
-                if col == 'Type_Competition':
-                    df_config[col] = 'Acad'
-                elif col == 'Remarques':
+                if col == 'Remarques':
                     df_config[col] = 'Importé J1'
                 elif col == 'Genre':
                     df_config[col] = ''
+                elif col == 'Type_Competition':
+                    # Type_Competition devrait déjà être défini plus haut
+                    # Si ce n'est pas le cas, on met Acad par défaut
+                    df_config[col] = 'Acad'
                 else:
                     df_config[col] = ''
         
@@ -895,12 +996,15 @@ class ImporteurMatchsExternes:
             DataFrame fusionné
         """
         # Créer une clé unique pour détecter les doublons
-        # Utiliser les colonnes communes aux deux formats
+        # IMPORTANT: Inclure le Genre et Type_Competition pour différencier les matchs
+        # avec les mêmes équipes mais de genre ou compétition différents
         def creer_cle(df):
             return (
                 df['Equipe_1'].astype(str) + '|' +
                 df['Equipe_2'].astype(str) + '|' +
-                df['Semaine'].astype(str) if 'Semaine' in df.columns else ''
+                (df['Genre'].astype(str) if 'Genre' in df.columns else '') + '|' +
+                (df['Type_Competition'].astype(str) if 'Type_Competition' in df.columns else '') + '|' +
+                (df['Semaine'].astype(str) if 'Semaine' in df.columns else '')
             )
         
         df_nouveaux['_cle'] = creer_cle(df_nouveaux)

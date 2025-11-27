@@ -1,5 +1,4 @@
 # Configuration par défaut pour PyCalendar
-#   # Configuration par défaut pour PyCalendar
 # =========================================
 # Ce fichier contient TOUTES les valeurs par défaut
 # Les valeurs ici doivent correspondre exactement aux défauts dans core/config.py
@@ -9,189 +8,107 @@
 
 # Fichiers d'entrée et de sortie
 fichiers:
-  donnees: "examples/basic/config_exemple.xlsx"
-  sortie: "examples/basic/calendrier.xlsx"
+  donnees: "data/volleyball/config_volley.xlsx"
+  sortie: "data/volleyball/calendrier_volley.xlsx"
 
 # Paramètres de planification
 planification:
   nb_semaines: 11
-  semaine_min: 1  # Semaine minimum à partir de laquelle planifier (1 = début normal, >1 = compétition déjà commencée)
-  taille_poule_min: 3
-  taille_poule_max: 6
-  strategie: "cpsat"  # "greedy" ou "cpsat"
-  fallback_greedy: true
+  semaine_min: 1  # Semaine minimum à partir de laquelle planifier
 
-# Configuration Greedy
-greedy:
-  nb_essais: 10
-
-# Configuration CP-SAT (OR-Tools)
+# Configuration CP-SAT (OR-Tools - recherche solution optimale)
 cpsat:
-  temps_max_secondes: 120  # Minimum time needed for complex models (267+ matches). Lower values may cause UNKNOWN status.
-  afficher_progression: false  # true = affiche détails du solver, false = silencieux
-  niveau_log: 1
-  warm_start: true  # Utilise la dernière solution comme point de départ (accélère la résolution)
-  warm_start_file: "default"  # Nom du fichier de solution (permet d'avoir des solutions par config)
+  temps_max_secondes: 120  # Temps maximum de résolution (minimum recommandé pour problèmes complexes)
+  afficher_progression: false  # Afficher les détails du solver pendant la résolution
+  niveau_log: 1  # Niveau de verbosité des logs
+  warm_start: true  # Utiliser la solution précédente comme point de départ
+  warm_start_file: "volley"  # Nom du fichier pour sauvegarder/charger les solutions de démarrage
 
-# Poids des contraintes
+# Contraintes
 contraintes:
-  # Contraintes DURES (hard constraints)
-  poids_indisponibilite: 1000.0        # Indisponibilité équipes/institutions
-  poids_capacite_gymnase: 1500.0        # Capacité des gymnases
+  # --- Préférences de gymnase ---
+  bonus_preferences_gymnases: [10.0, 8.0, 5.0, 2.0, 1.0]  # Réduction de coût par rang de préférence
 
-  # Contraintes SOUPLES (soft constraints)
-  poids_equilibrage_charge: 50.0       # Équilibrage de la charge sur semaines/gymnases
+  # --- Adéquation niveau match / niveau gymnase ---
+  # Convention: valeurs NÉGATIVES = bonus (réduction coût), POSITIVES = pénalité (augmentation coût)
+  # Exemple: A1 (haut niveau) sur gymnase haut niveau → bonus (valeur négative)
+  #          A1 (haut niveau) sur gymnase bas niveau → pénalité (valeur positive)
+  penalite_niveau_gymnases_haut: [-10, -8, -5, -1]  # [A1, A2, A3, A4] sur gymnase HAUT niveau
+  penalite_niveau_gymnases_bas: [8, 6, 4, 2]  # [A1, A2, A3, A4] sur gymnase BAS niveau
 
-  # Préférences de gymnase (nouveau système avec bonus)
-  nb_preferences_gymnases: 5           # Nombre de colonnes de préférences (1 à N)
-  bonus_preferences_gymnases: [10.0, 8.0, 5.0, 2.0, 1.0]  # Bonus par rang de préférence
+  # --- Horaires préférés avec système de tolérance ---
+  # Formule: pénalité = multiplicateur × ((distance / diviseur)²)
+  # Distance calculée uniquement si > tolérance
+  penalite_apres_horaire_min: 1.0  # Multiplicateur si match APRÈS horaire préféré
+  penalite_avant_horaire_min: 6.0  # Multiplicateur si match AVANT horaire d'une seule équipe
+  penalite_avant_horaire_min_deux: 15.0  # Multiplicateur si match AVANT horaire des deux équipes
+  penalite_horaire_diviseur: 60.0  # Diviseur pour normaliser la distance en minutes
+  penalite_horaire_tolerance: 30.0  # Fenêtre de tolérance en minutes sans pénalité
+  
+  # Interdiction stricte de jouer AVANT l'horaire préféré (contrainte dure optionnelle)
+  # Utile pour déblocage rapide de planifications où jouer avant est impossible
+  # (équipes en cours, au travail, etc.)
+  horaire_avant_interdit: true  # Si true: INTERDIT les matchs avant horaire préféré
+  horaire_avant_tolerance: 30  # Tolérance en minutes (0 = strict, 30 = accepte 30min avant)
 
-  # Bonus pour gymnases par niveau (classification haut/bas niveau)
-  bonus_niveau_gymnases_haut: [10, 8, 5, 1]  # Bonus par niveau de match (A1=10, A2=8, A3=5, A4=1) si gymnase haut niveau
-  bonus_niveau_gymnases_bas: [8, 6, 4, 2]    # Bonus par niveau de match (A1=8, A2=6, A3=4, A4=2) si gymnase bas niveau
+  # --- Limites strictes ---
+  max_matchs_par_equipe_par_semaine: 1  # Maximum de matchs qu'une équipe peut jouer par semaine
 
-  # Contrainte sophistiquée: Horaires préférés avec tolérance
-  # Formule: pénalité = multiplicateur × ((distance) / diviseur)²
-  penalite_apres_horaire_min: 1.0           # Multiplicateur si match après horaire préféré (base)
-  penalite_avant_horaire_min: 6.0           # Multiplicateur si match avant horaire d'1 équipe
-  penalite_avant_horaire_min_deux: 15.0     # Multiplicateur si match avant horaire des 2 équipes
-  penalite_horaire_diviseur: 60.0            # Diviseur pour normaliser la distance (60=heures, 90=plus doux)
-  penalite_horaire_tolerance: 30.0           # Fenêtre de tolérance en minutes (0=strict, 30=tolérant)
+  # --- Espacement entre matchs d'une même équipe ---
+  # Liste de pénalités indexées par nombre de semaines de repos
+  # Index 0 = matchs consécutifs (0 semaine de repos)
+  # Index 1 = 1 semaine d'écart entre matchs
+  # Index 2 = 2 semaines d'écart, etc.
+  # Si repos >= longueur liste, pénalité = 0
+  penalites_espacement_repos: [5.0, 2.0, 1.0]
 
-  # Limites
-  max_matchs_par_equipe_par_semaine: 1
-
-  # Espacement entre matchs d'une même équipe
-  # Liste de pénalités par nombre de semaines de repos [0 repos, 1 repos, 2 repos, ...]
-  # 0 repos = matchs semaines consécutives, 1 repos = 1 semaine d'écart entre matchs
-  # Si repos >= longueur de la liste, pénalité = 0 (espacement suffisant)
-  penalites_espacement_repos: [5.0, 2.0, 1.0]  # [0 sem repos, 1 sem repos, 2 sem repos]
-
-  # Compaction temporelle (contrainte souple)
+  # --- Compaction temporelle ---
+  # Pénalise les matchs planifiés tard dans la saison pour favoriser planification précoce
   compaction_temporelle_actif: true
-  compaction_penalites_par_semaine: [0, 0, 5, 10, 10, 15, 20, 35]  # Pénalité par semaine (indice 0 = semaine 1)
+  compaction_penalites_par_semaine: []  # Index = semaine - 1
 
-  # Overlaps institution (contrainte souple)
-  overlap_institution_actif: false
-  overlap_institution_poids: 10.0     # Pénalité pour matchs simultanés de même institution
+  # --- Overlaps institution ---
+  # Évite que plusieurs matchs d'un même groupe jouent simultanément (même semaine + horaire)
+  # Nécessite la configuration de groupes dans la feuille Excel 'Groupes_Non_Simultaneite'
+  # Exemple: groupe "Paris" avec institutions ["Paris 1", "Paris 2", "Paris 3"]
+  #   → si "Paris 1 vs Lyon" et "Paris 2 vs Marseille" sont simultanés, pénalité appliquée
+  # Si aucun groupe configuré: contrainte automatiquement désactivée (message de warning)
+  overlap_institution_actif: false  # Activer/désactiver cette contrainte
+  overlap_institution_poids: 10.0  # Pénalité par chevauchement détecté (recommandé: 10-100)
 
-  # Ententes (matchs entre institutions spécifiques - pénalité réduite si non planifiées)
+  # --- Équilibrage des matchs (système max-min avec bonus progressif) ---
+  # Garantit que le minimum de matchs par équipe soit maximal
+  # Utilise des bonus dégressifs: 1er match = bonus élevé, 2ème = bonus/2, 3ème = bonus/4, etc.
+  equilibrage_actif: true
+  equilibrage_bonus_base: 10000000000.0  # Bonus pour le premier match d'une équipe
+  equilibrage_facteur_decroissance: 0.3  # Facteur multiplicatif pour chaque match suivant
+  equilibrage_bonus_minimum: 1.0  # Bonus plancher 
+
+  # --- Ententes (matchs entre institutions spécifiques) ---
+  # Les ententes sont des matchs gérés par les équipes (sans créneau assigné)
+  # Utilisées comme "soupape de sécurité" quand le calendrier est saturé
   entente_actif: true
-  entente_penalite_non_planif: 20.0  # Pénalité par défaut si match entente non planifié
+  entente_facteur_reduction_bonus: 0.90  # Réduction multiplicative du bonus total de l'équipe par entente (0.90 = -10% par entente)
 
-  # Contraintes temporelles (matchs à planifier avant/après une semaine - ex: CFE)
+  # --- Contraintes temporelles (CFE, phases de poules, etc.) ---
+  # Permet de forcer certains matchs avant/après une semaine donnée
   contrainte_temporelle_actif: true
-  contrainte_temporelle_penalite: 100.0  # Pénalité si contrainte violée (mode souple)
-  contrainte_temporelle_dure: false  # true = bloquant (impossible de violer), false = souple (pénalité)
+  contrainte_temporelle_penalite: 100.0  # Pénalité si contrainte violée
+  contrainte_temporelle_dure: false  # Si true: bloquant, si false: simple pénalité
 
-  # Espacement aller-retour (pour poules de type Aller-Retour uniquement)
-  # Cette contrainte force un espacement minimum entre les matchs aller et retour
-  aller_retour_espacement_actif: true  # Activer/désactiver la contrainte
-  aller_retour_min_semaines: 2  # Espacement minimum en semaines entre aller et retour
-  aller_retour_penalite_meme_semaine: 5000.0  # Pénalité si aller et retour dans même semaine
-  aller_retour_penalite_consecutives: 2000.0  # Pénalité si aller et retour dans semaines consécutives
+  # --- Espacement aller-retour ---
+  # Force un espacement minimum entre matchs aller et retour (poules Aller-Retour uniquement)
+  aller_retour_espacement_actif: true
+  aller_retour_penalite_meme_semaine: 5000.0  # Pénalité très élevée si même semaine
+  aller_retour_penalite_consecutives: 2000.0  # Pénalité si semaines consécutives
 
 # Gestion du calendrier avec dates réelles
 calendrier:
-  actif: false  # Activer/désactiver l'affichage des dates réelles dans la visualisation
-  date_debut: "2025-10-09"  # Date de début de saison (premier jour possible pour les matchs)
-  jour_match: "jeudi"  # Jour de la semaine où se déroulent les matchs======================================
-# Ce fichier contient TOUTES les valeurs par défaut
-# Les valeurs ici doivent correspondre exactement aux défauts dans core/config.py
-# 
-# Pour créer une config personnalisée, copiez ce fichier et ne gardez que les valeurs
-# que vous souhaitez modifier. Les autres seront automatiquement héritées des défauts.
+  actif: false  # Activer pour afficher dates réelles au lieu de numéros de semaine
+  date_debut: "2025-10-09"  # Date de début de saison (format YYYY-MM-DD)
+  jour_match: "jeudi"  # Jour de la semaine des matchs
+  semaines_banalisees: []  # Liste des semaines banalisées (vacances, pas de matchs)
 
-# Fichiers d'entrée/sortie
-# Configuration par défaut pour PyCalendar
-
-fichiers:
-  donnees: "examples/basic/config_exemple.xlsx"
-  sortie: "examples/basic/calendrier.xlsx"
-
-# Paramètres de planification
-planification:
-  nb_semaines: 11
-  semaine_min: 1  # Semaine minimum à partir de laquelle planifier (1 = début normal, >1 = compétition déjà commencée)
-  taille_poule_min: 3
-  taille_poule_max: 6
-  strategie: "cpsat"  # "greedy" ou "cpsat"
-  fallback_greedy: true
-
-# Configuration Greedy
-greedy:
-  nb_essais: 10
-
-# Configuration CP-SAT (OR-Tools)
-cpsat:
-  temps_max_secondes: 60  # Minimum time needed for complex models (267+ matches). Lower values may cause UNKNOWN status.
-  afficher_progression: false  # true = affiche détails du solver, false = silencieux
-  niveau_log: 1
-  warm_start: true  # Utilise la dernière solution comme point de départ (accélère la résolution)
-  warm_start_file: "default"  # Nom du fichier de solution (permet d'avoir des solutions par config)
-
-# Poids des contraintes
-contraintes:
-  # Contraintes DURES (hard constraints)
-  poids_indisponibilite: 1000.0        # Indisponibilité équipes/institutions
-  poids_capacite_gymnase: 1500.0        # Capacité des gymnases
-  
-  # Contraintes SOUPLES (soft constraints)
-  poids_equilibrage_charge: 50.0       # Équilibrage de la charge sur semaines/gymnases
-  
-  # Préférences de gymnase (nouveau système avec bonus par rang)
-  nb_preferences_gymnases: 5           # Nombre de colonnes de préférences (1 à N)
-  bonus_preferences_gymnases: [10.0, 8.0, 5.0, 2.0, 1.0]  # Bonus par rang de préférence
-  
-  # Contrainte sophistiquée: Horaires préférés avec tolérance
-  # Formule: pénalité = multiplicateur × ((distance) / diviseur)²
-  penalite_apres_horaire_min: 1.0           # Multiplicateur si match après horaire préféré (base)
-  penalite_avant_horaire_min: 6.0           # Multiplicateur si match avant horaire d'1 équipe
-  penalite_avant_horaire_min_deux: 15.0     # Multiplicateur si match avant horaire des 2 équipes
-  penalite_horaire_diviseur: 60.0            # Diviseur pour normaliser la distance (60=heures, 90=plus doux)
-  penalite_horaire_tolerance: 30.0           # Fenêtre de tolérance en minutes (0=strict, 30=tolérant)
-  
-  # Limites
-  max_matchs_par_equipe_par_semaine: 1
-  
-  # Espacement entre matchs d'une même équipe
-  # Liste de pénalités par nombre de semaines de repos [0 repos, 1 repos, 2 repos, ...]
-  # 0 repos = matchs semaines consécutives, 1 repos = 1 semaine d'écart entre matchs
-  # Si repos >= longueur de la liste, pénalité = 0 (espacement suffisant)
-  penalites_espacement_repos: [5.0, 2.0, 1.0]  # [0 sem repos, 1 sem repos, 2 sem repos]
-  
-  # Compaction temporelle (contrainte souple)
-  compaction_temporelle_actif: true
-  compaction_penalites_par_semaine: [0, 0, 5, 10, 10, 15, 20, 35]  # Pénalité par semaine (indice 0 = semaine 1)
-  
-  # Overlaps institution (contrainte souple)
-  overlap_institution_actif: true
-  overlap_institution_poids: 10.0     # Pénalité pour matchs simultanés de même institution
-  
-  # Ententes (matchs entre institutions spécifiques - pénalité réduite si non planifiés)
-  entente_actif: true
-  entente_penalite_non_planif: 30.0  # Pénalité par défaut si match entente non planifié
-  
-  # Contraintes temporelles (matchs à planifier avant/après une semaine - ex: CFE)
-  contrainte_temporelle_actif: true
-  contrainte_temporelle_penalite: 100.0  # Pénalité si contrainte violée (mode souple)
-  contrainte_temporelle_dure: false  # true = bloquant (impossible de violer), false = souple (pénalité)
-  
-  # Espacement aller-retour (pour poules de type Aller-Retour uniquement)
-  # Cette contrainte force un espacement minimum entre les matchs aller et retour
-  aller_retour_espacement_actif: true  # Activer/désactiver la contrainte
-  aller_retour_min_semaines: 2  # Espacement minimum souhaité en semaines
-  aller_retour_penalite_meme_semaine: 5000.0  # Pénalité si aller et retour dans même semaine (très élevé)
-  aller_retour_penalite_consecutives: 2000.0  # Pénalité si aller et retour dans semaines consécutives
-
-# Gestion du calendrier avec dates réelles
-calendrier:
-  actif: false  # Activer/désactiver l'affichage des dates réelles dans la visualisation
-  date_debut: "2025-10-09"  # Date de début de saison (premier jour possible pour les matchs)
-  jour_match: "jeudi"  # Jour de la semaine où se déroulent les matchs
-  semaines_banalisees: [44, 52, 1]  # Liste des numéros de semaines banalisées (vacances, périodes sans match)
-
-# Paramètres avancés
-extra:
-  afficher_progression: true
-  niveau_log: 1
+# Paramètres spécifiques au sport
+sport:
+  duree_match_minutes: 90  # Durée d'un match en minutes (90 pour handball, 120 pour volley)

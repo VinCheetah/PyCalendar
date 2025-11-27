@@ -26,7 +26,7 @@ class TeamsView {
         
         // Options d'affichage
         this.groupBy = 'none'; // 'none', 'gender', 'institution', 'pool', 'level'
-        this.sortBy = 'name'; // 'name', 'institution', 'matches', 'points', 'victories', 'pointsDiff', 'completion', 'penalties'
+        this.sortBy = 'name'; // 'name', 'institution', 'matches', 'scheduled', 'played', 'points', 'victories', 'pointsDiff', 'completion', 'penalties'
         this.sortOrder = 'asc'; // 'asc', 'desc'
         this.colorBy = 'none'; // 'none', 'completion', 'performance', 'penalties', 'pointsDiff'
         this.showPerformance = true;
@@ -119,7 +119,9 @@ class TeamsView {
                     values: [
                         { value: 'name', text: 'Nom' },
                         { value: 'institution', text: 'Institution' },
-                        { value: 'matches', text: 'Nombre de matchs' },
+                        { value: 'matches', text: 'Nombre de matchs total' },
+                        { value: 'scheduled', text: 'Matchs effectifs (planifiés + ententes)' },
+                        { value: 'played', text: 'Matchs joués (avec score)' },
                         { value: 'points', text: 'Points' },
                         { value: 'victories', text: 'Victoires' },
                         { value: 'pointsDiff', text: 'Différence de points' },
@@ -310,31 +312,29 @@ class TeamsView {
             m.equipe1_id === team.id || m.equipe2_id === team.id
         );
         
-        // IMPORTANT: Les ententes sont TOUJOURS non planifiées (pas de créneau)
-        // Même si elles ont un créneau dans les données, on les considère comme non planifiées
+        // IMPORTANT: Les matchs "entente" SANS créneau sont considérés comme PLANIFIÉS
+        // car ils seront joués en dehors du calendrier officiel
         const ententeMatches = teamMatches.filter(m => m.is_entente);
         
-        // Matchs planifiés (avec créneau) SANS les ententes
-        const scheduledMatches = teamMatches.filter(m => m.semaine && !m.is_entente);
+        // Matchs planifiés = matchs avec créneau + matchs entente sans créneau
+        const scheduledMatches = teamMatches.filter(m => m.semaine || m.is_entente);
         
-        // Matchs non planifiés (sans créneau) = ententes + vrais non planifiés
-        const unscheduledMatches = teamMatches.filter(m => !m.semaine || m.is_entente);
+        // Matchs NON planifiés = matchs sans créneau ET non entente
+        const unscheduledMatches = teamMatches.filter(m => !m.semaine && !m.is_entente);
         
-        // Séparer les non planifiés en ententes et non-ententes
-        const unscheduledEntente = ententeMatches;
-        const unscheduledNonEntente = unscheduledMatches.filter(m => !m.is_entente);
-        
-        // Matchs joués (avec score) - uniquement parmi les matchs planifiés
+        // Matchs joués (avec score) - uniquement parmi les matchs planifiés avec créneau
         const playedMatches = scheduledMatches.filter(m => 
+            m.semaine && // Doit avoir un créneau pour être considéré "joué"
             m.score && m.score.has_score &&
             m.score.equipe1 !== null && m.score.equipe1 !== undefined &&
             m.score.equipe2 !== null && m.score.equipe2 !== undefined
         );
         
         const upcomingMatches = scheduledMatches.filter(m => 
-            !m.score || !m.score.has_score ||
+            m.semaine && // Matchs avec créneau seulement
+            (!m.score || !m.score.has_score ||
             m.score.equipe1 === null || m.score.equipe1 === undefined ||
-            m.score.equipe2 === null || m.score.equipe2 === undefined
+            m.score.equipe2 === null || m.score.equipe2 === undefined)
         );
         
         // Statistiques de performance
@@ -385,7 +385,7 @@ class TeamsView {
         
         const avgPenalties = teamMatches.length > 0 ? totalPenalties / teamMatches.length : 0;
         
-        // Taux de complétion
+        // Taux de complétion: matchs planifiés / total matchs (y compris ententes planifiées)
         const completionRate = teamMatches.length > 0 
             ? (scheduledMatches.length / teamMatches.length) * 100 
             : 0;
@@ -416,15 +416,24 @@ class TeamsView {
             ? (preferencesRespected / preferencesTotal) * 100 
             : 100;
         
+        // Statistiques détaillées des ententes
+        const scheduledWithSlot = scheduledMatches.filter(m => m.semaine && !m.is_entente);
+        const ententeScheduledWithSlot = scheduledMatches.filter(m => m.semaine && m.is_entente);
+        const ententeScheduledNoSlot = scheduledMatches.filter(m => !m.semaine && m.is_entente);
+        
         return {
             totalMatches: teamMatches.length,
-            scheduled: scheduledMatches.length,
-            scheduledNonEntente: scheduledMatches.length, // Tous les planifiés (puisqu'on exclut les ententes)
-            scheduledEntente: ententeMatches.length, // Nombre d'ententes (affichées dans colonne "Entente")
-            unscheduled: unscheduledNonEntente.length, // Vrais non planifiés (sans entente)
+            scheduled: scheduledMatches.length, // Inclut ententes sans créneau
+            scheduledNonEntente: scheduledWithSlot.length, // Matchs normaux avec créneau
+            scheduledEntente: ententeMatches.length, // TOUTES les ententes (comptées comme planifiées)
+            unscheduled: unscheduledMatches.length, // Matchs NON planifiés (sans créneau ET non entente)
             played: playedMatches.length,
             upcoming: upcomingMatches.length,
-            entente: ententeMatches.length,
+            entente: ententeMatches.length, // Total ententes
+            ententeScheduled: ententeMatches.length, // Toutes les ententes sont "planifiées"
+            ententeUnscheduled: 0, // Plus d'ententes non planifiées par définition
+            ententeWithSlot: ententeScheduledWithSlot.length, // Ententes avec créneau
+            ententeNoSlot: ententeScheduledNoSlot.length, // Ententes sans créneau (= "à jouer hors calendrier")
             won: won,
             drawn: drawn,
             lost: lost,
@@ -444,20 +453,21 @@ class TeamsView {
     
     /**
      * Filtre les équipes selon les filtres actifs
+     * Les filtres se COMBINENT : semaine ET gymnase signifie "matchs cette semaine dans ce gymnase"
      */
     _filterTeams(teams) {
         return teams.filter(team => {
-            // Filtre par genre
+            // Filtre par genre (propriété de l'équipe)
             if (this.activeFilters.gender && team.genre !== this.activeFilters.gender) {
                 return false;
             }
             
-            // Filtre par institution
+            // Filtre par institution (propriété de l'équipe)
             if (this.activeFilters.institution && team.institution !== this.activeFilters.institution) {
                 return false;
             }
             
-            // Filtre par poule
+            // Filtre par poule (propriété de l'équipe)
             if (this.activeFilters.pool && team.poule !== this.activeFilters.pool) {
                 return false;
             }
@@ -466,6 +476,64 @@ class TeamsView {
             if (this.activeFilters.equipe) {
                 const equipeIds = this.activeFilters.equipe.split(',').map(id => id.trim());
                 if (!equipeIds.includes(team.id)) {
+                    return false;
+                }
+            }
+            
+            // Filtres combinés sur les matchs (semaine ET/OU gymnase ET/OU plage horaire)
+            // Si au moins un filtre de match est actif, on vérifie que l'équipe a au moins un match
+            // qui satisfait TOUS les critères de matchs actifs simultanément
+            const hasWeekFilter = this.activeFilters.week !== null && this.activeFilters.week !== undefined && this.activeFilters.week !== '';
+            const hasVenueFilter = this.activeFilters.venue !== null && this.activeFilters.venue !== undefined && this.activeFilters.venue !== '';
+            const hasHoraireFilter = this.activeFilters.horaireStart && this.activeFilters.horaireEnd;
+            
+            if (hasWeekFilter || hasVenueFilter || hasHoraireFilter) {
+                const weekNumber = hasWeekFilter ? parseInt(this.activeFilters.week) : null;
+                const venue = hasVenueFilter ? this.activeFilters.venue : null;
+                
+                let rangeStart, rangeEnd;
+                if (hasHoraireFilter) {
+                    const [startHours, startMinutes] = this.activeFilters.horaireStart.split(':').map(Number);
+                    const [endHours, endMinutes] = this.activeFilters.horaireEnd.split(':').map(Number);
+                    rangeStart = startHours * 60 + startMinutes;
+                    rangeEnd = endHours * 60 + endMinutes;
+                }
+                
+                // L'équipe doit avoir AU MOINS UN match qui satisfait TOUS les critères actifs
+                const hasMatchingMatch = team.stats.matches.some(match => {
+                    // Vérifier la semaine (si filtre actif)
+                    if (weekNumber !== null && match.semaine !== weekNumber) {
+                        return false;
+                    }
+                    
+                    // Vérifier le gymnase (si filtre actif)
+                    if (venue !== null && match.gymnase !== venue) {
+                        return false;
+                    }
+                    
+                    // Vérifier la plage horaire (si filtre actif)
+                    if (hasHoraireFilter) {
+                        // Si le match n'a pas d'horaire, il passe le filtre horaire (matchs non planifiés, ententes)
+                        if (match.horaire) {
+                            const [hours, minutes] = match.horaire.split(':').map(Number);
+                            const matchStartMinutes = hours * 60 + minutes;
+                            const matchDuration = 90; // Durée standard d'un match
+                            const matchEndMinutes = matchStartMinutes + matchDuration;
+                            
+                            // Vérifier le chevauchement
+                            const overlaps = matchStartMinutes < rangeEnd && matchEndMinutes > rangeStart;
+                            if (!overlaps) {
+                                return false;
+                            }
+                        }
+                        // Si pas d'horaire, le match passe le filtre
+                    }
+                    
+                    // Le match satisfait tous les critères actifs
+                    return true;
+                });
+                
+                if (!hasMatchingMatch) {
                     return false;
                 }
             }
@@ -490,6 +558,14 @@ class TeamsView {
                     break;
                 case 'matches':
                     comparison = b.stats.totalMatches - a.stats.totalMatches;
+                    break;
+                case 'scheduled':
+                    // Trier par matchs effectifs (planifiés + ententes)
+                    comparison = b.stats.scheduled - a.stats.scheduled;
+                    break;
+                case 'played':
+                    // Trier par matchs joués (avec score)
+                    comparison = b.stats.played - a.stats.played;
                     break;
                 case 'points':
                     comparison = b.stats.points - a.stats.points;
@@ -624,7 +700,7 @@ class TeamsView {
                     <th style="padding: ${compact ? '0.6rem 0.5rem' : '0.8rem 0.75rem'}; text-align: center; font-weight: 800; font-size: ${compact ? '0.7rem' : '0.75rem'}; text-transform: uppercase; letter-spacing: 0.05em;" title="Différence de points marqués">+/-</th>
                     ` : ''}
                     ${this.showPlanning ? `
-                    <th style="padding: ${compact ? '0.6rem 0.5rem' : '0.8rem 0.75rem'}; text-align: center; font-weight: 800; font-size: ${compact ? '0.7rem' : '0.75rem'}; text-transform: uppercase; letter-spacing: 0.05em;" title="Planifiés / Entente / Non planifiés">Planning</th>
+                    <th style="padding: ${compact ? '0.6rem 0.5rem' : '0.8rem 0.75rem'}; text-align: center; font-weight: 800; font-size: ${compact ? '0.7rem' : '0.75rem'}; text-transform: uppercase; letter-spacing: 0.05em;" title="Planifiés (normaux + entente) / Non planifiés">Planning</th>
                     <th style="padding: ${compact ? '0.6rem 0.5rem' : '0.8rem 0.75rem'}; text-align: center; font-weight: 800; font-size: ${compact ? '0.7rem' : '0.75rem'}; text-transform: uppercase; letter-spacing: 0.05em;" title="Taux de complétion">%</th>
                     ` : ''}
                     ${this.showPenalties ? `
@@ -740,9 +816,8 @@ class TeamsView {
                 ${this.showPlanning ? `
                 <td style="padding: ${compact ? '0.6rem 0.5rem' : '0.8rem 0.75rem'}; text-align: center;">
                     <span style="font-size: 0.75rem; font-weight: 700;">
-                        <span style="color: #27AE60;" title="Planifiés (hors entente)">${stats.scheduledNonEntente}</span>
-                        <span style="color: #999;"> / </span>
-                        <span style="color: #3498DB;" title="Entente">${stats.scheduledEntente}</span>
+                        <span style="color: #27AE60;" title="Planifiés normaux">${stats.scheduledNonEntente}</span>
+                        ${stats.scheduledEntente > 0 ? `<span style="color: #999;"> + </span><span style="color: #27AE60;" title="Planifiés entente">🤝${stats.scheduledEntente}</span>` : ''}
                         <span style="color: #999;"> / </span>
                         <span style="color: #EF4135;" title="Non planifiés">${stats.unscheduled}</span>
                     </span>
@@ -857,12 +932,18 @@ class TeamsView {
             const opponent = isTeam1 ? match.equipe2_nom : match.equipe1_nom;
             const isScheduled = match.semaine && match.horaire && match.gymnase;
             const hasScore = match.score && match.score.has_score;
+            const isEntente = match.is_entente;
             
             let statusBg = 'rgba(0, 85, 164, 0.05)';
             let statusColor = '#0055A4';
             let statusText = 'À planifier';
             
-            if (hasScore) {
+            if (isEntente && !isScheduled) {
+                // Match entente sans créneau = à jouer hors calendrier
+                statusBg = 'rgba(156, 39, 176, 0.1)'; // Violet
+                statusColor = '#9C27B0';
+                statusText = 'Entente';
+            } else if (hasScore) {
                 statusBg = 'rgba(39, 174, 96, 0.1)';
                 statusColor = '#27AE60';
                 statusText = 'Terminé';
@@ -887,13 +968,16 @@ class TeamsView {
             html += `
                 <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.5rem; background: ${statusBg}; border-radius: 6px; border: 1px solid ${statusColor}33;">
                     <div style="flex: 1;">
-                        <div style="font-weight: 700; color: #333; margin-bottom: 0.2rem;">vs ${opponent}</div>
+                        <div style="font-weight: 700; color: #333; margin-bottom: 0.2rem;">
+                            vs ${opponent}
+                            ${isEntente ? '<span style="font-size: 0.9rem; margin-left: 0.3rem;" title="Match en entente">🤝</span>' : ''}
+                        </div>
                         ${isScheduled ? `<div style="color: #666; font-size: 0.7rem;">S${match.semaine} • ${match.horaire} • ${match.gymnase}</div>` : ''}
+                        ${isEntente && !isScheduled ? `<div style="color: ${statusColor}; font-size: 0.7rem; font-style: italic;">À jouer hors calendrier officiel</div>` : ''}
                     </div>
                     <div style="display: flex; align-items: center; gap: 0.5rem;">
                         ${scoreDisplay}
                         <span style="font-size: 0.65rem; font-weight: 700; padding: 0.2rem 0.4rem; background: white; border-radius: 4px; color: ${statusColor}; text-transform: uppercase;">${statusText}</span>
-                        ${match.is_entente ? '<span style="font-size: 0.9rem;">🤝</span>' : ''}
                     </div>
                 </div>
             `;

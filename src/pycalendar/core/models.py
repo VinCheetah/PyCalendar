@@ -177,12 +177,21 @@ class Gymnase:
 
 @dataclass
 class Match:
-    """Represents a match between two teams."""
+    """Represents a match between two teams.
+    
+    Attributes:
+        championship_type: Type de championnat du match (Acad, CFU, CFE, Autre)
+            - Acad: Championnat Académique régulier (par défaut)
+            - CFU: Championnat de France Universitaire
+            - CFE: Championnat de France Établissement
+            - Autre: Autres compétitions (amicaux, tournois, etc.)
+    """
     equipe1: Equipe
     equipe2: Equipe
     poule: str
     creneau: Optional[Creneau] = None
     priorite: int = 0
+    championship_type: str = "Acad"  # Type de championnat (Acad, CFU, CFE, Autre)
     metadata: Dict = field(default_factory=dict)  # Métadonnées additionnelles (ex: matchs fixes)
     
     def get_equipes_tuple(self) -> Tuple[str, str]:

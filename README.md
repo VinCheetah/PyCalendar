@@ -119,6 +119,57 @@ Le système génère :
   - `Statistiques` : Métriques et résumé
 - `calendrier_handball.html` : Visualisation interactive
 
+## 🔍 Validation des Données
+
+### Outil de validation automatique
+
+Validez vos données **avant** de lancer la planification pour éviter les erreurs :
+
+```bash
+# Valider les données avec la configuration par défaut
+python validate_data.py
+
+# Valider avec une configuration spécifique
+python validate_data.py configs/config_volley.yaml
+```
+
+**Vérifications automatiques** :
+- ✅ **Noms d'équipes** : format correct sans genre explicite
+- ✅ **Capacités des gymnases** : valeurs positives
+- ✅ **Horaires** : format HH:MM valide
+- ✅ **Cohérence** : tous les champs obligatoires présents
+
+**Exemple de sortie** :
+```
+================================================================================
+VALIDATION DES DONNÉES: configs/config_volley.yaml
+================================================================================
+
+📂 Fichier de données: examples/volleyball/config_volley.xlsx
+
+📊 Chargement des données...
+   ✓ 126 équipes chargées
+   ✓ 9 gymnases chargés
+
+🔍 Validation des structures...
+
+✅ Toutes les validations ont réussi!
+```
+
+**En cas d'erreur**, le script détaille exactement ce qui ne va pas :
+```
+❌ ÉQUIPES (2 erreurs):
+   • Équipe 'LYON 1 (1) [M]': Le nom ne doit pas contenir [M] ou [F]
+   • Équipe 'INSA (1)': Institution 'INSA' non trouvée
+
+❌ GYMNASES (1 erreur):
+   • Gymnase 'Gerland': La capacité doit être positive (valeur: -1)
+```
+
+➡️ **Documentation complète** : `src/pycalendar/core/data_schema.py`
+
+---
+
 ## 🎯 Outils d'Analyse des Pénalités (Nouveau !)
 
 ### 🎲 Simulateur de Pénalités (Pédagogique)
@@ -353,12 +404,77 @@ python actualiser_config.py examples/basic/config_exemple.xlsx
 
 ## 📚 Documentation complète
 
+### Guides d'utilisation
 - **[GUIDE_CONFIGURATION_CENTRALE.md](GUIDE_CONFIGURATION_CENTRALE.md)** - Guide complet de configuration
 - **[GUIDE_INTEGRATION_CONTRAINTES.md](GUIDE_INTEGRATION_CONTRAINTES.md)** - Comment les contraintes fonctionnent
 - **[GUIDE_ACTUALISATION.md](GUIDE_ACTUALISATION.md)** - Utilisation de l'outil d'actualisation
 - **[GUIDE_SIMULATEUR_PENALITES.md](GUIDE_SIMULATEUR_PENALITES.md)** - 🆕 Simulateur pédagogique pour comprendre la formule
 - **[GUIDE_ANALYSEUR_PENALITES.md](GUIDE_ANALYSEUR_PENALITES.md)** - 🆕 Analyseur avancé avec données réelles
-- **[ARCHITECTURE.md](ARCHITECTURE.md)** - Architecture technique du système
+
+### Documentation technique
+- **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** - Architecture technique du système
+- **[MAX_MIN_DESIGN.md](docs/MAX_MIN_DESIGN.md)** - 🆕 Système d'équilibrage max-min progressif
+- **[ANALYSE_EQUILIBRAGE.md](docs/ANALYSE_EQUILIBRAGE.md)** - 🆕 Guide d'analyse de la qualité d'équilibrage
+- **[MIGRATION_MAX_MIN.md](docs/MIGRATION_MAX_MIN.md)** - 🆕 Migration vers le nouveau système
+- **[NOTIFICATIONS_ENTENTES.md](docs/NOTIFICATIONS_ENTENTES.md)** - 🆕 Système de notification des matchs en entente
+- **[AMELIORATION_OVERLAP.md](docs/AMELIORATION_OVERLAP.md)** - 🆕 Optimisation contrainte overlap
+
+### 📧 Notifications des ententes
+
+Générez automatiquement les emails pour les équipes ayant des matchs en entente :
+
+```bash
+# Créer le fichier de contacts (une seule fois)
+python scripts/create_contacts_template.py
+
+# Remplir config/contacts_equipes.xlsx avec les coordonnées
+
+# Générer les notifications
+python scripts/generate_entente_notifications.py --deadline "31/03/2026"
+```
+
+**Voir** : [QUICKSTART_NOTIFICATIONS.md](docs/QUICKSTART_NOTIFICATIONS.md) pour le guide rapide complet.
+
+Les **ententes** sont des matchs planifiés sans créneau fixe que les équipes doivent organiser entre elles. Le script génère un fichier texte avec tous les emails formatés, incluant :
+- 📧 Coordonnées complètes de chaque adversaire (capitaine, email, téléphone)
+- 📅 Date limite configurable
+- 📝 Instructions claires pour l'organisation
+- ✨ Format professionnel prêt à copier-coller
+
+### 🔬 Analyse de qualité
+
+Pour évaluer la qualité de l'équilibrage d'une solution :
+
+```bash
+# Tests de base du système
+python test_equilibrage.py
+
+# Analyser une solution spécifique
+python test_equilibrage.py --analyse solutions/latest_volley.json
+
+# Comparer ancien vs nouveau système
+python test_equilibrage.py --compare
+
+# Tout exécuter
+python test_equilibrage.py --all
+```
+
+Le script analyse **uniquement le championnat académique** (exclut ententes et matchs externes) et fournit :
+- 📊 Statistiques détaillées (min/max/moyenne/écart-type)
+- ⭐ Note de qualité sur 5 étoiles
+- 📈 Distribution visuelle des matchs
+- 🏆 Classement des équipes
+- 🎯 Analyse par poule et institution
+
+**Exemple de résultat** :
+```
+Statistiques d'équilibrage:
+   MINIMUM : 1 match    MAXIMUM : 6 matchs
+   AMPLITUDE : 5        ÉCART-TYPE : 1.15
+   Note globale: 3.0/5.0 → 👍 BON
+```
+
+📖 **Guide complet** : [ANALYSE_EQUILIBRAGE.md](docs/ANALYSE_EQUILIBRAGE.md)
 
 ## 🆕 Fonctionnalités
 

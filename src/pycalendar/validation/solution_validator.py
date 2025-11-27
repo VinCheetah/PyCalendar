@@ -163,7 +163,7 @@ class SolutionValidator:
                     description=f"L'équipe {match.equipe1.nom} n'est pas disponible semaine {semaine} à {horaire}",
                     match_concerne=f"{match.equipe1.nom} vs {match.equipe2.nom}",
                     creneau_concerne=f"S{semaine} - {match.creneau.gymnase} - {horaire}",
-                    penalite=self.config.poids_indisponibilite
+                    penalite=10000  # Hard constraint
                 ))
             
             if not match.equipe2.est_disponible(semaine, horaire):
@@ -173,7 +173,7 @@ class SolutionValidator:
                     description=f"L'équipe {match.equipe2.nom} n'est pas disponible semaine {semaine} à {horaire}",
                     match_concerne=f"{match.equipe1.nom} vs {match.equipe2.nom}",
                     creneau_concerne=f"S{semaine} - {match.creneau.gymnase} - {horaire}",
-                    penalite=self.config.poids_indisponibilite
+                    penalite=10000  # Hard constraint
                 ))
     
     def _verifier_disponibilite_gymnases(self, matchs: List[Match]):
@@ -192,7 +192,7 @@ class SolutionValidator:
                     description=f"Le gymnase {creneau.gymnase} n'existe pas",
                     match_concerne=f"{match.equipe1.nom} vs {match.equipe2.nom}",
                     creneau_concerne=f"S{creneau.semaine} - {creneau.gymnase} - {creneau.horaire}",
-                    penalite=self.config.poids_indisponibilite
+                    penalite=10000  # Hard constraint
                 ))
                 continue
             
@@ -203,25 +203,80 @@ class SolutionValidator:
                     description=f"Le gymnase {creneau.gymnase} n'est pas disponible à {creneau.horaire}",
                     match_concerne=f"{match.equipe1.nom} vs {match.equipe2.nom}",
                     creneau_concerne=f"S{creneau.semaine} - {creneau.gymnase} - {creneau.horaire}",
-                    penalite=self.config.poids_indisponibilite
+                    penalite=10000  # Hard constraint
                 ))
     
     def _verifier_capacite_gymnases(self, matchs: List[Match], etat: Dict):
-        """Vérifie que la capacité des gymnases n'est pas dépassée."""
-        for key_creneau, count in etat['creneaux_usage'].items():
+        """Vérifie que la capacité des gymnases n'est pas dépassée.
+        
+        IMPORTANT: Cette vérification prend en compte la durée réelle des matchs (configurable).
+        Un match à 15h occupe un terrain de 15h à 16h30 (handball) ou 17h (volley), donc il 
+        réduit la capacité disponible des créneaux adjacents.
+        """
+        from collections import defaultdict
+        
+        # Récupérer la durée d'un match depuis la config
+        match_duration_minutes = self.config.duree_match_minutes
+        
+        # Helper function: convertir horaire "14h00" en minutes depuis minuit
+        def horaire_to_minutes(horaire: str) -> int:
+            """Convertit '14h00' en 840 (14*60)"""
+            if not horaire or 'h' not in horaire:
+                return 0
+            parts = horaire.lower().split('h')
+            heures = int(parts[0])
+            minutes = int(parts[1]) if len(parts) > 1 and parts[1] else 0
+            return heures * 60 + minutes
+        
+        # Helper function: vérifier si deux créneaux se chevauchent
+        def creneaux_se_chevauchent(horaire_match: str, horaire_creneau: str) -> bool:
+            """
+            Vérifie si un match à horaire_match chevauche le créneau horaire_creneau.
+            """
+            match_start = horaire_to_minutes(horaire_match)
+            match_end = match_start + match_duration_minutes
+            
+            creneau_start = horaire_to_minutes(horaire_creneau)
+            creneau_end = creneau_start + 120  # Créneaux de 2h (120 minutes)
+            
+            # Chevauchement si: début_match < fin_créneau ET fin_match > début_créneau
+            return match_start < creneau_end and match_end > creneau_start
+        
+        # Calculer l'occupation réelle par créneau en tenant compte des chevauchements
+        # Format: {(semaine, gymnase, horaire): nb_terrains_occupes}
+        occupation_reelle = defaultdict(int)
+        
+        for key_match, count_match in etat['creneaux_usage'].items():
+            semaine_match, gymnase_match, horaire_match = key_match
+            
+            # Pour chaque match, vérifier tous les créneaux qu'il chevauche
+            for key_creneau in etat['creneaux_usage'].keys():
+                semaine_creneau, gymnase_creneau, horaire_creneau = key_creneau
+                
+                # Même gymnase et même semaine ?
+                if gymnase_match == gymnase_creneau and semaine_match == semaine_creneau:
+                    # Les horaires se chevauchent ?
+                    if creneaux_se_chevauchent(horaire_match, horaire_creneau):
+                        occupation_reelle[key_creneau] += count_match
+        
+        # Vérifier que la capacité n'est pas dépassée
+        for key_creneau, nb_matchs_chevauchants in occupation_reelle.items():
             semaine, gymnase_nom, horaire = key_creneau
             gymnase = self.gymnases.get(gymnase_nom)
             
             if not gymnase:
                 continue
             
-            if count > gymnase.capacite:
+            if nb_matchs_chevauchants > gymnase.capacite:
+                # Compter le nombre de matchs à cet horaire exact (pour le message)
+                nb_matchs_exact = etat['creneaux_usage'].get(key_creneau, 0)
+                
                 self.violations.append(ViolationDetail(
                     type_contrainte="Capacité gymnase",
                     severite="DURE",
-                    description=f"Capacité dépassée: {count}/{gymnase.capacite} matchs au gymnase {gymnase_nom}",
+                    description=f"Capacité dépassée: {nb_matchs_chevauchants}/{gymnase.capacite} matchs chevauchants au gymnase {gymnase_nom} (dont {nb_matchs_exact} à cet horaire exact)",
                     creneau_concerne=f"S{semaine} - {gymnase_nom} - {horaire}",
-                    penalite=self.config.poids_capacite_gymnase
+                    penalite=500  # Hard constraint
                 ))
     
     def _verifier_unicite_equipes_par_creneau(self, matchs: List[Match], etat: Dict):

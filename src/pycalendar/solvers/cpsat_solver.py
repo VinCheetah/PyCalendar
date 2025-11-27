@@ -76,20 +76,58 @@ class CPSATSolver(BaseSolver):
     
     def _get_penalite_entente(self, match: Match) -> float:
         """
-        Récupère la pénalité de non-planification pour une entente.
+        Récupère le bonus réduit pour une entente (dans le cadre du système progressif).
+        
+        Dans le système progressif, les ententes reçoivent un bonus réduit par rapport
+        aux matchs normaux, ce qui les rend moins prioritaires.
         
         Returns:
-            Pénalité spécifique ou pénalité par défaut du YAML
+            Bonus spécifique (si défini dans Excel) ou bonus réduit calculé
         """
         inst1 = match.equipe1.institution
         inst2 = match.equipe2.institution
         cle = tuple(sorted([inst1, inst2]))
         
+        # Vérifier si une pénalité spécifique est définie dans Excel
         penalite = self.ententes.get(cle)
-        if penalite is None:
-            # Pas de pénalité spécifiée dans Excel, utiliser défaut YAML
-            return self.config.entente_penalite_non_planif
-        return penalite
+        if penalite is not None:
+            # Utiliser la valeur spécifique de l'Excel
+            return penalite
+        
+        # Sinon, utiliser la pénalité par défaut du YAML
+        # (sera utilisé si le système progressif est désactivé)
+        return self.config.entente_penalite_non_planif
+    
+    def _calcul_bonus_progressif(self, n: int, est_entente: bool = False) -> int:
+        """
+        Calcule le bonus pour le n-ième match d'une équipe (système max-min fairness).
+        
+        Le bonus décroit exponentiellement selon la formule:
+        bonus(n) = bonus_base × (facteur_decroissance ^ n)
+        
+        Pour les ententes, le bonus est réduit par le facteur_reduction.
+        
+        Args:
+            n: Index du match (0 = premier match, 1 = deuxième match, etc.)
+            est_entente: Si True, applique le facteur de réduction pour ententes
+            
+        Returns:
+            Bonus entier pour ce match
+            
+        Exemple avec bonus_base=100000, facteur=0.5:
+            n=0 (1er match): 100000
+            n=1 (2ème match): 50000
+            n=2 (3ème match): 25000
+            n=3 (4ème match): 12500
+            etc.
+        """
+        # Calculer le bonus de base avec décroissance exponentielle
+        bonus = self.config.equilibrage_bonus_base * (self.config.equilibrage_facteur_decroissance ** n)
+        
+        # Appliquer le bonus minimum (éviter que le bonus ne devienne trop faible)
+        bonus = max(bonus, self.config.equilibrage_bonus_minimum)
+        
+        return int(bonus)
     
     def _get_contrainte_temporelle(self, match: Match):
         """
@@ -175,6 +213,15 @@ class CPSATSolver(BaseSolver):
         Vérifie si deux matchs partagent une entité (institution ou équipe) 
         dans les groupes de non-simultanéité configurés.
         
+        Cette méthode est utilisée pour la contrainte d'overlap : éviter que plusieurs matchs
+        liés par un groupe (ex: même institution, même ville) jouent simultanément.
+        
+        Logique:
+        - Si groupes_non_simultaneite est configuré: vérifie si les matchs partagent une entité
+          dans un des groupes (institutions OU noms d'équipes)
+        - Si groupes_non_simultaneite est vide (mode legacy): applique à TOUTES les institutions
+          qui se chevauchent (déprécié car trop large et coûteux)
+        
         Args:
             match1: Premier match
             match2: Deuxième match
@@ -183,13 +230,14 @@ class CPSATSolver(BaseSolver):
             True si les matchs doivent être soumis à la contrainte de non-simultanéité
         """
         if not self.groupes_non_simultaneite:
-            # Mode legacy : appliquer à toutes les institutions
+            # Mode legacy (déprécié): appliquer à toutes les institutions communes
+            # NOTE: Ce mode est inefficace et sera supprimé. Configurez des groupes explicites.
             inst1 = {match1.equipe1.institution, match1.equipe2.institution}
             inst2 = {match2.equipe1.institution, match2.equipe2.institution}
             return bool(inst1 & inst2)
         
-        # Mode configuré : vérifier si les matchs partagent une entité dans un groupe
-        # Créer les ensembles d'entités pour chaque match (institutions + noms équipes)
+        # Mode configuré (recommandé): vérifier si les matchs partagent une entité dans un groupe
+        # Les entités peuvent être des institutions OU des noms d'équipes
         entites1 = {
             match1.equipe1.institution,
             match1.equipe2.institution,
@@ -204,14 +252,14 @@ class CPSATSolver(BaseSolver):
             match2.equipe2.nom
         }
         
-        # Vérifier si les matchs partagent une entité dans un des groupes
-        for groupe_entites in self.groupes_non_simultaneite.values():
+        # Vérifier si les matchs partagent une entité dans un des groupes configurés
+        for groupe_nom, groupe_entites in self.groupes_non_simultaneite.items():
             # Entités du match1 qui sont dans ce groupe
             entites1_dans_groupe = entites1 & groupe_entites
             # Entités du match2 qui sont dans ce groupe
             entites2_dans_groupe = entites2 & groupe_entites
             
-            # Si les deux matchs ont au moins une entité dans ce groupe
+            # Si les deux matchs ont au moins une entité dans ce groupe → conflit
             if entites1_dans_groupe and entites2_dans_groupe:
                 return True
         
@@ -381,6 +429,21 @@ class CPSATSolver(BaseSolver):
         
         assignment_vars = {}
         match_assigned = []
+        entente_activated = {}  # Variables pour ententes activées (sans créneau)
+        
+        # Séparer matchs normaux et ententes
+        matchs_normaux_indices = []
+        matchs_ententes_indices = []
+        
+        for i, match in enumerate(matchs):
+            if self._est_entente(match):
+                matchs_ententes_indices.append(i)
+            else:
+                matchs_normaux_indices.append(i)
+        
+        if self.config.afficher_progression:
+            print(f"   → {len(matchs_normaux_indices)} matchs normaux à planifier")
+            print(f"   → {len(matchs_ententes_indices)} ententes disponibles (fallback)")
         
         # Filtrer les créneaux valides selon semaine_min
         creneaux_valides = [creneau for creneau in creneaux if creneau.semaine >= self.config.semaine_min]
@@ -389,19 +452,55 @@ class CPSATSolver(BaseSolver):
         if self.config.afficher_progression:
             print(f"   → {len(creneaux_valides)} créneaux valides sur {len(creneaux)} total (semaine_min={self.config.semaine_min})")
         
-        # Créer les variables
-        for i, match in enumerate(matchs):
-            # Variable pour savoir si le match est assigné
+        # Créer les variables pour TOUS les matchs (normaux + ententes)
+        for i in range(len(matchs)):
+            # Variable pour savoir si le match est assigné (planifié OU entente activée)
             assigned_var = model.NewBoolVar(f'match_{i}_assigned')
             match_assigned.append(assigned_var)
-            
+        
+        # Variables pour MATCHS NORMAUX : assignation à créneaux
+        for i in matchs_normaux_indices:
             for j, creneau in enumerate(creneaux_valides):
                 var = model.NewBoolVar(f'match_{i}_creneau_{j}')
                 assignment_vars[(i, j)] = var
-        
-        # CONTRAINTE 1: Chaque match est assigné à exactement 1 créneau (ou aucun)
-        for i in range(len(matchs)):
+            
+            # CONTRAINTE: match normal assigné = somme des créneaux
             model.Add(sum(assignment_vars[(i, j)] for j in range(len(creneaux_valides))) == match_assigned[i])
+        
+        # Variables pour ENTENTES : activation sans créneau
+        for i in matchs_ententes_indices:
+            var = model.NewBoolVar(f'entente_{i}_activated')
+            entente_activated[i] = var
+            
+            # CONTRAINTE: entente "assignée" = entente activée (pas de créneau)
+            model.Add(entente_activated[i] == match_assigned[i])
+        
+        # CONTRAINTE 1bis: Interdiction stricte de jouer avant l'horaire préféré (optionnel)
+        if self.config.horaire_avant_interdit:
+            if self.config.afficher_progression:
+                print(f"   → Contrainte DURE: Interdiction matchs avant horaire préféré (tolérance: {self.config.horaire_avant_tolerance}min)")
+            
+            # Appliquer uniquement aux matchs NORMAUX (les ententes n'ont pas de créneau)
+            for i in matchs_normaux_indices:
+                match = matchs[i]
+                for j, creneau in enumerate(creneaux_valides):
+                    # Vérifier si ce créneau viole la contrainte pour ce match
+                    horaire_creneau_min = self._parse_horaire(creneau.horaire)
+                    violation = False
+                    
+                    for equipe in [match.equipe1, match.equipe2]:
+                        if equipe.horaires_preferes:
+                            horaire_prefere_min = self._parse_horaire(equipe.horaires_preferes[0])
+                            diff_minutes = horaire_creneau_min - horaire_prefere_min
+                            
+                            # Si avant (négatif) et au-delà de la tolérance
+                            if diff_minutes < -self.config.horaire_avant_tolerance:
+                                violation = True
+                                break
+                    
+                    # Si violation, interdire cette assignation
+                    if violation:
+                        model.Add(assignment_vars[(i, j)] == 0)
         
         # CONTRAINTE 2: Capacité des gymnases (avec support de capacité réduite et matchs fixés)
         capacites_debug = []  # Pour debug
@@ -429,11 +528,13 @@ class CPSATSolver(BaseSolver):
                 
                 # S'assurer que la capacité restante est positive
                 if capacite_restante > 0:
-                    model.Add(sum(assignment_vars[(i, j)] for i in range(len(matchs))) <= capacite_restante)
+                    # Ne compter que les matchs NORMAUX (les ententes n'occupent pas de créneau)
+                    model.Add(sum(assignment_vars[(i, j)] for i in matchs_normaux_indices if (i, j) in assignment_vars) <= capacite_restante)
                 else:
-                    # Pas de capacité restante, interdire tous les matchs sur ce créneau
-                    for i in range(len(matchs)):
-                        model.Add(assignment_vars[(i, j)] == 0)
+                    # Pas de capacité restante, interdire tous les matchs normaux sur ce créneau
+                    for i in matchs_normaux_indices:
+                        if (i, j) in assignment_vars:
+                            model.Add(assignment_vars[(i, j)] == 0)
         
         # Afficher le debug des capacités
         if capacites_debug and self.config.afficher_progression:
@@ -443,7 +544,9 @@ class CPSATSolver(BaseSolver):
         
         # CONTRAINTE 3: Disponibilité des équipes (DURE)
         # Vérifier la disponibilité avec le gymnase pour tenir compte des disponibilités anticipées
-        for i, match in enumerate(matchs):
+        # Appliquer uniquement aux matchs NORMAUX (les ententes n'ont pas de créneau)
+        for i in matchs_normaux_indices:
+            match = matchs[i]
             for j, creneau in enumerate(creneaux_valides):
                 if not match.equipe1.est_disponible(creneau.semaine, creneau.horaire, creneau.gymnase):
                     model.Add(assignment_vars[(i, j)] == 0)
@@ -452,7 +555,9 @@ class CPSATSolver(BaseSolver):
         
         # CONTRAINTE 3bis: Contraintes temporelles (mode dur si activé)
         if self.config.contrainte_temporelle_actif and self.config.contrainte_temporelle_dure:
-            for i, match in enumerate(matchs):
+            # Appliquer uniquement aux matchs NORMAUX (les ententes n'ont pas de créneau)
+            for i in matchs_normaux_indices:
+                match = matchs[i]
                 contrainte = self._get_contrainte_temporelle(match)
                 if contrainte:
                     for j, creneau in enumerate(creneaux_valides):
@@ -478,12 +583,14 @@ class CPSATSolver(BaseSolver):
         
         for equipe_id in equipes_uniques:
             for (semaine, horaire), indices_creneaux in creneaux_par_semaine_horaire.items():
-                # Trouver tous les matchs où cette équipe joue à ce (semaine, horaire)
+                # Trouver tous les matchs NORMAUX où cette équipe joue à ce (semaine, horaire)
                 vars_equipe = []
-                for i, match in enumerate(matchs):
+                for i in matchs_normaux_indices:
+                    match = matchs[i]
                     if match.equipe1.id_unique == equipe_id or match.equipe2.id_unique == equipe_id:
                         for j in indices_creneaux:
-                            vars_equipe.append(assignment_vars[(i, j)])
+                            if (i, j) in assignment_vars:
+                                vars_equipe.append(assignment_vars[(i, j)])
                 
                 # L'équipe ne peut jouer qu'une fois à ce (semaine, horaire)
                 if len(vars_equipe) > 1:
@@ -500,12 +607,15 @@ class CPSATSolver(BaseSolver):
                 # Trouver tous les créneaux valides de cette semaine
                 indices_semaine_valides = [j for j, c in enumerate(creneaux_valides) if c.semaine == semaine]
                 
-                # Trouver tous les matchs où cette équipe joue
+                # Trouver tous les matchs NORMAUX où cette équipe joue
+                # Note: les ententes activées comptent aussi dans match_assigned mais pas ici
                 vars_equipe_semaine = []
-                for i, match in enumerate(matchs):
+                for i in matchs_normaux_indices:
+                    match = matchs[i]
                     if match.equipe1.id_unique == equipe_id or match.equipe2.id_unique == equipe_id:
                         for j in indices_semaine_valides:
-                            vars_equipe_semaine.append(assignment_vars[(i, j)])
+                            if (i, j) in assignment_vars:
+                                vars_equipe_semaine.append(assignment_vars[(i, j)])
                 
                 # Limiter le nombre de matchs (en tenant compte des matchs déjà fixés)
                 if vars_equipe_semaine:
@@ -513,7 +623,9 @@ class CPSATSolver(BaseSolver):
                     model.Add(sum(vars_equipe_semaine) <= limite)
         
         # CONTRAINTE 6: Obligations de présence
-        for i, match in enumerate(matchs):
+        # Appliquer uniquement aux matchs NORMAUX (les ententes n'ont pas de créneau)
+        for i in matchs_normaux_indices:
+            match = matchs[i]
             for j, creneau in enumerate(creneaux_valides):
                 institution_requise = obligations_presence.get(creneau.gymnase)
                 
@@ -527,51 +639,183 @@ class CPSATSolver(BaseSolver):
                         model.Add(assignment_vars[(i, j)] == 0)
         
         # CONTRAINTE 7: Disponibilité des gymnases
-        for i, match in enumerate(matchs):
+        # Appliquer uniquement aux matchs NORMAUX (les ententes n'ont pas de gymnase)
+        for i in matchs_normaux_indices:
             for j, creneau in enumerate(creneaux_valides):
                 gymnase = gymnases.get(creneau.gymnase)
                 if gymnase and not gymnase.est_disponible(creneau.semaine, creneau.horaire):
                     model.Add(assignment_vars[(i, j)] == 0)
         
-        # Fonction objectif : MAXIMISER les matchs assignés ET minimiser les pénalités
+        # ============================================================================
+        # FONCTION OBJECTIF : SYSTÈME MAX-MIN AVEC BONUS PROGRESSIF
+        # ============================================================================
         objective_terms = []
         
-        # Grand bonus pour chaque match assigné (poids très élevé)
-        # SAUF pour les ententes qui ont un bonus réduit (= pénalité plus faible si non planifiés)
-        for i, match in enumerate(matchs):
-            if self._est_entente(match):
-                # Match entente : bonus réduit = pénalité faible si non planifié
-                bonus = int(self._get_penalite_entente(match))
-            else:
-                # Match normal : bonus configurable = pénalité si non planifié
-                bonus = int(self.config.penalite_match_non_planif)
-            objective_terms.append(bonus * match_assigned[i])
+        if self.config.equilibrage_actif:
+            # NOUVEAU SYSTÈME: Bonus progressif pour garantir max-min fairness
+            # Principe: Chaque équipe reçoit un bonus décroissant pour chaque match planifié
+            # Bonus 1er match > Bonus 2ème match > Bonus 3ème match, etc.
+            # Cela garantit que le solver priorise donner 1 match à chaque équipe
+            # avant de donner 2 matchs à qui que ce soit
+            
+            if self.config.afficher_progression:
+                print("   → Utilisation du système de bonus progressif (max-min fairness)")
+            
+            # Compter les matchs DÉJÀ FIXÉS par équipe (CRUCIAL pour l'équilibrage)
+            matchs_fixes_normaux_par_equipe = {}  # equipe_id -> nombre de matchs normaux déjà fixés
+            matchs_fixes_ententes_par_equipe = {}  # equipe_id -> nombre de matchs ententes déjà fixés
+            
+            if matchs_fixes:
+                for match_fixe in matchs_fixes:
+                    eq1_id = match_fixe.equipe1.id_unique
+                    eq2_id = match_fixe.equipe2.id_unique
+                    est_entente = self._est_entente(match_fixe)
+                    
+                    # Choisir le bon dictionnaire selon le type
+                    dict_cible = matchs_fixes_ententes_par_equipe if est_entente else matchs_fixes_normaux_par_equipe
+                    
+                    dict_cible[eq1_id] = dict_cible.get(eq1_id, 0) + 1
+                    dict_cible[eq2_id] = dict_cible.get(eq2_id, 0) + 1
+            
+            # Grouper TOUS les matchs par équipe (normaux + ententes ensemble)
+            matchs_par_equipe = {}  # equipe_id -> liste des indices de TOUS les matchs
+            
+            for i, match in enumerate(matchs):
+                eq1_id = match.equipe1.id_unique
+                eq2_id = match.equipe2.id_unique
+                
+                if eq1_id not in matchs_par_equipe:
+                    matchs_par_equipe[eq1_id] = []
+                if eq2_id not in matchs_par_equipe:
+                    matchs_par_equipe[eq2_id] = []
+                
+                matchs_par_equipe[eq1_id].append(i)
+                matchs_par_equipe[eq2_id].append(i)
+            
+            # NOUVEAU SYSTÈME: Bonus progressif UNIFIÉ pour chaque équipe
+            # Le bonus total de l'équipe est réduit multiplicativement par (facteur ^ nb_ententes)
+            for equipe_id, indices_matchs in matchs_par_equipe.items():
+                nb_matchs_a_planifier = len(indices_matchs)
+                
+                # Compter matchs fixés (normaux + ententes)
+                nb_fixes_normaux = matchs_fixes_normaux_par_equipe.get(equipe_id, 0)
+                nb_fixes_ententes = matchs_fixes_ententes_par_equipe.get(equipe_id, 0)
+                nb_matchs_total_fixes = nb_fixes_normaux + nb_fixes_ententes
+                nb_matchs_total_possibles = nb_matchs_a_planifier + nb_matchs_total_fixes
+                
+                # Variable: nombre TOTAL de matchs planifiés (normaux + ententes activées)
+                nb_planifies = model.NewIntVar(0, nb_matchs_a_planifier, f'nb_matchs_planifies_{equipe_id}')
+                model.Add(nb_planifies == sum(match_assigned[i] for i in indices_matchs))
+                
+                # Variable: nombre d'ENTENTES activées pour cette équipe
+                indices_ententes_equipe = [i for i in indices_matchs if i in matchs_ententes_indices]
+                nb_ententes_activees = model.NewIntVar(0, len(indices_ententes_equipe), f'nb_ententes_{equipe_id}')
+                if indices_ententes_equipe:
+                    model.Add(nb_ententes_activees == sum(entente_activated[i] for i in indices_ententes_equipe))
+                else:
+                    model.Add(nb_ententes_activees == 0)
+                
+                # Total ententes (fixes + activées)
+                nb_ententes_total = nb_fixes_ententes + nb_ententes_activees
+                
+                # Créer variables booléennes pour chaque seuil de bonus
+                for seuil in range(1, nb_matchs_total_possibles + 1):
+                    has_n_matchs = model.NewBoolVar(f'{equipe_id}_has_{seuil}_matchs')
+                    
+                    # Nombre de matchs à planifier pour atteindre ce seuil
+                    nb_total_requis = seuil - nb_matchs_total_fixes
+                    
+                    if nb_total_requis <= 0:
+                        # Seuil déjà atteint par matchs fixés
+                        model.Add(has_n_matchs == 1)
+                    elif nb_total_requis > nb_matchs_a_planifier:
+                        # Impossible d'atteindre ce seuil
+                        model.Add(has_n_matchs == 0)
+                    else:
+                        # Seuil atteignable
+                        model.Add(nb_planifies >= nb_total_requis).OnlyEnforceIf(has_n_matchs)
+                        model.Add(nb_planifies < nb_total_requis).OnlyEnforceIf(has_n_matchs.Not())
+                    
+                    # Bonus de base pour ce seuil (sans réduction)
+                    bonus_base_seuil = self._calcul_bonus_progressif(seuil - 1, est_entente=False)
+                    
+                    # Appliquer réduction multiplicative basée sur nombre d'ententes
+                    # Pour chaque nombre d'ententes possible (0, 1, 2, ...), créer une variable
+                    # et appliquer le facteur de réduction correspondant
+                    max_ententes_possibles = len(indices_ententes_equipe) + nb_fixes_ententes
+                    
+                    if max_ententes_possibles > 0:
+                        # Créer des variables pour détecter le nombre exact d'ententes
+                        for nb_ent in range(max_ententes_possibles + 1):
+                            has_exact_n_ententes = model.NewBoolVar(f'{equipe_id}_has_exactly_{nb_ent}_ententes_at_seuil_{seuil}')
+                            
+                            # Contrainte: has_exact_n_ententes = 1 si nb_ententes_total == nb_ent
+                            model.Add(nb_ententes_total == nb_ent).OnlyEnforceIf(has_exact_n_ententes)
+                            model.Add(nb_ententes_total != nb_ent).OnlyEnforceIf(has_exact_n_ententes.Not())
+                            
+                            # Bonus réduit selon formule: bonus_base × (facteur ^ nb_ententes)
+                            facteur_reduction = self.config.entente_facteur_reduction_bonus ** nb_ent
+                            bonus_reduit = int(bonus_base_seuil * facteur_reduction)
+                            
+                            # Contribuer au bonus si ce seuil est atteint ET on a exactement nb_ent ententes
+                            contrib_var = model.NewBoolVar(f'{equipe_id}_contrib_{seuil}_{nb_ent}ent')
+                            model.Add(has_n_matchs + has_exact_n_ententes >= 2).OnlyEnforceIf(contrib_var)
+                            model.Add(has_n_matchs + has_exact_n_ententes <= 1).OnlyEnforceIf(contrib_var.Not())
+                            
+                            objective_terms.append(bonus_reduit * contrib_var)
+                    else:
+                        # Pas d'ententes possibles, bonus complet
+                        objective_terms.append(bonus_base_seuil * has_n_matchs)
+        
+        else:
+            # ANCIEN SYSTÈME (désactivé par défaut): Bonus fixe par match
+            # Conservé uniquement pour compatibilité si quelqu'un désactive le système progressif
+            if self.config.afficher_progression:
+                print("   ⚠️  Utilisation du système de bonus fixe (ancien système)")
+            
+            for i, match in enumerate(matchs):
+                if self._est_entente(match):
+                    # Match entente : bonus réduit
+                    bonus = int(self._get_penalite_entente(match))
+                else:
+                    # Match normal : bonus fixe
+                    bonus = int(self.config.equilibrage_bonus_base)
+                objective_terms.append(bonus * match_assigned[i])
         
         # Pénalités pour préférences horaires (sophistiquée avec distance)
-        for i, match in enumerate(matchs):
+        # Appliqué uniquement aux matchs normaux (ententes non assignées à créneaux)
+        for i in matchs_normaux_indices:
+            match = matchs[i]
             for j, creneau in enumerate(creneaux_valides):
                 penalty = self._calculate_time_preference_penalty(match, creneau)
                 
-                if penalty > 0:
+                if penalty > 0 and (i, j) in assignment_vars:
                     objective_terms.append(-int(penalty) * assignment_vars[(i, j)])
         
         # Pénalité pour contraintes temporelles violées (mode souple uniquement)
+        # Appliqué uniquement aux matchs normaux
         if self.config.contrainte_temporelle_actif and not self.config.contrainte_temporelle_dure:
-            for i, match in enumerate(matchs):
+            for i in matchs_normaux_indices:
+                match = matchs[i]
                 contrainte = self._get_contrainte_temporelle(match)
                 if contrainte:
                     for j, creneau in enumerate(creneaux_valides):
                         # Si la contrainte n'est pas respectée, ajouter une pénalité
-                        if not contrainte.est_respectee(creneau.semaine):
+                        if not contrainte.est_respectee(creneau.semaine) and (i, j) in assignment_vars:
                             penalty = int(self.config.contrainte_temporelle_penalite)
                             objective_terms.append(-penalty * assignment_vars[(i, j)])
         
         # Pénalités pour préférences de gymnases (système de bonus)
+        # Appliqué uniquement aux matchs normaux
         if self.config.bonus_preferences_gymnases:
             base_penalty = 2 * max(self.config.bonus_preferences_gymnases)
             
-            for i, match in enumerate(matchs):
+            for i in matchs_normaux_indices:
+                match = matchs[i]
                 for j, creneau in enumerate(creneaux_valides):
+                    if (i, j) not in assignment_vars:
+                        continue
+                    
                     penalty = base_penalty
                     
                     # Soustraire bonus si équipe 1 a ce gymnase dans ses préférences
@@ -593,15 +837,20 @@ class CPSATSolver(BaseSolver):
         
         # Pénalités pour gymnases par niveau (classification haut/bas niveau)
         # Applique une pénalité quand un match est assigné à un gymnase inapproprié
+        # Appliqué uniquement aux matchs normaux
         # Valeurs positives = pénalité (augmente le coût, à éviter)
         if self.niveaux_gymnases and (self.config.penalite_niveau_gymnases_haut or self.config.penalite_niveau_gymnases_bas):
-            for i, match in enumerate(matchs):
+            for i in matchs_normaux_indices:
+                match = matchs[i]
                 # Déterminer le niveau du match (basé sur la poule: A1=0, A2=1, A3=2, A4=3)
                 niveau_match = self._get_niveau_match(match)
                 if niveau_match is None:
                     continue
                 
                 for j, creneau in enumerate(creneaux_valides):
+                    if (i, j) not in assignment_vars:
+                        continue
+                    
                     # Récupérer le niveau du gymnase
                     niveau_gymnase = self.niveaux_gymnases.get(creneau.gymnase)
                     if not niveau_gymnase:
@@ -609,9 +858,9 @@ class CPSATSolver(BaseSolver):
                     
                     # Calculer la pénalité selon le niveau du gymnase et du match
                     penalite = 0
-                    if niveau_gymnase == 'Haut niveau' and niveau_match < len(self.config.penalite_niveau_gymnases_haut):
+                    if niveau_gymnase == 'haut' and niveau_match < len(self.config.penalite_niveau_gymnases_haut):
                         penalite = self.config.penalite_niveau_gymnases_haut[niveau_match]
-                    elif niveau_gymnase == 'Bas niveau' and niveau_match < len(self.config.penalite_niveau_gymnases_bas):
+                    elif niveau_gymnase == 'bas' and niveau_match < len(self.config.penalite_niveau_gymnases_bas):
                         penalite = self.config.penalite_niveau_gymnases_bas[niveau_match]
                     
                     # Ajouter la pénalité à l'objectif avec signe NÉGATIF (on maximise l'objectif global)
@@ -624,6 +873,7 @@ class CPSATSolver(BaseSolver):
         
         # CONTRAINTE SOUPLE: Espacement entre matchs d'une même équipe
         # Pour chaque équipe, pénaliser les matchs trop rapprochés
+        # Appliqué uniquement aux matchs normaux
         if self.config.penalites_espacement_repos:
             # Grouper les créneaux par semaine pour chaque équipe
             for equipe_id in equipes_uniques:
@@ -642,9 +892,9 @@ class CPSATSolver(BaseSolver):
                                 creneaux_s1 = [j for j, c in enumerate(creneaux_valides) if c.semaine == semaine1]
                                 creneaux_s2 = [j for j, c in enumerate(creneaux_valides) if c.semaine == semaine2]
                                 
-                                # Trouver tous les matchs où cette équipe joue
-                                matchs_equipe = [i for i, m in enumerate(matchs) 
-                                               if m.equipe1.id_unique == equipe_id or m.equipe2.id_unique == equipe_id]
+                                # Trouver tous les matchs NORMAUX où cette équipe joue
+                                matchs_equipe = [i for i in matchs_normaux_indices 
+                                               if matchs[i].equipe1.id_unique == equipe_id or matchs[i].equipe2.id_unique == equipe_id]
                                 
                                 # Créer une variable pour détecter si l'équipe joue aux deux semaines
                                 plays_s1 = model.NewBoolVar(f'plays_{equipe_id}_s{semaine1}')
@@ -652,14 +902,14 @@ class CPSATSolver(BaseSolver):
                                 
                                 # plays_s1 = 1 si l'équipe joue en semaine1
                                 vars_s1 = [assignment_vars[(i, j)] 
-                                          for i in matchs_equipe for j in creneaux_s1]
+                                          for i in matchs_equipe for j in creneaux_s1 if (i, j) in assignment_vars]
                                 if vars_s1:
                                     model.Add(sum(vars_s1) >= 1).OnlyEnforceIf(plays_s1)
                                     model.Add(sum(vars_s1) == 0).OnlyEnforceIf(plays_s1.Not())
                                 
                                 # plays_s2 = 1 si l'équipe joue en semaine2
                                 vars_s2 = [assignment_vars[(i, j)] 
-                                          for i in matchs_equipe for j in creneaux_s2]
+                                          for i in matchs_equipe for j in creneaux_s2 if (i, j) in assignment_vars]
                                 if vars_s2:
                                     model.Add(sum(vars_s2) >= 1).OnlyEnforceIf(plays_s2)
                                     model.Add(sum(vars_s2) == 0).OnlyEnforceIf(plays_s2.Not())
@@ -673,9 +923,13 @@ class CPSATSolver(BaseSolver):
                                 objective_terms.append(-int(penalty_value) * plays_both)
         
         # CONTRAINTE SOUPLE 1: Compaction temporelle (prioriser les matchs en début de calendrier)
+        # Appliqué uniquement aux matchs normaux
         if self.config.compaction_temporelle_actif:
-            for i in range(len(matchs)):
+            for i in matchs_normaux_indices:
                 for j, creneau in enumerate(creneaux_valides):
+                    if (i, j) not in assignment_vars:
+                        continue
+                    
                     semaine = creneau.semaine
                     
                     # Récupérer la pénalité pour cette semaine (indice 0 = semaine 1)
@@ -690,46 +944,85 @@ class CPSATSolver(BaseSolver):
         
         # CONTRAINTE SOUPLE 2: Éviter les overlaps d'institution (matchs simultanés de même institution/équipe)
         # Appliqué seulement aux groupes configurés dans groupes_non_simultaneite
+        # Appliqué uniquement aux matchs normaux
         if self.config.overlap_institution_actif:
-            # Grouper les créneaux valides identiques (même semaine, même horaire, même gymnase)
-            creneaux_identiques = {}
-            for j, creneau in enumerate(creneaux_valides):
-                key = (creneau.semaine, creneau.horaire, creneau.gymnase)
-                if key not in creneaux_identiques:
-                    creneaux_identiques[key] = []
-                creneaux_identiques[key].append(j)
-            
-            # Pour chaque créneau unique, pénaliser si plusieurs matchs partagent un groupe de non-simultanéité
-            for creneaux_list in creneaux_identiques.values():
-                if len(creneaux_list) > 1:
-                    # Pour chaque paire de créneaux simultanés
-                    for j1 in creneaux_list:
-                        for j2 in creneaux_list:
-                            if j1 < j2:  # Éviter de compter deux fois
-                                # Pour chaque paire de matchs
-                                for i1, match1 in enumerate(matchs):
-                                    for i2, match2 in enumerate(matchs):
-                                        if i1 < i2:  # Éviter de compter deux fois
-                                            # Vérifier si les matchs partagent un groupe de non-simultanéité
-                                            if self._matchs_partagent_groupe_non_simultaneite(match1, match2):
-                                                # Créer une variable pour détecter l'overlap
-                                                overlap_var = model.NewBoolVar(f'overlap_{i1}_{i2}_{j1}_{j2}')
-                                                
-                                                # overlap_var = 1 si les deux matchs sont assignés simultanément
-                                                model.Add(assignment_vars[(i1, j1)] + assignment_vars[(i2, j2)] >= 2).OnlyEnforceIf(overlap_var)
-                                                model.Add(assignment_vars[(i1, j1)] + assignment_vars[(i2, j2)] <= 1).OnlyEnforceIf(overlap_var.Not())
-                                                
-                                                # Pénaliser l'overlap
-                                                penalty = int(self.config.overlap_institution_poids)
-                                                objective_terms.append(-penalty * overlap_var)
+            # Vérifier si la contrainte est applicable
+            if not self.groupes_non_simultaneite:
+                if self.config.afficher_progression:
+                    print("   ⚠️  Contrainte overlap activée mais aucun groupe configuré - désactivation")
+            else:
+                # PRÉ-CALCUL: Identifier toutes les paires de matchs conflictuelles (une seule fois)
+                # Ceci évite de recalculer pour chaque combinaison de créneaux
+                paires_conflictuelles = set()
+                for i1 in matchs_normaux_indices:
+                    for i2 in matchs_normaux_indices:
+                        if i1 < i2:  # Éviter duplicatas
+                            match1 = matchs[i1]
+                            match2 = matchs[i2]
+                            if self._matchs_partagent_groupe_non_simultaneite(match1, match2):
+                                paires_conflictuelles.add((i1, i2))
+                
+                if self.config.afficher_progression and paires_conflictuelles:
+                    print(f"   Détecté {len(paires_conflictuelles)} paire(s) de matchs avec contrainte overlap")
+                
+                if paires_conflictuelles:
+                    # Grouper les créneaux par (semaine, horaire) - SANS le gymnase
+                    # Car des matchs peuvent être simultanés dans des gymnases différents
+                    creneaux_par_moment = {}
+                    for j, creneau in enumerate(creneaux_valides):
+                        key = (creneau.semaine, creneau.horaire)
+                        if key not in creneaux_par_moment:
+                            creneaux_par_moment[key] = []
+                        creneaux_par_moment[key].append(j)
+                    
+                    nb_contraintes_overlap = 0
+                    
+                    # Pour chaque paire de matchs conflictuels
+                    for i1, i2 in paires_conflictuelles:
+                        # Pour chaque moment (semaine, horaire)
+                        for creneaux_list in creneaux_par_moment.values():
+                            # Trouver tous les créneaux où chaque match pourrait être assigné
+                            creneaux_i1 = [j for j in creneaux_list if (i1, j) in assignment_vars]
+                            creneaux_i2 = [j for j in creneaux_list if (i2, j) in assignment_vars]
+                            
+                            if creneaux_i1 and creneaux_i2:
+                                # Créer une variable pour détecter si les deux matchs jouent au même moment
+                                overlap_var = model.NewBoolVar(f'overlap_{i1}_{i2}_w{creneaux_valides[creneaux_i1[0]].semaine}_h{creneaux_valides[creneaux_i1[0]].horaire}')
+                                
+                                # overlap_var = 1 si au moins un créneau de i1 ET un créneau de i2 sont assignés
+                                vars_i1 = [assignment_vars[(i1, j)] for j in creneaux_i1]
+                                vars_i2 = [assignment_vars[(i2, j)] for j in creneaux_i2]
+                                
+                                # Si les deux matchs jouent à ce moment → overlap
+                                i1_plays = model.NewBoolVar(f'i1_plays_{i1}_{creneaux_i1[0]}')
+                                i2_plays = model.NewBoolVar(f'i2_plays_{i2}_{creneaux_i2[0]}')
+                                
+                                model.Add(sum(vars_i1) >= 1).OnlyEnforceIf(i1_plays)
+                                model.Add(sum(vars_i1) == 0).OnlyEnforceIf(i1_plays.Not())
+                                
+                                model.Add(sum(vars_i2) >= 1).OnlyEnforceIf(i2_plays)
+                                model.Add(sum(vars_i2) == 0).OnlyEnforceIf(i2_plays.Not())
+                                
+                                # overlap = les deux jouent
+                                model.Add(i1_plays + i2_plays >= 2).OnlyEnforceIf(overlap_var)
+                                model.Add(i1_plays + i2_plays <= 1).OnlyEnforceIf(overlap_var.Not())
+                                
+                                # Pénaliser l'overlap
+                                penalty = int(self.config.overlap_institution_poids)
+                                objective_terms.append(-penalty * overlap_var)
+                                nb_contraintes_overlap += 1
+                    
+                    if self.config.afficher_progression and nb_contraintes_overlap > 0:
+                        print(f"   Créé {nb_contraintes_overlap} contrainte(s) overlap pour éviter matchs simultanés")
         
         # CONTRAINTE SOUPLE 3: Espacement aller-retour (pour poules de type Aller-Retour)
+        # Appliqué uniquement aux matchs normaux
         if self.config.aller_retour_espacement_actif:
             # Détecter toutes les paires aller-retour
             paires_aller_retour = []
-            for i1, match1 in enumerate(matchs):
-                for i2, match2 in enumerate(matchs):
-                    if i1 < i2 and self._sont_matchs_aller_retour(match1, match2):
+            for i1 in matchs_normaux_indices:
+                for i2 in matchs_normaux_indices:
+                    if i1 < i2 and self._sont_matchs_aller_retour(matchs[i1], matchs[i2]):
                         paires_aller_retour.append((i1, i2))
             
             if paires_aller_retour:
@@ -741,6 +1034,10 @@ class CPSATSolver(BaseSolver):
                     # Variables pour détecter si planifiés dans même semaine ou semaines consécutives
                     for j1, creneau1 in enumerate(creneaux_valides):
                         for j2, creneau2 in enumerate(creneaux_valides):
+                            # Vérifier que les variables existent
+                            if (i1, j1) not in assignment_vars or (i2, j2) not in assignment_vars:
+                                continue
+                            
                             semaine_diff = abs(creneau1.semaine - creneau2.semaine)
                             
                             # Pénalité si dans même semaine
@@ -931,16 +1228,29 @@ class CPSATSolver(BaseSolver):
         matchs_non_planifies = []
         
         if status in [cp_model.OPTIMAL, cp_model.FEASIBLE]:
-            for i, match in enumerate(matchs):
+            # Traiter les matchs normaux (assignment_vars)
+            for i in matchs_normaux_indices:
+                match = matchs[i]
                 assigned = False
                 for j, creneau in enumerate(creneaux_valides):
-                    if solver.Value(assignment_vars[(i, j)]) == 1:
+                    if (i, j) in assignment_vars and solver.Value(assignment_vars[(i, j)]) == 1:
                         match.creneau = creneau
                         matchs_planifies.append(match)
                         assigned = True
                         break
                 
                 if not assigned:
+                    matchs_non_planifies.append(match)
+            
+            # Traiter les ententes (entente_activated)
+            for i in matchs_ententes_indices:
+                match = matchs[i]
+                # Vérifier si l'entente a été activée
+                if i in entente_activated and solver.Value(entente_activated[i]) == 1:
+                    # Entente activée : pas de créneau assigné, mais comptée comme planifiée
+                    match.creneau = None  # Entente n'a pas de créneau
+                    matchs_planifies.append(match)
+                else:
                     matchs_non_planifies.append(match)
         else:
             matchs_non_planifies = matchs

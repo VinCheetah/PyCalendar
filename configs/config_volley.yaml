@@ -4,18 +4,15 @@
 
 # Fichiers
 fichiers:
-  donnees: "examples/volleyball/config_volley.xlsx"
-  sortie: "examples/volleyball/calendrier_volley.xlsx"
+  donnees: "data/volleyball/config_volley.xlsx"
+  sortie: "data/volleyball/calendrier_volley.xlsx"
 
 # Paramètres de planification (seulement valeurs différentes des défauts)
 planification:
-  semaine_min: 5    # Défaut: 1 - Commence la planification à la semaine 2
+  semaine_min: 9    # Défaut: 1 - Commence la planification à la semaine 2
   nb_semaines: 13
   strategie: "cpsat"  # Défaut: "greedy" - Force l'utilisation de CP-SAT
 
-# Configuration Greedy (fallback)
-greedy:
-  nb_essais: 5        # Défaut: 10 - Réduit pour fallback plus rapide
 
 # Configuration CP-SAT (OR-Tools)
 cpsat:
@@ -24,19 +21,22 @@ cpsat:
   warm_start_file: "volley"  # Solutions spécifiques au volley
 
 contraintes:
-  compaction_penalites_par_semaine: [0, 0, 5, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3]  # Pénalité par semaine (indice 0 = semaine 1)
-  # Pénalités pour gymnases par niveau (classification haut/bas niveau)
-  # Valeurs positives = pénalité (augmente le coût, à éviter)
-  # Plus la valeur est élevée, plus on veut ÉVITER cette assignation
-  penalite_niveau_gymnases_haut: [-5, -3, -1, 0]  # Pénalité par niveau de match (A1=0, A2=3, A3=5, A4=6) si gymnase haut niveau
-                                                # A1 en haut niveau: 0 (parfait), A4 en haut niveau: 6 (à éviter)
-  penalite_niveau_gymnases_bas: [8, 5, 2, 1]   # Pénalité par niveau de match (A1=10, A2=8, A3=5, A4=3) si gymnase bas niveau
-                                                # A1 en bas niveau: 10 (très mauvais), A4 en bas niveau: 3 (acceptable)
+  compaction_penalites_par_semaine: [0, 0, 5, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+  
+  # Adéquation niveau match / niveau gymnase
+  # Convention: valeurs NÉGATIVES = bonus (réduction coût), POSITIVES = pénalité (augmentation coût)
+  # Exemple: A1 (haut niveau) sur gymnase haut niveau → bonus (valeur négative)
+  #          A1 (haut niveau) sur gymnase bas niveau → pénalité (valeur positive)
+  penalite_niveau_gymnases_haut: [-5, -3, -1, 0]  # [A1, A2, A3, A4] sur gymnase HAUT niveau (valeurs négatives = bonus)
+  penalite_niveau_gymnases_bas: [8, 5, 2, 1]  # [A1, A2, A3, A4] sur gymnase BAS niveau (valeurs positives = pénalité)
 
 
-# Gestion du calendrier avec dates réelles
 calendrier:
   actif: true
   date_debut: "2025-10-09"  # Date de début de saison (premier jour possible pour les matchs)
   jour_match: "jeudi"  # Jour de la semaine où se déroulent les matchs
   semaines_banalisees: [3, 10, 11, 12]  # Liste des numéros de semaines banalisées (vacances, périodes sans match)
+
+# Paramètres spécifiques au volley
+sport:
+  duree_match_minutes: 120  # Durée d'un match de volley = 2h

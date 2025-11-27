@@ -8,7 +8,6 @@ from pycalendar.data.data_source import DataSource
 from pycalendar.data.validators import DataValidator
 from pycalendar.data.transformers import DataTransformer
 from pycalendar.generators.multi_pool_generator import MultiPoolGenerator
-from pycalendar.solvers.greedy_solver import GreedySolver
 from pycalendar.exporters.excel_exporter import ExcelExporter
 from pycalendar.core.statistics import Statistics
 from pycalendar.interface.core.generator import InterfaceGenerator
@@ -246,23 +245,49 @@ class SchedulingPipeline:
         """
         Exclut les matchs déjà fixés de la liste des matchs à planifier.
         
-        Pour les poules aller-retour, A→B et B→A sont des matchs différents,
-        donc on utilise l'ordre exact des équipes.
+        IMPORTANT: Pour les poules Classiques, A→B == B→A (même match).
+                   Pour les poules Aller-Retour, A→B ≠ B→A (matchs distincts).
+        
+        BUG FIX: Version précédente utilisait l'ordre exact pour toutes les poules,
+                 causant des doublons dans les poules Classiques.
         """
         if not matchs_fixes:
             return matchs
         
-        # Créer un ensemble des matchs fixés avec l'ordre exact (direction compte)
+        # Charger les types de poules si pas déjà fait
+        if not hasattr(self, 'types_poules') or not self.types_poules:
+            self.types_poules = self.source.charger_types_poules()
+        
+        # Créer un ensemble des matchs fixés
         matchs_fixes_set = set()
         for match_fixe in matchs_fixes:
-            # Utiliser l'ID unique pour être sûr (nom peut avoir duplicates)
-            key = (match_fixe.equipe1.id_unique, match_fixe.equipe2.id_unique)
+            poule = match_fixe.poule
+            type_poule = self.types_poules.get(poule, 'Classique')
+            est_aller_retour = (type_poule == 'Aller-Retour')
+            
+            if est_aller_retour:
+                # Aller-Retour: ordre exact (A→B ≠ B→A)
+                key = (match_fixe.equipe1.id_unique, match_fixe.equipe2.id_unique, poule)
+            else:
+                # Classique: ordre trié (A→B == B→A)
+                key = tuple(sorted([match_fixe.equipe1.id_unique, match_fixe.equipe2.id_unique])) + (poule,)
+            
             matchs_fixes_set.add(key)
         
         # Filtrer les matchs
         matchs_a_planifier = []
         for match in matchs:
-            key = (match.equipe1.id_unique, match.equipe2.id_unique)
+            poule = match.poule
+            type_poule = self.types_poules.get(poule, 'Classique')
+            est_aller_retour = (type_poule == 'Aller-Retour')
+            
+            if est_aller_retour:
+                # Aller-Retour: ordre exact
+                key = (match.equipe1.id_unique, match.equipe2.id_unique, poule)
+            else:
+                # Classique: ordre trié
+                key = tuple(sorted([match.equipe1.id_unique, match.equipe2.id_unique])) + (poule,)
+            
             if key not in matchs_fixes_set:
                 matchs_a_planifier.append(match)
         
@@ -310,18 +335,27 @@ class SchedulingPipeline:
         for match_fixe in matchs_fixes:
             meta = match_fixe.metadata
             
-            # Créer le créneau correspondant
-            creneau = Creneau(
-                semaine=meta['semaine'],
-                horaire=meta['horaire'],
-                gymnase=meta['gymnase']
-            )
+            # Vérifier si c'est un match en entente
+            is_entente = meta.get('is_entente', False)
             
-            # Assigner le créneau au match
-            match_fixe.creneau = creneau
-            
-            # Ajouter aux matchs planifiés
-            solution.matchs_planifies.append(match_fixe)
+            if is_entente:
+                # Pour les matchs en entente, ne pas créer de créneau
+                # Ils seront ajoutés aux matchs non planifiés mais marqués comme entente
+                match_fixe.creneau = None
+                solution.matchs_non_planifies.append(match_fixe)
+            else:
+                # Pour les autres matchs fixes, créer le créneau correspondant
+                creneau = Creneau(
+                    semaine=meta['semaine'],
+                    horaire=meta['horaire'],
+                    gymnase=meta['gymnase']
+                )
+                
+                # Assigner le créneau au match
+                match_fixe.creneau = creneau
+                
+                # Ajouter aux matchs planifiés
+                solution.matchs_planifies.append(match_fixe)
         
         # Trier par semaine pour un affichage cohérent
         solution.matchs_planifies.sort(key=lambda m: (m.creneau.semaine, m.creneau.horaire) if m.creneau else (999, ''))
@@ -389,45 +423,23 @@ class SchedulingPipeline:
             gymnases: Dictionnaire des gymnases
             matchs_fixes: Matchs déjà planifiés/fixés (pour calcul des pénalités)
         """
-        print(f"🧮 Résolution avec algorithme: {self.config.strategie.upper()}\n")
+        print(f"🧮 Résolution avec CP-SAT\n")
         
         gymnases_dict = {g.nom: g for g in gymnases}
         
-        if self.config.strategie == "greedy":
-            solver = GreedySolver(self.config, self.groupes_non_simultaneite, self.ententes, self.contraintes_temporelles, self.niveaux_gymnases)
-            # Les matchs fixés sont passés au solver mais ne seront pas replanifiés
-            # Ils seront utilisés pour initialiser le solution_state
-            solution = solver.solve(matchs, creneaux, gymnases_dict, self.obligations_presence, matchs_fixes)
-            
-            return solution
+        if not CPSAT_AVAILABLE:
+            raise ImportError("OR-Tools n'est pas installé. Installez-le avec: pip install ortools")
         
-        elif self.config.strategie == "cpsat":
-            if not CPSAT_AVAILABLE:
-                print("⚠️  OR-Tools non installé, basculement vers Greedy")
-                solver = GreedySolver(self.config, self.groupes_non_simultaneite, self.ententes, self.contraintes_temporelles, self.niveaux_gymnases)
-                return solver.solve(matchs, creneaux, gymnases_dict, self.obligations_presence, matchs_fixes)
-            
-            solver = CPSATSolver(self.config, self.groupes_non_simultaneite, self.ententes, self.contraintes_temporelles, self.niveaux_gymnases)
-            try:
-                # CP-SAT avec warm start activé par défaut
-                use_warm_start = getattr(self.config, 'cpsat_warm_start', True)
-                solution = solver.solve(matchs, creneaux, gymnases_dict, 
-                                       self.obligations_presence,
-                                       use_warm_start=use_warm_start,
-                                       matchs_fixes=matchs_fixes)
-                
-                return solution
-                
-            except Exception as e:
-                if self.config.fallback_greedy:
-                    print(f"⚠️  CP-SAT a échoué ({e}), basculement vers Greedy")
-                    solver = GreedySolver(self.config, self.groupes_non_simultaneite, self.ententes, self.contraintes_temporelles, self.niveaux_gymnases)
-                    return solver.solve(matchs, creneaux, gymnases_dict, self.obligations_presence, matchs_fixes)
-                raise
+        solver = CPSATSolver(self.config, self.groupes_non_simultaneite, self.ententes, self.contraintes_temporelles, self.niveaux_gymnases)
         
-        else:
-            print(f"❌ Stratégie inconnue: {self.config.strategie}")
-            return None
+        # CP-SAT avec warm start activé par défaut
+        use_warm_start = getattr(self.config, 'cpsat_warm_start', True)
+        solution = solver.solve(matchs, creneaux, gymnases_dict, 
+                               self.obligations_presence,
+                               use_warm_start=use_warm_start,
+                               matchs_fixes=matchs_fixes)
+        
+        return solution
     
     def _save_solution(self, solution: Solution, matchs, creneaux, gymnases, matchs_fixes=None):
         """Sauvegarde la solution avec sa signature pour réutilisation future."""

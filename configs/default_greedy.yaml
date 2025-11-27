@@ -1,6 +1,0 @@
-fichiers:
-  sortie: "examples/basic/calendrier_greedy.xlsx"
-greedy:
-  nb_essais: 5
-planification:
-  strategie: greedy

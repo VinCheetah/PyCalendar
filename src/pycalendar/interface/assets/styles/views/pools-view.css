@@ -524,3 +524,31 @@
         gap: var(--spacing-xs);
     }
 }
+
+/* ==================== MATCHS CFU/CFE - POOLS VIEW ==================== */
+
+/* Cartes de matchs CFU avec bordure dorée */
+.match-card-new.match-cfu {
+    border: 3px solid #FFD700 !important;
+    box-shadow: 0 4px 12px rgba(255, 215, 0, 0.4), 
+                0 0 20px rgba(255, 215, 0, 0.2) !important;
+}
+
+.match-card-new.match-cfu:hover {
+    box-shadow: 0 6px 16px rgba(255, 215, 0, 0.6), 
+                0 0 30px rgba(255, 215, 0, 0.3) !important;
+    transform: translateY(-2px) scale(1.01);
+}
+
+/* Cartes de matchs CFE avec bordure bleue */
+.match-card-new.match-cfe {
+    border: 3px solid #4A90E2 !important;
+    box-shadow: 0 4px 12px rgba(74, 144, 226, 0.4), 
+                0 0 20px rgba(74, 144, 226, 0.2) !important;
+}
+
+.match-card-new.match-cfe:hover {
+    box-shadow: 0 6px 16px rgba(74, 144, 226, 0.6), 
+                0 0 30px rgba(74, 144, 226, 0.3) !important;
+    transform: translateY(-2px) scale(1.01);
+}

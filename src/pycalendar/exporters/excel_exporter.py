@@ -150,9 +150,9 @@ class ExcelExporter:
                 'Equipe_2': eq2_nom,
                 'Genre': genre,
                 'Poule': match.poule,
-                'Semaine': match.creneau.semaine if match.creneau else '',
-                'Horaire': match.creneau.horaire if match.creneau else '',
-                'Gymnase': match.creneau.gymnase if match.creneau else '',
+                'Semaine': match.creneau.semaine if match.creneau else (match.metadata.get('semaine', '') if match.metadata else ''),
+                'Horaire': match.creneau.horaire if match.creneau else (match.metadata.get('horaire', '') if match.metadata else ''),
+                'Gymnase': match.creneau.gymnase if match.creneau else (match.metadata.get('gymnase', '') if match.metadata else ''),
                 'Score': score or '',  # Score depuis metadata si match fixe
                 'Type_Competition': type_comp,
                 'Remarques': remarques,

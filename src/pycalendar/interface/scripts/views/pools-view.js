@@ -32,6 +32,118 @@ class PoolsView {
     }
     
     /**
+     * Vérifie si un match a un score valide (match joué).
+     * Centralise la logique de détection des matchs terminés.
+     * 
+     * @param {Object} match - Le match à vérifier
+     * @returns {boolean} true si le match a un score valide
+     */
+    _hasValidScore(match) {
+        return match.score && 
+               match.score.has_score && 
+               match.score.equipe1 !== null && 
+               match.score.equipe1 !== undefined &&
+               match.score.equipe2 !== null && 
+               match.score.equipe2 !== undefined;
+    }
+    
+    /**
+     * Échappe les caractères HTML pour prévenir les injections XSS.
+     * Convertit les caractères spéciaux en entités HTML sécurisées.
+     * 
+     * @param {string} text - Le texte à échapper
+     * @returns {string} Texte échappé et sécurisé
+     */
+    _escapeHtml(text) {
+        if (typeof text !== 'string') return text;
+        
+        const map = {
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#039;'
+        };
+        
+        return text.replace(/[&<>"']/g, char => map[char]);
+    }
+    
+    /**
+     * Extrait la catégorie/niveau du match (A1, A2, A3, A4, CFE, CFU)
+     * @param {Object} match - Le match
+     * @returns {string} La catégorie (ex: 'A1', 'CFU', 'CFE')
+     */
+    _extractCategory(match) {
+        // 1. PRIORITÉ: Utiliser le champ championship_type si disponible
+        if (match.championship_type) {
+            const type = match.championship_type.toUpperCase();
+            // CFU et CFE sont directement retournés
+            if (type === 'CFU' || type === 'CFE') {
+                return type;
+            }
+            // Pour 'Acad', extraire le niveau depuis la poule (A1, A2, A3, A4)
+            if (type === 'ACAD' && match.poule) {
+                const pouleMatch = match.poule.match(/A([1-4])/i);
+                if (pouleMatch) {
+                    return `A${pouleMatch[1]}`;
+                }
+            }
+            // 'Autre' type
+            if (type === 'AUTRE') {
+                return 'Autre';
+            }
+        }
+        
+        // 2. FALLBACK: Essayer d'extraire depuis le champ poule (ex: "VBFA1PA" -> "A1")
+        if (match.poule) {
+            // Chercher A1-A4
+            const pouleMatch = match.poule.match(/A([1-4])/i);
+            if (pouleMatch) {
+                return `A${pouleMatch[1]}`;
+            }
+            
+            // Chercher CFE ou CFU dans la poule
+            const cfeMatch = match.poule.match(/CF[EU]/i);
+            if (cfeMatch) {
+                return cfeMatch[0].toUpperCase();
+            }
+        }
+        
+        // 3. FALLBACK: Essayer d'extraire depuis le nom de l'équipe
+        const teamNames = [match.equipe1_nom, match.equipe2_nom].join(' ');
+        
+        // Chercher A1, A2, A3, A4
+        const categoryMatch = teamNames.match(/A([1-4])/i);
+        if (categoryMatch) {
+            return `A${categoryMatch[1]}`;
+        }
+        
+        // Chercher CFE ou CFU
+        const cfeMatch = teamNames.match(/CF[EU]/i);
+        if (cfeMatch) {
+            return cfeMatch[0].toUpperCase();
+        }
+        
+        // 4. FALLBACK: Si le match a un champ category/niveau (ancien format)
+        if (match.category) {
+            const cat = match.category.toUpperCase();
+            if (cat.match(/^(A[1-4]|CFE|CFU)$/)) {
+                return cat;
+            }
+        }
+        
+        if (match.niveau) {
+            const niv = match.niveau.toUpperCase();
+            if (niv.match(/^(A[1-4]|CFE|CFU)$/)) {
+                return niv;
+            }
+        }
+        
+        // Par défaut
+        return '';
+    }
+    
+    /**
      * Initialise la vue
      */
     init() {
@@ -48,128 +160,13 @@ class PoolsView {
     
     /**
      * Retourne la configuration des options d'affichage pour cette vue.
-     * Options réellement fonctionnelles et utiles pour la vue Poules.
+     * Options simplifiées - format 'cards' uniquement.
      */
     getDisplayOptions() {
         return {
             title: "Options - Vue Poules",
-            options: [
-                // Format d'affichage - FONCTIONNEL
-                {
-                    type: 'button-group',
-                    id: 'pools-format',
-                    label: '📐 Format',
-                    values: [
-                        { value: 'cards', text: 'Cartes' },
-                        { value: 'compact', text: 'Compact' },
-                        { value: 'list', text: 'Liste' }
-                    ],
-                    default: this.displayOptions.format,
-                    action: (value) => {
-                        this.displayOptions.format = value;
-                        this.render();
-                    }
-                },
-                
-                // Coloration des matchs - NOUVEAU
-                {
-                    type: 'select',
-                    id: 'pools-color-scheme',
-                    label: '🎨 Coloration des matchs',
-                    values: [
-                        { value: 'none', text: 'Aucune' },
-                        { value: 'by-status', text: 'Par statut' },
-                        { value: 'by-venue', text: 'Par lieu' },
-                        { value: 'by-gender', text: 'Par genre' },
-                        { value: 'by-level', text: 'Par niveau' }
-                    ],
-                    default: this.displayOptions.colorScheme || 'none',
-                    action: (value) => {
-                        this.displayOptions.colorScheme = value;
-                        this.applyColorScheme(value);
-                    }
-                },
-                
-                // Afficher les équipes - FONCTIONNEL
-                {
-                    type: 'checkbox',
-                    id: 'pools-show-teams',
-                    label: '👥 Afficher liste des équipes',
-                    default: this.displayOptions.showTeams,
-                    action: (checked) => {
-                        this.displayOptions.showTeams = checked;
-                        this.render();
-                    }
-                },
-                
-                // Afficher les préférences - FONCTIONNEL
-                {
-                    type: 'checkbox',
-                    id: 'pools-show-preferences',
-                    label: '⭐ Afficher préférences équipes',
-                    default: this.displayOptions.showPreferences,
-                    action: (checked) => {
-                        this.displayOptions.showPreferences = checked;
-                        this.render();
-                    }
-                },
-                
-                // Séparateurs de niveau - FONCTIONNEL
-                {
-                    type: 'checkbox',
-                    id: 'pools-level-separators',
-                    label: '📊 Séparateurs de niveau',
-                    default: this.displayOptions.showLevelSeparators,
-                    action: (checked) => {
-                        this.displayOptions.showLevelSeparators = checked;
-                        this.render();
-                    }
-                },
-                
-                // Auto-expand - FONCTIONNEL
-                {
-                    type: 'checkbox',
-                    id: 'pools-auto-expand',
-                    label: '� Tout développer',
-                    default: this.displayOptions.autoExpand || false,
-                    action: (checked) => {
-                        this.displayOptions.autoExpand = checked;
-                        if (checked) {
-                            // Expand all pools
-                            const data = this.dataManager.getData();
-                            if (data?.entities?.poules) {
-                                data.entities.poules.forEach(pool => {
-                                    this.expandedPools.add(pool.id);
-                                });
-                            }
-                        } else {
-                            // Collapse all
-                            this.expandedPools.clear();
-                        }
-                        this.render();
-                    }
-                }
-            ]
+            options: []
         };
-    }
-    
-    /**
-     * Applique un schéma de couleurs aux matchs
-     * @param {string} scheme - Le schéma à appliquer ('none', 'by-status', 'by-venue', etc.)
-     */
-    applyColorScheme(scheme) {
-        // Appliquer l'attribut data-color-scheme sur le conteneur
-        if (scheme === 'none') {
-            this.container.removeAttribute('data-color-scheme');
-        } else {
-            this.container.setAttribute('data-color-scheme', scheme);
-        }
-        
-        // Sauvegarder la préférence
-        localStorage.setItem('pools-color-scheme', scheme);
-        
-        // Si on doit ajouter des attributs spécifiques sur chaque match, on re-render
-        this.render();
     }
     
     /**
@@ -230,6 +227,12 @@ class PoolsView {
      * Filtre les poules selon les filtres actifs
      */
     _filterPools(pools) {
+        // Validation des entrées
+        if (!Array.isArray(pools)) {
+            console.warn('[PoolsView] _filterPools: pools n\'est pas un tableau', pools);
+            return [];
+        }
+        
         if (!this.dataManager) return pools;
         const data = this.dataManager.getData();
         
@@ -255,6 +258,12 @@ class PoolsView {
             
             // Filtre par équipe - vérifier si l'équipe (ou groupe d'équipes) est dans cette poule
             if (this.selectedFilters.equipe && data?.entities?.equipes) {
+                // Validation: s'assurer que equipe est une string
+                if (typeof this.selectedFilters.equipe !== 'string') {
+                    console.warn('[PoolsView] selectedFilters.equipe devrait être une string', this.selectedFilters.equipe);
+                    return true; // Ignorer ce filtre s'il est mal formé
+                }
+                
                 const equipeIds = this.selectedFilters.equipe.split(',');
                 const poolTeams = data.entities.equipes.filter(e => e.poule === pool.id);
                 const hasEquipe = poolTeams.some(e => equipeIds.includes(e.id));
@@ -413,32 +422,21 @@ class PoolsView {
     }
     
     /**
-     * Génère une section de genre
+     * Génère une section de genre avec séparateur visuel
      */
     _generateGenderSection(gender, pools, data) {
         const genderLabel = gender === 'F' ? 'Féminin' : 'Masculin';
         const genderIcon = gender === 'F' ? '♀️' : '♂️';
         const genderClass = gender === 'F' ? 'female' : 'male';
+        const genderColor = gender === 'F' ? '#E91E63' : '#2196F3';
         
         const totalTeams = pools.reduce((sum, p) => sum + (p.nb_equipes || 0), 0);
         const totalMatches = pools.reduce((sum, p) => 
             sum + (p.nb_matchs_planifies || 0) + (p.nb_matchs_non_planifies || 0), 0);
         
-        let html = `
-            <div class="gender-section ${genderClass}">
-                <div class="gender-header">
-                    <div class="gender-icon">${genderIcon}</div>
-                    <div class="gender-title">
-                        <h2>${genderLabel}</h2>
-                        <div class="gender-subtitle">
-                            ${pools.length} poule${pools.length > 1 ? 's' : ''} • 
-                            ${totalTeams} équipe${totalTeams > 1 ? 's' : ''} • 
-                            ${totalMatches} match${totalMatches > 1 ? 's' : ''}
-                        </div>
-                    </div>
-                </div>
-                <div class="pools-list ${this.displayOptions.format}">
-        `;
+        let html = this._generateGenderSeparator(gender, pools, totalTeams, totalMatches);
+        
+        html += `<div class="pools-list ${this.displayOptions.format}">`;
         
         // Grouper par niveau si l'option est activée
         if (this.displayOptions.showLevelSeparators) {
@@ -461,9 +459,35 @@ class PoolsView {
             });
         }
         
-        html += '</div></div>';
+        html += '</div>';
         
         return html;
+    }
+    
+    /**
+     * Génère un séparateur de genre avec styles inline
+     */
+    _generateGenderSeparator(gender, pools, totalTeams, totalMatches) {
+        const genderLabel = gender === 'F' ? 'Féminin' : 'Masculin';
+        const genderIcon = gender === 'F' ? '♀️' : '♂️';
+        const genderColor = gender === 'F' ? '#E91E63' : '#2196F3';
+        const genderColorLight = gender === 'F' ? 'rgba(233, 30, 99, 0.1)' : 'rgba(33, 150, 243, 0.1)';
+        
+        return `
+            <div style="margin: 2.5rem 0 2rem; padding: 0;">
+                <div style="display: flex; align-items: center; gap: 1.5rem; margin-bottom: 1rem;">
+                    <div style="flex: 1; height: 3px; background: linear-gradient(to right, transparent, ${genderColor}40, transparent);"></div>
+                    <div style="display: flex; align-items: center; gap: 1rem; padding: 0.75rem 2rem; background: linear-gradient(135deg, ${genderColorLight} 0%, white 100%); border-radius: 12px; border: 2px solid ${genderColor}; box-shadow: 0 4px 12px ${genderColor}20;">
+                        <span style="font-size: 2rem;">${genderIcon}</span>
+                        <div style="display: flex; flex-direction: column; gap: 0.25rem;">
+                            <span style="font-size: 1.3rem; font-weight: 700; color: ${genderColor}; font-family: 'Inter', 'Roboto', sans-serif;">${genderLabel}</span>
+                            <span style="font-size: 0.85rem; color: #666; font-weight: 500; font-family: 'Roboto', sans-serif;">${pools.length} poule${pools.length > 1 ? 's' : ''} • ${totalTeams} équipe${totalTeams > 1 ? 's' : ''} • ${totalMatches} match${totalMatches > 1 ? 's' : ''}</span>
+                        </div>
+                    </div>
+                    <div style="flex: 1; height: 3px; background: linear-gradient(to left, transparent, ${genderColor}40, transparent);"></div>
+                </div>
+            </div>
+        `;
     }
     
     /**
@@ -484,89 +508,28 @@ class PoolsView {
     }
     
     /**
-     * Génère un séparateur de niveau
+     * Génère un séparateur de niveau avec styles inline
      */
     _generateLevelSeparator(level, pools, data) {
         const totalTeams = pools.reduce((sum, p) => sum + (p.nb_equipes || 0), 0);
         
         return `
-            <div class="level-separator">
-                <div class="level-separator-line"></div>
-                <div class="level-separator-label">
-                    <span class="level-name">Niveau ${level}</span>
-                    <span class="level-info">${pools.length} poule${pools.length > 1 ? 's' : ''} • ${totalTeams} équipe${totalTeams > 1 ? 's' : ''}</span>
+            <div style="display: flex; align-items: center; gap: 1rem; margin: 2rem 0 1.5rem; padding: 0 1rem;">
+                <div style="flex: 1; height: 2px; background: linear-gradient(to right, transparent, #ddd, transparent);"></div>
+                <div style="display: flex; flex-direction: column; align-items: center; gap: 0.25rem; padding: 0.5rem 1.5rem; background: #f8f9fa; border-radius: 8px; border: 1px solid #e0e0e0;">
+                    <span style="font-size: 1.1rem; font-weight: 600; color: #2c3e50;"">Niveau ${level}</span>
+                    <span style="font-size: 0.85rem; color: #7f8c8d;">${pools.length} poule${pools.length > 1 ? 's' : ''} • ${totalTeams} équipe${totalTeams > 1 ? 's' : ''}</span>
                 </div>
-                <div class="level-separator-line"></div>
+                <div style="flex: 1; height: 2px; background: linear-gradient(to left, transparent, #ddd, transparent);"></div>
             </div>
         `;
     }
     
     /**
-     * Génère le balisage pour une poule en fonction du format d'affichage.
+     * Génère le balisage pour une poule (format cards uniquement).
      */
     _generatePoolMarkup(pool, data, gender) {
-        switch (this.displayOptions.format) {
-            case 'compact':
-                return this._generatePoolCompact(pool, data, gender);
-            case 'list':
-                // Pour le format 'list', nous pourrions avoir besoin de construire les lignes
-                // dans un contexte de tableau plus large, donc cela pourrait être différent.
-                // Pour l'instant, traitons-le comme une ligne simple.
-                return this._generatePoolListRow(pool, data, gender);
-            case 'cards':
-            default:
-                return this._generatePoolCard(pool, data, gender);
-        }
-    }
-
-    /**
-     * Génère la vue compacte d'une poule.
-     */
-    _generatePoolCompact(pool, data, gender) {
-        const genderClass = gender === 'F' ? 'female' : 'male';
-        const poolMatches = this.dataManager.getMatchesByPool(pool.id);
-        const completion = poolMatches.length > 0 ? (pool.nb_matchs_planifies / poolMatches.length) * 100 : 0;
-
-        return `
-            <div class="pool-compact ${genderClass}" data-pool-id="${pool.id}" onclick="window.poolsView.togglePool('${pool.id}')">
-                <div class="pool-compact-main">
-                    <span class="pool-compact-name">${pool.nom}</span>
-                    <span class="pool-compact-level">${this._formatLevel(pool.niveau || pool.nom)}</span>
-                </div>
-                <div class="pool-compact-stats">
-                    <span class="pool-compact-teams" title="${pool.nb_equipes} équipes">👥 ${pool.nb_equipes}</span>
-                    <span class="pool-compact-matches" title="${poolMatches.length} matchs">⚽ ${poolMatches.length}</span>
-                    <div class="pool-compact-progress" title="${completion.toFixed(0)}% planifié">
-                        <div class="progress-bar" style="width: ${completion}%;"></div>
-                    </div>
-                </div>
-                <button class="expand-btn ${this.expandedPools.has(pool.id) ? 'expanded' : ''}">▶</button>
-            </div>
-            ${this.expandedPools.has(pool.id) ? this._generateExpandedContent(pool, data) : ''}
-        `;
-    }
-
-    /**
-     * Génère une ligne de liste pour une poule.
-     */
-    _generatePoolListRow(pool, data, gender) {
-        const genderClass = gender === 'F' ? 'female' : 'male';
-        const poolMatches = this.dataManager.getMatchesByPool(pool.id);
-        const scheduled = pool.nb_matchs_planifies || 0;
-        const unscheduled = pool.nb_matchs_non_planifies || 0;
-
-        return `
-            <div class="pool-list-row ${genderClass}" data-pool-id="${pool.id}" onclick="window.poolsView.togglePool('${pool.id}')">
-                <div class="pool-list-cell name">${pool.nom}</div>
-                <div class="pool-list-cell level">${this._formatLevel(pool.niveau || pool.nom)}</div>
-                <div class="pool-list-cell teams">${pool.nb_equipes}</div>
-                <div class="pool-list-cell scheduled">${scheduled}</div>
-                <div class="pool-list-cell unscheduled">${unscheduled}</div>
-                <div class="pool-list-cell total">${scheduled + unscheduled}</div>
-                <div class="pool-list-cell expand"><button class="expand-btn ${this.expandedPools.has(pool.id) ? 'expanded' : ''}">▶</button></div>
-            </div>
-            ${this.expandedPools.has(pool.id) ? this._generateExpandedContent(pool, data) : ''}
-        `;
+        return this._generatePoolCard(pool, data, gender);
     }
 
     /**
@@ -576,6 +539,12 @@ class PoolsView {
         const isExpanded = this.expandedPools.has(pool.id);
         const genderClass = gender === 'F' ? 'female' : 'male';
         const genderIcon = gender === 'F' ? '♀️' : '♂️';
+        const genderColor = gender === 'F' ? '#E91E63' : '#2196F3';
+        const genderColorLight = gender === 'F' ? 'rgba(233, 30, 99, 0.05)' : 'rgba(33, 150, 243, 0.05)';
+        
+        // Échapper le nom de la poule pour prévenir XSS
+        const poolNom = this._escapeHtml(pool.nom);
+        const poolNiveau = this._escapeHtml(this._formatLevel(pool.niveau || pool.nom));
         
         // Récupérer les matchs de la poule
         const poolMatches = this.dataManager.getMatchesByPool(pool.id);
@@ -583,32 +552,29 @@ class PoolsView {
         const unscheduledMatches = poolMatches.filter(m => !m.semaine);
         
         // Un match est joué SEULEMENT s'il a un score valide
-        const playedMatches = scheduledMatches.filter(m => 
-            m.score && m.score.has_score && 
-            m.score.equipe1 !== null && m.score.equipe1 !== undefined &&
-            m.score.equipe2 !== null && m.score.equipe2 !== undefined
-        );
+        const playedMatches = scheduledMatches.filter(m => this._hasValidScore(m));
         
         // Les matchs à venir sont ceux planifiés mais sans score
-        const upcomingMatches = scheduledMatches.filter(m => 
-            !m.score || !m.score.has_score ||
-            m.score.equipe1 === null || m.score.equipe1 === undefined ||
-            m.score.equipe2 === null || m.score.equipe2 === undefined
-        );
+        const upcomingMatches = scheduledMatches.filter(m => !this._hasValidScore(m));
+        
+        // Calculer le taux de complétion
+        const completionRate = poolMatches.length > 0 ? (scheduledMatches.length / poolMatches.length) * 100 : 0;
         
         let html = `
-            <div class="pool-card ${genderClass} ${isExpanded ? 'expanded' : ''}" data-pool-id="${pool.id}" style="background: white; border: 2px solid rgba(0, 85, 164, 0.15); border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); margin-bottom: 1.5rem; transition: all 0.3s ease;">
-                <div class="pool-header" data-toggle-pool="${pool.id}" style="padding: 1.25rem; background: linear-gradient(135deg, #0055A4 0%, rgba(0, 85, 164, 0.9) 100%); color: white; cursor: pointer; position: relative; border-bottom: 3px solid rgba(255, 255, 255, 0.2);">
-                    <div class="pool-title" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem;">
-                        <h3 style="margin: 0; font-size: 1.25rem; font-weight: 800; color: white; font-family: 'Inter', 'Roboto', sans-serif; letter-spacing: 0.02em; text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);">${pool.nom}</h3>
-                        <button class="expand-btn ${isExpanded ? 'expanded' : ''}" aria-label="Développer" style="background: rgba(255, 255, 255, 0.2); border: 1px solid rgba(255, 255, 255, 0.3); color: white; font-size: 1rem; font-weight: 700; padding: 0.4rem 0.8rem; border-radius: 6px; cursor: pointer; transition: all 0.2s ease; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);">
+            <div class="pool-card ${genderClass} ${isExpanded ? 'expanded' : ''}" data-pool-id="${pool.id}" style="background: white; border: 2px solid ${genderColor}30; border-radius: 16px; overflow: hidden; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08); margin-bottom: 1.5rem; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); position: relative;">
+                <div class="pool-header" data-toggle-pool="${pool.id}" style="padding: 1.5rem; background: linear-gradient(135deg, ${genderColor} 0%, ${genderColor}dd 100%); color: white; cursor: pointer; position: relative; border-bottom: 3px solid rgba(255, 255, 255, 0.2); box-shadow: 0 2px 8px ${genderColor}40;">
+                    <div style="position: absolute; top: 0; right: 0; font-size: 6rem; opacity: 0.08; line-height: 1; pointer-events: none;">${genderIcon}</div>
+                    <div class="pool-title" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem; position: relative; z-index: 1;">
+                        <h3 style="margin: 0; font-size: 1.35rem; font-weight: 800; color: white; font-family: 'Inter', 'Roboto', sans-serif; letter-spacing: 0.02em; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);">${poolNom}</h3>
+                        <button class="expand-btn ${isExpanded ? 'expanded' : ''}" aria-label="Développer" style="background: rgba(255, 255, 255, 0.25); border: 1px solid rgba(255, 255, 255, 0.4); color: white; font-size: 1rem; font-weight: 700; padding: 0.5rem 1rem; border-radius: 8px; cursor: pointer; transition: all 0.2s ease; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15); backdrop-filter: blur(8px);">
                             ${isExpanded ? '▼' : '▶'}
                         </button>
                     </div>
-                    <div class="pool-info" style="display: flex; gap: 1.5rem; flex-wrap: wrap; align-items: center;">
-                        <span class="pool-level" style="font-size: 0.75rem; font-weight: 800; padding: 0.3rem 0.6rem; background: rgba(255, 255, 255, 0.25); border-radius: 6px; text-transform: uppercase; letter-spacing: 0.08em; font-family: 'Roboto', sans-serif; border: 1px solid rgba(255, 255, 255, 0.2); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);">${this._formatLevel(pool.niveau || pool.nom)}</span>
-                        <span class="pool-teams" style="font-size: 0.85rem; font-weight: 600; color: rgba(255, 255, 255, 0.95); display: inline-flex; align-items: center; gap: 0.4rem;">👥 ${pool.nb_equipes} équipes</span>
-                        <span class="pool-matches" style="font-size: 0.85rem; font-weight: 600; color: rgba(255, 255, 255, 0.95); display: inline-flex; align-items: center; gap: 0.4rem;">⚽ ${poolMatches.length} matchs</span>
+                    <div class="pool-info" style="display: flex; gap: 1.5rem; flex-wrap: wrap; align-items: center; position: relative; z-index: 1;">
+                        <span class="pool-level" style="font-size: 0.8rem; font-weight: 800; padding: 0.4rem 0.8rem; background: rgba(255, 255, 255, 0.3); border-radius: 8px; text-transform: uppercase; letter-spacing: 0.1em; font-family: 'Roboto', sans-serif; border: 1px solid rgba(255, 255, 255, 0.3); box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2); backdrop-filter: blur(4px);">📊 ${poolNiveau}</span>
+                        <span class="pool-teams" style="font-size: 0.9rem; font-weight: 600; color: rgba(255, 255, 255, 0.95); display: inline-flex; align-items: center; gap: 0.5rem;">👥 <strong>${pool.nb_equipes}</strong> équipes</span>
+                        <span class="pool-matches" style="font-size: 0.9rem; font-weight: 600; color: rgba(255, 255, 255, 0.95); display: inline-flex; align-items: center; gap: 0.5rem;">⚽ <strong>${poolMatches.length}</strong> matchs</span>
+                        <span class="pool-completion" style="font-size: 0.85rem; font-weight: 600; color: rgba(255, 255, 255, 0.9); display: inline-flex; align-items: center; gap: 0.5rem;">✓ ${completionRate.toFixed(0)}% planifié</span>
                     </div>
                 </div>
         `;
@@ -631,18 +597,10 @@ class PoolsView {
         const scheduledMatches = poolMatches.filter(m => m.semaine);
         
         // Un match est joué SEULEMENT s'il a un score valide
-        const playedMatches = scheduledMatches.filter(m => 
-            m.score && m.score.has_score && 
-            m.score.equipe1 !== null && m.score.equipe1 !== undefined &&
-            m.score.equipe2 !== null && m.score.equipe2 !== undefined
-        );
+        const playedMatches = scheduledMatches.filter(m => this._hasValidScore(m));
         
         // Les matchs à venir sont ceux planifiés mais sans score
-        const upcomingMatches = scheduledMatches.filter(m => 
-            !m.score || !m.score.has_score ||
-            m.score.equipe1 === null || m.score.equipe1 === undefined ||
-            m.score.equipe2 === null || m.score.equipe2 === undefined
-        );
+        const upcomingMatches = scheduledMatches.filter(m => !this._hasValidScore(m));
         
         const unscheduledMatches = poolMatches.filter(m => !m.semaine);
 
@@ -702,11 +660,13 @@ class PoolsView {
         `;
         
         teams.forEach(team => {
+            const teamNom = this._escapeHtml(team.nom);
+            
             html += `
                 <div class="team-item">
                     <div class="team-item-icon">🏐</div>
                     <div class="team-item-content">
-                        <div class="team-item-name">${team.nom}</div>
+                        <div class="team-item-name">${teamNom}</div>
             `;
             
             // Afficher les préférences si l'option est activée
@@ -761,22 +721,6 @@ class PoolsView {
         `;
         
         return html;
-    }
-    
-    /**
-     * Récupère la semaine actuelle (pour distinguer passé/futur)
-     */
-    _getCurrentWeek(data) {
-        // Dans un vrai contexte, on utiliserait la date actuelle
-        // Ici on prend la médiane des semaines pour simuler
-        const allWeeks = data.matches.scheduled
-            .map(m => m.semaine)
-            .filter(w => w)
-            .sort((a, b) => a - b);
-        
-        if (allWeeks.length === 0) return 1;
-        
-        return allWeeks[Math.floor(allWeeks.length / 2)] || 1;
     }
     
     /**
@@ -867,10 +811,14 @@ class PoolsView {
             else if (index === 1) rowStyle += ' background: rgba(192, 192, 192, 0.1);'; // Argent pour 2e
             else if (index === 2) rowStyle += ' background: rgba(205, 127, 50, 0.1);'; // Bronze pour 3e
             
+            // Échapper les noms d'équipes
+            const teamNom = this._escapeHtml(team.nom);
+            const teamNomComplet = this._escapeHtml(team.nom_complet || team.nom);
+            
             html += `
                 <tr class="${positionClass}" style="${rowStyle}">
                     <td style="padding: 0.6rem 0.5rem; text-align: center; font-weight: 700; color: ${index < 3 ? '#0055A4' : '#666'}; font-family: 'Roboto Mono', monospace;">${index + 1}</td>
-                    <td class="team-name" title="${team.nom_complet || team.nom}" style="padding: 0.6rem 0.75rem; font-weight: 600; color: #333;">${team.nom}</td>
+                    <td class="team-name" title="${teamNomComplet}" style="padding: 0.6rem 0.75rem; font-weight: 600; color: #333;">${teamNom}</td>
                     <td style="padding: 0.6rem 0.5rem; text-align: center; font-weight: 600; color: #666; font-family: 'Roboto Mono', monospace;">${team.played}</td>
                     <td style="padding: 0.6rem 0.5rem; text-align: center; font-weight: 600; color: #27AE60; font-family: 'Roboto Mono', monospace;">${team.won}</td>
                     <td style="padding: 0.6rem 0.5rem; text-align: center; font-weight: 600; color: #FF9500; font-family: 'Roboto Mono', monospace;">${team.drawn}</td>
@@ -893,7 +841,16 @@ class PoolsView {
      * Récupère les équipes d'une poule
      */
     _getPoolTeams(poolId, data) {
-        if (!data.entities?.equipes) return [];
+        // Validation des données
+        if (!data?.entities?.equipes || !Array.isArray(data.entities.equipes)) {
+            console.warn('[PoolsView] _getPoolTeams: données équipes invalides');
+            return [];
+        }
+        
+        if (!poolId) {
+            console.warn('[PoolsView] _getPoolTeams: poolId manquant');
+            return [];
+        }
         
         return data.entities.equipes.filter(e => e.poule === poolId);
     }
@@ -923,15 +880,14 @@ class PoolsView {
         // Analyser les matchs avec scores
         matches.forEach(match => {
             // Un match est joué seulement s'il a un score valide
-            if (!match.score || !match.score.has_score) return;
+            if (!this._hasValidScore(match)) return;
             
             const team1Id = match.equipe1_id;
             const team2Id = match.equipe2_id;
             const score1 = match.score.equipe1;
             const score2 = match.score.equipe2;
             
-            // Vérifier que les scores sont valides
-            if (score1 === null || score1 === undefined || score2 === null || score2 === undefined) return;
+            // Vérifications de sécurité
             if (!stats[team1Id] || !stats[team2Id]) return;
             
             // Incrémenter les matchs joués
@@ -1107,16 +1063,23 @@ class PoolsView {
      * Génère une carte de match avec le nouveau design.
      */
     _generateMatchCardNew(match, data, type) {
-        const gymnase = this.dataManager.getGymnaseById(match.gymnase);
-        const equipe1Nom = match.equipe1_nom_complet || match.equipe1_nom || 'Équipe 1';
-        const equipe2Nom = match.equipe2_nom_complet || match.equipe2_nom || 'Équipe 2';
-        const equipe1Num = match.equipe1_num ? `#${match.equipe1_num}` : '';
-        const equipe2Num = match.equipe2_num ? `#${match.equipe2_num}` : '';
+        // Validation des données du match
+        if (!match || !match.match_id) {
+            console.warn('[PoolsView] _generateMatchCardNew: match invalide', match);
+            return '';
+        }
+        
+        const gymnase = this.dataManager?.getGymnaseById(match.gymnase);
+        
+        // Échapper les noms pour prévenir XSS
+        const equipe1Nom = this._escapeHtml(match.equipe1_nom_complet || match.equipe1_nom || 'Équipe 1');
+        const equipe2Nom = this._escapeHtml(match.equipe2_nom_complet || match.equipe2_nom || 'Équipe 2');
+        const equipe1Num = match.equipe1_num ? `#${this._escapeHtml(String(match.equipe1_num))}` : '';
+        const equipe2Num = match.equipe2_num ? `#${this._escapeHtml(String(match.equipe2_num))}` : '';
+        const gymnaseNom = this._escapeHtml(gymnase?.nom || 'Non défini');
 
-        // Déterminer si le match est réellement joué (a un score)
-        const hasScore = match.score && match.score.has_score && 
-                        match.score.equipe1 !== null && match.score.equipe1 !== undefined &&
-                        match.score.equipe2 !== null && match.score.equipe2 !== undefined;
+        // Déterminer si le match est réellement joué (a un score valide)
+        const hasScore = this._hasValidScore(match);
         
         // Déterminer si le match est planifié
         const isScheduled = match.semaine && match.horaire && match.gymnase;
@@ -1148,6 +1111,23 @@ class PoolsView {
             </div>
         ` : '';
         
+        // Déterminer la catégorie du match (CFU, CFE, A1, etc.)
+        const category = this._extractCategory(match);
+        
+        // Badge CFU (styles inline complets)
+        const cfuBadge = category === 'CFU' ? `
+            <div class="match-badge badge-cfu" style="display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.25rem 0.6rem; border-radius: 6px; font-size: 0.7rem; font-weight: 700; font-family: 'Roboto', sans-serif; text-transform: uppercase; letter-spacing: 0.08em; background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%); color: #000; border: 2px solid #FFB700; box-shadow: 0 2px 8px rgba(255, 215, 0, 0.5), 0 0 15px rgba(255, 215, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.5); text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);">
+                CFU
+            </div>
+        ` : '';
+        
+        // Badge CFE (styles inline complets)
+        const cfeBadge = category === 'CFE' ? `
+            <div class="match-badge badge-cfe" style="display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.25rem 0.6rem; border-radius: 6px; font-size: 0.7rem; font-weight: 700; font-family: 'Roboto', sans-serif; text-transform: uppercase; letter-spacing: 0.08em; background: linear-gradient(135deg, #4A90E2 0%, #357ABD 100%); color: #FFF; border: 2px solid #2E5F8D; box-shadow: 0 2px 8px rgba(74, 144, 226, 0.5), 0 0 15px rgba(74, 144, 226, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.3); text-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);">
+                CFE
+            </div>
+        ` : '';
+        
         // Déterminer la couleur de fond selon le genre
         const genre = match.equipe1_genre || match.equipe2_genre;
         let bgGradient = 'linear-gradient(135deg, rgba(0, 85, 164, 0.08) 0%, rgba(0, 85, 164, 0.03) 100%)';
@@ -1159,15 +1139,31 @@ class PoolsView {
 
         const totalPenalties = Object.values(match.penalties || {}).reduce((sum, p) => sum + p, 0);
         const penaltyColor = totalPenalties > 10 ? '#EF4135' : totalPenalties > 5 ? '#FF9500' : '#27AE60';
+        
+        // Classes CSS pour CFU/CFE au lieu de styles inline
+        let cardClasses = `match-card-new ${statusClass}`;
+        if (category === 'CFU') {
+            cardClasses += ' match-cfu';
+        } else if (category === 'CFE') {
+            cardClasses += ' match-cfe';
+        }
+        
+        // Bordure gauche pour les matchs non planifiés (sauf CFU/CFE qui ont déjà une bordure spéciale)
+        let extraBorderStyle = '';
+        if (!isScheduled && category !== 'CFU' && category !== 'CFE') {
+            extraBorderStyle = 'border-left: 4px solid #EF4135;';
+        }
 
         return `
-            <div class="match-card-new ${statusClass}" data-match-id="${match.match_id}" style="background: white; border: 1px solid rgba(0, 85, 164, 0.15); border-radius: 10px; padding: 1rem; margin-bottom: 0.75rem; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06); transition: all 0.2s ease; ${!isScheduled ? 'border-left: 4px solid #EF4135;' : ''}">
+            <div class="${cardClasses}" data-match-id="${match.match_id}" style="background: white; border-radius: 10px; padding: 1rem; margin-bottom: 0.75rem; transition: all 0.2s ease; ${extraBorderStyle}">
                 <div class="match-card-new-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; padding-bottom: 0.5rem; border-bottom: 1px solid rgba(0, 85, 164, 0.1);">
-                    <div style="display: flex; gap: 0.5rem; align-items: center;">
+                    <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
                         <div class="match-card-new-status" style="display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.25rem 0.6rem; background: ${statusBg}; border-radius: 6px; border: 1px solid ${statusBorder};">
                             <span class="status-icon" style="font-size: 0.9rem;">${statusIcon}</span>
                             <span class="status-label" style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: ${statusColor}; font-family: 'Roboto', sans-serif;">${statusLabel}</span>
                         </div>
+                        ${cfuBadge}
+                        ${cfeBadge}
                         ${ententeBadge}
                     </div>
                     <div class="match-card-new-week" style="font-size: 0.75rem; font-weight: 800; color: #666; font-family: 'Roboto Mono', monospace; padding: 0.25rem 0.6rem; background: rgba(0, 85, 164, 0.08); border-radius: 6px; border: 1px solid rgba(0, 85, 164, 0.15);">
@@ -1205,11 +1201,11 @@ class PoolsView {
                     ${isScheduled ? `
                     <div class="footer-info location" style="display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.25rem 0.5rem; background: rgba(0, 85, 164, 0.06); border-radius: 6px; border: 1px solid rgba(0, 85, 164, 0.1);">
                         <span class="footer-icon" style="font-size: 0.85rem;">📍</span>
-                        <span style="font-weight: 600; color: #555; font-family: 'Roboto', sans-serif;">${gymnase?.nom || 'Non défini'}</span>
+                        <span style="font-weight: 600; color: #555; font-family: 'Roboto', sans-serif;">${gymnaseNom}</span>
                     </div>
                     <div class="footer-info time" style="display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.25rem 0.5rem; background: rgba(0, 85, 164, 0.06); border-radius: 6px; border: 1px solid rgba(0, 85, 164, 0.1);">
                         <span class="footer-icon" style="font-size: 0.85rem;">🕒</span>
-                        <span style="font-weight: 800; color: #555; font-family: 'Roboto Mono', monospace;">${match.jour || ''} ${match.horaire || ''}</span>
+                        <span style="font-weight: 800; color: #555; font-family: 'Roboto Mono', monospace;">${this._escapeHtml(match.jour || '')} ${this._escapeHtml(match.horaire || '')}</span>
                     </div>
                     ` : `
                     <div class="footer-info unscheduled-note" style="display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.25rem 0.5rem; background: rgba(239, 65, 53, 0.1); border-radius: 6px; border: 1px solid rgba(239, 65, 53, 0.25);">
@@ -1224,48 +1220,6 @@ class PoolsView {
                 </div>
             </div>
         `;
-    }
-    
-    /**
-     * Génère une carte de match riche en informations
-     */
-    _generateMatchCard(match, data, type) {
-        const gymnase = this.dataManager.getGymnaseById(match.gymnase);
-        
-        // Les données d'équipe sont dans le match (format v2.0)
-        const equipe1Nom = match.equipe1_nom_complet || match.equipe1_nom || 'Équipe 1';
-        const equipe2Nom = match.equipe2_nom_complet || match.equipe2_nom || 'Équipe 2';
-        
-        const totalPenalties = Object.values(match.penalties || {}).reduce((sum, p) => sum + p, 0);
-        const penaltyClass = totalPenalties > 10 ? 'high' : totalPenalties > 5 ? 'medium' : 'low';
-        
-        const statusClass = type === 'played' ? 'played' : 'upcoming';
-        const statusLabel = type === 'played' ? 'Terminé' : 'À venir';
-        
-        let html = `
-            <div class="match-card ${statusClass}" data-match-id="${match.match_id}">
-                <div class="match-time">
-                    ${match.jour || 'N/A'} - ${match.horaire || 'N/A'}
-                </div>
-                <div class="match-teams-mini">
-                    <span class="team">${equipe1Nom}</span>
-                    <span class="vs">vs</span>
-                    <span class="team">${equipe2Nom}</span>
-                </div>
-                <div class="match-venue">
-                    📍 ${gymnase?.nom || 'Lieu non défini'}
-                </div>
-                <div class="match-footer">
-                    <span class="match-status ${statusClass}">${statusLabel}</span>
-                    <span class="match-penalty-badge penalty-${penaltyClass}" 
-                          title="Pénalités totales">
-                        ${totalPenalties.toFixed(1)}
-                    </span>
-                </div>
-            </div>
-        `;
-        
-        return html;
     }
     
     /**
@@ -1297,7 +1251,7 @@ class PoolsView {
         });
         
         // Double-clic sur match pour éditer
-        const matchCards = this.container.querySelectorAll('.match-card, .match-card_new');
+        const matchCards = this.container.querySelectorAll('.match-card, .match-card-new');
         matchCards.forEach(card => {
             card.addEventListener('dblclick', (e) => {
                 const matchId = e.currentTarget.dataset.matchId;

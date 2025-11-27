@@ -14,6 +14,7 @@ import json
 from pycalendar.core.models import Solution, Match, Equipe, Creneau, Gymnase
 from pycalendar.core.config import Config
 from pycalendar.core.utils import determiner_genre_match
+from pycalendar.core.penalty_calculator import PenaltyCalculator
 
 
 class DataFormatter:
@@ -59,7 +60,7 @@ class DataFormatter:
             "config": DataFormatter._format_config(config),
             "entities": DataFormatter._format_entities(equipes, gymnases, solution, types_poules),
             "matches": DataFormatter._format_matches(solution, config),
-            "slots": DataFormatter._format_slots(creneaux_disponibles, solution, gymnases),
+            "slots": DataFormatter._format_slots(creneaux_disponibles, solution, gymnases, config),
             "statistics": DataFormatter._calculate_statistics(solution, equipes, gymnases),
         }
         
@@ -94,8 +95,6 @@ class DataFormatter:
         # Calculate hash of config for change detection
         config_str = json.dumps({
             "nb_semaines": config.nb_semaines,
-            "strategie": config.strategie,
-            "poids_indisponibilite": config.poids_indisponibilite,
         }, sort_keys=True)
         config_hash = hashlib.md5(config_str.encode()).hexdigest()
         
@@ -103,12 +102,9 @@ class DataFormatter:
             "hash": config_hash,
             "nb_semaines": config.nb_semaines,
             "semaine_min": config.semaine_min,
-            "strategie": config.strategie,
             "temps_max_secondes": config.temps_max_secondes,
+            "duree_match_minutes": config.duree_match_minutes,
             "constraints": {
-                "poids_indisponibilite": config.poids_indisponibilite,
-                "poids_capacite_gymnase": config.poids_capacite_gymnase,
-                "poids_equilibrage_charge": config.poids_equilibrage_charge,
                 "penalites_espacement_repos": config.penalites_espacement_repos,
                 "penalite_apres_horaire_min": config.penalite_apres_horaire_min,
                 "penalite_avant_horaire_min": config.penalite_avant_horaire_min,
@@ -260,6 +256,9 @@ class DataFormatter:
         
         Note: Compaction penalties are pool-level and not stored per-match.
         """
+        # Store all matches for PenaltyCalculator
+        all_matches = solution.matchs_planifies
+        
         # Build index of matches by team
         matches_by_team: Dict[str, List[Match]] = {}
         for match in solution.matchs_planifies:
@@ -305,6 +304,7 @@ class DataFormatter:
             team2_matches = matches_by_team.get(match.equipe2.id_unique, [])
             
             match.metadata["_penalty_context"] = {
+                "all_matches": all_matches,  # Required for PenaltyCalculator
                 "team1_matches": team1_matches,
                 "team2_matches": team2_matches,
                 "slot_matches": matches_by_slot.get(
@@ -359,15 +359,19 @@ class DataFormatter:
             "poule": match.poule,
             "priorite": match.priorite,  # Added priority field
             "genre": match_genre,  # Genre du match (M, F, ou X)
+            "championship_type": match.championship_type,  # Type de championnat (Acad, CFU, CFE, Autre)
         }
         
         if is_scheduled and match.creneau:
+            # IMPORTANT: Un match n'est "entente" QUE s'il n'a PAS de créneau
+            # Si le match a un créneau (gymnase + horaire), ce n'est JAMAIS une entente
+            # même si les institutions sont dans la liste des ententes
             match_data.update({
                 "semaine": match.creneau.semaine,
                 "horaire": match.creneau.horaire,
                 "gymnase": match.creneau.gymnase,
                 "is_fixed": match.metadata.get("is_fixed", False),
-                "is_entente": match.metadata.get("is_entente", False),
+                "is_entente": False,  # Match avec créneau = PAS une entente
                 "is_external": match.metadata.get("is_external", False),
             })
             
@@ -431,40 +435,49 @@ class DataFormatter:
                 }
         else:
             # Unscheduled match
-            match_data["reason"] = match.metadata.get("unscheduled_reason", "Aucun créneau disponible")
+            # IMPORTANT: Un match "entente" = match sans créneau entre institutions en entente
+            # Ces matchs doivent être considérés comme "planifiés" (joués en dehors du calendrier)
+            is_entente = match.metadata.get("is_entente", False)
+            
+            match_data["reason"] = match.metadata.get("unscheduled_reason", "Match en entente" if is_entente else "Aucun créneau disponible")
             match_data["constraints_violated"] = match.metadata.get("constraints_violated", [])
-            match_data["is_entente"] = match.metadata.get("is_entente", False)
+            match_data["is_entente"] = is_entente
         
         return match_data
     
     @staticmethod
     def _calculate_match_penalties(match: Match, config: Config) -> Dict[str, float]:
         """
-        Calculate penalties for a scheduled match.
+        Calculate penalties for a scheduled match using PenaltyCalculator.
         
-        This method provides the infrastructure for penalty calculation.
-        Each penalty type has its own calculation method for clarity and maintainability.
+        This ensures consistency between the solver and the interface by using
+        the same penalty calculation logic.
         
         Args:
             match: The match to calculate penalties for
             config: Configuration with penalty weights
             
         Returns:
-            Dictionary with all penalty types and total
+            Dictionary with all 9 penalty types and total
         """
-        penalties = {
-            "total": 0.0,
-            "horaire_prefere": DataFormatter._calculate_horaire_prefere_penalty(match, config),
-            "espacement": DataFormatter._calculate_espacement_penalty(match, config),
-            "indisponibilite": DataFormatter._calculate_indisponibilite_penalty(match, config),
-            "compaction": DataFormatter._calculate_compaction_penalty(match, config),
-            "overlap": DataFormatter._calculate_overlap_penalty(match, config),
-        }
+        # Get pre-calculated context (all matches list)
+        context = match.metadata.get("_penalty_context") if match.metadata else None
+        if not context:
+            # Fallback: create minimal context
+            all_matches = [match]
+        else:
+            # Extract all matches from context
+            all_matches = context.get("all_matches", [match])
         
-        # Calculate total
-        penalties["total"] = sum(v for k, v in penalties.items() if k != "total")
+        # Use PenaltyCalculator for consistent calculation
+        calculator = PenaltyCalculator(config, all_matches)
+        penalties_dict = calculator.calculate_match_penalties(match)
         
-        return penalties
+        # Return the complete penalties dictionary
+        # It already contains: horaire_prefere, gymnase_prefere, niveau_gymnase,
+        # espacement, compaction, overlap_institution, aller_retour, 
+        # contrainte_temporelle, guidance_qualite, and total
+        return penalties_dict
     
     @staticmethod
     def _calculate_horaire_prefere_penalty(match: Match, config: Config) -> float:
@@ -611,7 +624,7 @@ class DataFormatter:
         if not match.creneau:
             return 0.0
         
-        penalty_weight = getattr(config, 'poids_indisponibilite', 10000)
+        penalty_weight = 10000  # Hard constraint weight for unavailability
         semaine = match.creneau.semaine
         horaire = match.creneau.horaire
         
@@ -726,17 +739,56 @@ class DataFormatter:
     def _format_slots(
         creneaux_disponibles: Optional[List[Creneau]],
         solution: Solution,
-        gymnases: Optional[List[Gymnase]] = None
+        gymnases: Optional[List[Gymnase]] = None,
+        config: Optional[Config] = None
     ) -> Dict[str, List[Dict]]:
-        """Format slot data (available and occupied)."""
-        from collections import Counter
+        """Format slot data (available and occupied).
         
-        # Compter le nombre de matchs par créneau (pour gérer la capacité)
+        IMPORTANT: Cette fonction prend en compte la durée réelle des matchs (configurable).
+        Un match à 15h occupe un terrain de 15h à 16h30 (handball) ou 17h (volley), donc il 
+        réduit la capacité disponible des créneaux adjacents.
+        """
+        from collections import Counter, defaultdict
+        
+        # Récupérer la durée d'un match depuis la config (défaut: 90 min)
+        match_duration_minutes = config.duree_match_minutes if config else 90
+        
+        # Helper function: convertir horaire "14h00" en minutes depuis minuit
+        def horaire_to_minutes(horaire: str) -> int:
+            """Convertit '14h00' en 840 (14*60)"""
+            if not horaire or 'h' not in horaire:
+                return 0
+            parts = horaire.lower().split('h')
+            heures = int(parts[0])
+            minutes = int(parts[1]) if len(parts) > 1 and parts[1] else 0
+            return heures * 60 + minutes
+        
+        # Helper function: vérifier si deux créneaux se chevauchent
+        def creneaux_se_chevauchent(horaire_match: str, horaire_creneau: str) -> bool:
+            """
+            Vérifie si un match à horaire_match chevauche le créneau horaire_creneau.
+            Exemple: Match à 15h (15h-16h30) chevauche les créneaux 14h, 16h mais pas 18h.
+            """
+            match_start = horaire_to_minutes(horaire_match)
+            match_end = match_start + match_duration_minutes
+            
+            creneau_start = horaire_to_minutes(horaire_creneau)
+            creneau_end = creneau_start + 120  # Créneaux de 2h (120 minutes)
+            
+            # Chevauchement si: début_match < fin_créneau ET fin_match > début_créneau
+            return match_start < creneau_end and match_end > creneau_start
+        
+        # Compter le nombre de matchs par créneau (horaire exact)
         slot_occupation = Counter()
         occupied_with_matches = {}  # Pour garder l'info des matchs occupant les slots
         
+        # Compter l'occupation réelle par créneau en tenant compte des chevauchements
+        # Format: {(gymnase, semaine, horaire_creneau): nb_terrains_occupes}
+        real_occupation = defaultdict(int)
+        
         for idx, match in enumerate(solution.matchs_planifies):
             if match.creneau:
+                # Occupation du créneau exact où le match est planifié
                 slot_key = (match.creneau.gymnase, match.creneau.semaine, match.creneau.horaire)
                 slot_occupation[slot_key] += 1
                 
@@ -752,6 +804,19 @@ class DataFormatter:
                     "match_id": match_id,
                 }
         
+        # Calculer l'occupation réelle avec chevauchements
+        if creneaux_disponibles:
+            for idx, match in enumerate(solution.matchs_planifies):
+                if match.creneau:
+                    # Pour chaque créneau disponible, vérifier si ce match le chevauche
+                    for creneau in creneaux_disponibles:
+                        if (creneau.gymnase == match.creneau.gymnase and 
+                            creneau.semaine == match.creneau.semaine):
+                            # Vérifier le chevauchement temporel
+                            if creneaux_se_chevauchent(match.creneau.horaire, creneau.horaire):
+                                key = (creneau.gymnase, creneau.semaine, creneau.horaire)
+                                real_occupation[key] += 1
+        
         available = []
         occupied = list(occupied_with_matches.values())
         
@@ -765,13 +830,15 @@ class DataFormatter:
             
             for creneau in creneaux_disponibles:
                 slot_key = (creneau.gymnase, creneau.semaine, creneau.horaire)
-                nb_matchs_occupes = slot_occupation.get(slot_key, 0)
+                
+                # Utiliser l'occupation réelle (avec chevauchements) au lieu de l'occupation simple
+                nb_matchs_occupes = real_occupation.get(slot_key, 0)
                 
                 # Récupérer la capacité du gymnase (défaut: 1)
                 capacite = gymnase_capacities.get(creneau.gymnase, 1)
                 
                 # Calculer le nombre de slots disponibles
-                nb_slots_disponibles = capacite - nb_matchs_occupes
+                nb_slots_disponibles = max(0, capacite - nb_matchs_occupes)
                 
                 # Générer les slots disponibles
                 for i in range(nb_slots_disponibles):
@@ -796,21 +863,39 @@ class DataFormatter:
         equipes: List[Equipe],
         gymnases: List[Gymnase]
     ) -> Dict[str, Any]:
-        """Calculate comprehensive statistics."""
+        """Calculate comprehensive statistics.
+        
+        IMPORTANT: Les matchs "entente" (matchs sans créneau entre institutions en entente)
+        sont comptés comme PLANIFIÉS car ils seront joués en dehors du calendrier.
+        """
+        
+        # Compter les matchs entente (non planifiés mais considérés comme joués)
+        nb_matchs_entente = sum(1 for m in solution.matchs_non_planifies 
+                                if m.metadata.get("is_entente", False))
+        
+        # Total de matchs réellement planifiés = matchs avec créneau + matchs entente
+        nb_reellement_planifies = len(solution.matchs_planifies) + nb_matchs_entente
+        
+        # Total de matchs NON planifiés = matchs sans créneau (excluant les ententes)
+        nb_reellement_non_planifies = len(solution.matchs_non_planifies) - nb_matchs_entente
         
         total_matchs = len(solution.matchs_planifies) + len(solution.matchs_non_planifies)
+        
+        # Taux de planification corrigé (inclut les ententes)
+        taux_planification = (nb_reellement_planifies / total_matchs * 100) if total_matchs > 0 else 0.0
         
         # Global statistics
         nb_matchs_fixes = sum(1 for m in solution.matchs_planifies if m.metadata.get("is_fixed", False))
         nb_matchs_auto = len(solution.matchs_planifies) - nb_matchs_fixes
         
         global_stats = {
-            "taux_planification": solution.taux_planification(),
+            "taux_planification": taux_planification,  # Taux corrigé incluant les ententes
             "score_total": float(solution.score),
             "score_moyen_par_match": float(solution.score / total_matchs) if total_matchs > 0 else 0.0,
             "nb_matchs_total": total_matchs,
-            "nb_matchs_planifies": len(solution.matchs_planifies),
-            "nb_matchs_non_planifies": len(solution.matchs_non_planifies),
+            "nb_matchs_planifies": nb_reellement_planifies,  # Inclut les ententes
+            "nb_matchs_non_planifies": nb_reellement_non_planifies,  # Exclut les ententes
+            "nb_matchs_entente": nb_matchs_entente,  # Nouveau : nombre de matchs entente
             "nb_matchs_fixes": nb_matchs_fixes,
             "nb_matchs_auto": nb_matchs_auto,
         }
@@ -857,16 +942,28 @@ class DataFormatter:
     
     @staticmethod
     def _stats_par_poule(solution: Solution) -> Dict[str, Dict[str, Any]]:
-        """Calculate statistics per pool."""
-        stats = defaultdict(lambda: {"nb_matchs_planifies": 0, "nb_matchs_non_planifies": 0})
+        """Calculate statistics per pool.
         
+        IMPORTANT: Les matchs "entente" sont comptés comme PLANIFIÉS.
+        """
+        stats = defaultdict(lambda: {"nb_matchs_planifies": 0, "nb_matchs_non_planifies": 0, "nb_matchs_entente": 0})
+        
+        # Matchs avec créneau = planifiés
         for match in solution.matchs_planifies:
             stats[match.poule]["nb_matchs_planifies"] += 1
         
+        # Matchs sans créneau : distinguer ententes (= planifiés) vs vrais non-planifiés
         for match in solution.matchs_non_planifies:
-            stats[match.poule]["nb_matchs_non_planifies"] += 1
+            is_entente = match.metadata.get("is_entente", False)
+            if is_entente:
+                # Match entente = considéré comme planifié
+                stats[match.poule]["nb_matchs_planifies"] += 1
+                stats[match.poule]["nb_matchs_entente"] += 1
+            else:
+                # Vrai match non planifié
+                stats[match.poule]["nb_matchs_non_planifies"] += 1
         
-        # Calculate completion rate
+        # Calculate completion rate (inclut les ententes dans les planifiés)
         for poule in stats:
             total = stats[poule]["nb_matchs_planifies"] + stats[poule]["nb_matchs_non_planifies"]
             stats[poule]["taux_completion"] = (stats[poule]["nb_matchs_planifies"] / total * 100) if total > 0 else 0.0
@@ -929,14 +1026,18 @@ class DataFormatter:
     
     @staticmethod
     def _stats_par_equipe(solution: Solution, equipes: List[Equipe]) -> Dict[str, Dict[str, Any]]:
-        """Calculate statistics per team."""
+        """Calculate statistics per team.
+        
+        IMPORTANT: Les matchs "entente" sont comptés comme PLANIFIÉS.
+        """
         stats = defaultdict(lambda: {
             "nb_matchs_planifies": 0,
             "nb_matchs_non_planifies": 0,
+            "nb_matchs_entente": 0,
             "horaires_repartition": defaultdict(int),
         })
         
-        # Count scheduled matches
+        # Count scheduled matches (avec créneau)
         for match in solution.matchs_planifies:
             for equipe in [match.equipe1, match.equipe2]:
                 equipe_id = equipe.id_unique
@@ -944,11 +1045,18 @@ class DataFormatter:
                 if match.creneau:
                     stats[equipe_id]["horaires_repartition"][match.creneau.horaire] += 1
         
-        # Count unscheduled matches
+        # Count unscheduled matches : distinguer ententes vs vrais non-planifiés
         for match in solution.matchs_non_planifies:
+            is_entente = match.metadata.get("is_entente", False)
             for equipe in [match.equipe1, match.equipe2]:
                 equipe_id = equipe.id_unique
-                stats[equipe_id]["nb_matchs_non_planifies"] += 1
+                if is_entente:
+                    # Match entente = considéré comme planifié
+                    stats[equipe_id]["nb_matchs_planifies"] += 1
+                    stats[equipe_id]["nb_matchs_entente"] += 1
+                else:
+                    # Vrai match non planifié
+                    stats[equipe_id]["nb_matchs_non_planifies"] += 1
         
         # Convert defaultdict to dict
         result = {}
@@ -956,6 +1064,7 @@ class DataFormatter:
             result[equipe_id] = {
                 "nb_matchs_planifies": data["nb_matchs_planifies"],
                 "nb_matchs_non_planifies": data["nb_matchs_non_planifies"],
+                "nb_matchs_entente": data["nb_matchs_entente"],
                 "horaires_repartition": dict(data["horaires_repartition"]),
             }
         

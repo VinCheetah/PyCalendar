@@ -25,7 +25,7 @@ import pandas as pd
 from dataclasses import dataclass
 
 # Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 
 from pycalendar.core.config import Config
 from pycalendar.core.models import Creneau, Gymnase, Match

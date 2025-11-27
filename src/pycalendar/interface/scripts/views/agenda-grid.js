@@ -2,12 +2,23 @@
  * AgendaGridView - Vue agenda avec axe temporel vertical et colonnes par gymnase
  * 
  * Architecture:
- * - Axe vertical: Horaires de 13h à 23h
- * - Colonnes horizontales: Une par gymnase
+ * - Axe vertical: Horaires de 14h à 23h
+ * - Colonnes horizontales: Une par gymnase (mode week) ou par journée (mode venue)
  * - Matchs positionnés absolument selon leur horaire
  * - Matchs simultanés placés côte à côte
  */
 class AgendaGridView {
+    // ═══════════════════════════════════════════════════════════════
+    // CONSTANTES DE CONFIGURATION
+    // ═══════════════════════════════════════════════════════════════
+    static MIN_HOUR = 14;           // Heure de début de l'affichage
+    static MAX_HOUR = 23;           // Heure de fin de l'affichage
+    static PIXELS_PER_HOUR = 120;   // Hauteur en pixels pour 1 heure
+    static MATCH_DURATION_HOURS = 2; // Durée d'affichage d'un match
+    static TIME_COLUMN_WIDTH = 85;  // Largeur de la colonne des horaires
+    static COLUMN_MIN_WIDTH = 200;  // Largeur minimale d'une colonne
+    static COLUMN_MARGIN = 4;       // Marge entre les colonnes
+    
     constructor(dataManager, container) {
         this.dataManager = dataManager;
         this.container = container;
@@ -48,11 +59,11 @@ class AgendaGridView {
         this.currentVenueIndex = 0;
         this.venues = []; // Liste des gymnases disponibles
         
-        // Configuration des colonnes
-        this.columnMinWidth = 200; // Largeur minimale par colonne en pixels
-        
         // Date de début du championnat (J1 = jeudi 16 octobre 2025)
         this.championshipStartDate = new Date(2025, 9, 16); // Mois 9 = octobre (0-indexed)
+        
+        // Stockage des event listeners pour nettoyage
+        this._eventListeners = [];
     }
     
     /**
@@ -370,28 +381,36 @@ class AgendaGridView {
     /**
      * Organise les matchs par gymnase
      * @param {Array} matches - Liste des matchs
-     * @returns {Array} Tableau d'objets {venueName, matches[]}
+     * @returns {Array} Tableau d'objets {venueId, venueName, displayName, matches[]}
      */
     organizeMatchesByVenue(matches) {
         const venueMap = new Map();
+        const data = this.dataManager.getData();
+        const venuesData = data?.entities?.venues || {};
         
         matches.forEach(match => {
-            const venueName = match.gymnase;
-            if (!venueName) return;
+            const venueId = match.gymnase;
+            if (!venueId) return;
             
-            if (!venueMap.has(venueName)) {
-                venueMap.set(venueName, {
-                    venueName: venueName,
+            if (!venueMap.has(venueId)) {
+                // Récupérer le nom formaté depuis les données
+                const venueInfo = venuesData[venueId];
+                const displayName = venueInfo?.nom || venueId;
+                
+                venueMap.set(venueId, {
+                    venueId: venueId,
+                    venueName: venueId, // ID brut (pour compatibilité)
+                    displayName: displayName, // Nom formaté
                     matches: []
                 });
             }
             
-            venueMap.get(venueName).matches.push(match);
+            venueMap.get(venueId).matches.push(match);
         });
         
-        // Convertir en tableau et trier alphabétiquement
+        // Convertir en tableau et trier par nom d'affichage
         const venues = Array.from(venueMap.values()).sort((a, b) => 
-            a.venueName.localeCompare(b.venueName)
+            a.displayName.localeCompare(b.displayName)
         );
         
         return venues;
@@ -496,7 +515,7 @@ class AgendaGridView {
                 
                 const currentVenue = this.venues[this.currentVenueIndex];
                 matchesToDisplay = currentVenue.matches;
-                console.log('🔍 [AgendaGrid] Gymnase courant:', currentVenue.key, 'matchs:', matchesToDisplay.length);
+                console.log('🔍 [AgendaGrid] Gymnase courant:', currentVenue.displayName || currentVenue.venueName, 'matchs:', matchesToDisplay.length);
             }
             
             // ═══════════════════════════════════════════════════════════════
@@ -540,12 +559,12 @@ class AgendaGridView {
      * Génère la vue agenda complète avec axe temporel et colonnes de gymnases
      */
     generateAgendaView(matches, data) {
-        // Paramètres de temps
-        const minHour = 14;
-        const maxHour = 23;
-        const pixelsPerHour = 120;
-        const matchDuration = 2; // Durée réelle du match
-        const matchDisplayHeight = 2; // Hauteur affichée = durée complète (2h)
+        // Utiliser les constantes de classe
+        const minHour = AgendaGridView.MIN_HOUR;
+        const maxHour = AgendaGridView.MAX_HOUR;
+        const pixelsPerHour = AgendaGridView.PIXELS_PER_HOUR;
+        const matchDuration = AgendaGridView.MATCH_DURATION_HOURS;
+        const matchDisplayHeight = AgendaGridView.MATCH_DURATION_HOURS;
         const totalHeight = (maxHour - minHour) * pixelsPerHour;
         
         // ═══════════════════════════════════════════════════════════════
@@ -616,8 +635,11 @@ class AgendaGridView {
             
             console.log('🔍 [AgendaGrid] Mode Gymnase - Journées:', weeks.length);
             
+            // Récupérer l'ID du gymnase courant pour filtrer les créneaux libres
+            const currentVenueId = this.venues[this.currentVenueIndex]?.venueId;
+            
             columnsHTML = weeks.map(week => {
-                const widthInfo = columnWidths.get(week.weekNumber) || { width: this.columnMinWidth, widthPerSlot: 200 };
+                const widthInfo = columnWidths.get(week.weekNumber) || { width: AgendaGridView.COLUMN_MIN_WIDTH, widthPerSlot: 200 };
                 return this.generateWeekColumnWithWidth(
                     week,
                     matchesByWeek.get(week.weekNumber) || [],
@@ -625,10 +647,12 @@ class AgendaGridView {
                     widthInfo.width,
                     widthInfo.widthPerSlot,
                     minHour,
+                    maxHour,
                     pixelsPerHour,
                     matchDisplayHeight,
                     totalHeight,
-                    false  // Pas de créneaux libres pour le mode gymnase (colonnes = journées)
+                    this.showEmptySlots,  // Activer les créneaux libres si demandé
+                    currentVenueId       // ID du gymnase pour filtrer les créneaux
                 );
             }).join('');
             
@@ -687,7 +711,7 @@ class AgendaGridView {
                 <!-- Rangée des en-têtes de colonnes (au-dessus de la grille) -->
                 <div class="agenda-headers-row" style="display: flex; flex-direction: row; background: #fafbfc; padding: 0.5rem 0.5rem 0 0.5rem; overflow: hidden;">
                     <!-- Espace pour la colonne des horaires -->
-                    <div style="width: 85px; flex-shrink: 0; margin-right: 4px;"></div>
+                    <div style="width: ${AgendaGridView.TIME_COLUMN_WIDTH}px; flex-shrink: 0; margin-right: ${AgendaGridView.COLUMN_MARGIN}px;"></div>
                     <!-- Container scrollable pour les en-têtes -->
                     <div class="agenda-headers-scroll" style="overflow-x: auto; overflow-y: hidden; flex: 1;">
                         <style>
@@ -709,7 +733,7 @@ class AgendaGridView {
                 <div class="agenda-scroll-wrapper">
                     <div class="agenda-grid-container" style="display:flex; flex-direction:row; background:#fafbfc; padding:0.5rem;">
                         <!-- Colonne des horaires (fixée à gauche) -->
-                        <div class="time-column-fixed" style="width: 85px; flex-shrink: 0; background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); border-right: 3px solid #667eea; box-shadow: 2px 0 8px rgba(0,0,0,0.06); margin-right: 4px; position: sticky; left: 0; z-index: 10;">
+                        <div class="time-column-fixed" style="width: ${AgendaGridView.TIME_COLUMN_WIDTH}px; flex-shrink: 0; background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); border-right: 3px solid #667eea; box-shadow: 2px 0 8px rgba(0,0,0,0.06); margin-right: ${AgendaGridView.COLUMN_MARGIN}px; position: sticky; left: 0; z-index: 10;">
                             ${this.generateTimeScale(minHour, maxHour, pixelsPerHour, totalHeight)}
                         </div>
                         
@@ -774,43 +798,63 @@ class AgendaGridView {
     }
 
     /**
-     * Calcule le nombre maximum de matchs simultanés dans chaque gymnase
+     * Calcule le nombre maximum de colonnes nécessaires pour chaque groupe
+     * en utilisant l'algorithme de slot assignment pour gérer tous les chevauchements.
+     * 
+     * Contrairement à l'ancien calculateMaxSimultaneous (sweep line), cette méthode calcule
+     * le nombre MINIMUM de colonnes nécessaires pour afficher tous les matchs sans
+     * chevauchement visuel, même pour des chevauchements partiels.
+     * 
+     * Exemple :
+     * - Match A : 14h-16h
+     * - Match B : 15h-17h  
+     * - Match C : 16h-18h
+     * → Nécessite 3 colonnes (A, B, C ne peuvent pas partager la même position)
+     * 
+     * @param {Map} matchesByGroup - Map(groupId -> matches[])
+     * @returns {Map} Map(groupId -> nombre de colonnes nécessaires)
      */
-    calculateMaxSimultaneousMatches(matchesByVenue) {
-        const maxSimultaneous = new Map();
+    calculateMaxSimultaneous(matchesByGroup) {
+        const maxColumns = new Map();
         
-        matchesByVenue.forEach((matches, venueId) => {
-            let max = 1;
+        matchesByGroup.forEach((matches, groupId) => {
+            if (matches.length === 0) {
+                maxColumns.set(groupId, 0);
+                return;
+            }
             
-            // Pour chaque match, vérifier combien de matchs se chevauchent
-            matches.forEach(match1 => {
-                const time1 = this.parseTime(match1.horaire);
-                if (!time1) return;
-                
-                const end1 = time1 + 2; // durée de 2h
-                
-                let simultaneous = 1;
-                matches.forEach(match2 => {
-                    if (match1.match_id === match2.match_id) return;
-                    
-                    const time2 = this.parseTime(match2.horaire);
-                    if (!time2) return;
-                    
-                    const end2 = time2 + 2;
-                    
-                    // Vérifier le chevauchement
-                    if (!(end1 <= time2 || time1 >= end2)) {
-                        simultaneous++;
-                    }
-                });
-                
-                max = Math.max(max, simultaneous);
+            // Utiliser la logique d'assignMatchSlots pour calculer les slots
+            const slots = this.assignMatchSlots(matches);
+            
+            // Le nombre de colonnes nécessaires = max(slot) + 1
+            let maxSlot = 0;
+            slots.forEach(slot => {
+                maxSlot = Math.max(maxSlot, slot);
             });
             
-            maxSimultaneous.set(venueId, max);
+            const columnsNeeded = maxSlot + 1;
+            maxColumns.set(groupId, columnsNeeded);
+            
+            console.log(`📊 [calculateMaxSimultaneous] Groupe ${groupId}: ${matches.length} matchs, ${columnsNeeded} colonnes nécessaires`);
         });
         
-        return maxSimultaneous;
+        return maxColumns;
+    }
+
+    /**
+     * Calcule le nombre maximum de matchs simultanés dans chaque gymnase
+     * @deprecated Utiliser calculateMaxSimultaneous à la place
+     */
+    calculateMaxSimultaneousMatches(matchesByVenue) {
+        return this.calculateMaxSimultaneous(matchesByVenue);
+    }
+
+    /**
+     * Calcule le nombre maximum de matchs simultanés dans chaque journée
+     * @deprecated Utiliser calculateMaxSimultaneous à la place
+     */
+    calculateMaxSimultaneousMatchesByWeek(matchesByWeek) {
+        return this.calculateMaxSimultaneous(matchesByWeek);
     }
 
     /**
@@ -901,13 +945,12 @@ class AgendaGridView {
 
     /**
      * Calcule les largeurs de colonnes de manière proportionnelle
-     * avec un minimum de 200px par colonne
      * 
      * @param {Map} maxSimultaneousMap - Map(id -> nombre max de matchs simultanés)
      * @returns {Map} Map(id -> {width: number, widthPerSlot: number})
      */
     calculateColumnWidths(maxSimultaneousMap) {
-        const minColumnWidth = this.columnMinWidth; // 200px
+        const minColumnWidth = AgendaGridView.COLUMN_MIN_WIDTH;
         const padding = 8; // Réduit de 16 à 8 pour moins d'espace blanc
         const widths = new Map();
         
@@ -934,7 +977,7 @@ class AgendaGridView {
             // Calculer la largeur totale de la colonne
             let columnWidth = (maxSimultaneous * widthPerSlot) + padding;
             
-            // Appliquer le minimum de 200px
+            // Appliquer le minimum
             columnWidth = Math.max(columnWidth, minColumnWidth);
             
             widths.set(id, {
@@ -993,45 +1036,8 @@ class AgendaGridView {
     }
 
     /**
-     * Calcule le nombre maximum de matchs simultanés dans chaque journée
-     */
-    calculateMaxSimultaneousMatchesByWeek(matchesByWeek) {
-        const maxSimultaneous = new Map();
-        
-        matchesByWeek.forEach((matches, weekNum) => {
-            let max = 1;
-            
-            matches.forEach(match1 => {
-                const time1 = this.parseTime(match1.horaire);
-                if (!time1) return;
-                
-                const end1 = time1 + 2;
-                let simultaneous = 1;
-                
-                matches.forEach(match2 => {
-                    if (match1.match_id === match2.match_id) return;
-                    
-                    const time2 = this.parseTime(match2.horaire);
-                    if (!time2) return;
-                    
-                    const end2 = time2 + 2;
-                    
-                    if (!(end1 <= time2 || time1 >= end2)) {
-                        simultaneous++;
-                    }
-                });
-                
-                max = Math.max(max, simultaneous);
-            });
-            
-            maxSimultaneous.set(weekNum, max);
-        });
-        
-        return maxSimultaneous;
-    }
-
-    /**
      * Génère une colonne pour une journée (mode gymnase)
+     * @deprecated Cette méthode n'est plus utilisée, utiliser generateWeekColumnWithWidth
      */
     generateWeekColumn(week, matches, maxSimultaneous, minHour, pixelsPerHour, matchDuration, totalHeight) {
         // Largeur adaptative basée sur le nombre max de matchs simultanés
@@ -1049,7 +1055,7 @@ class AgendaGridView {
         }
         
         const padding = 4;
-        const columnWidth = Math.max(this.columnMinWidth, (maxSimultaneous * widthPerSlot) + padding);
+        const columnWidth = Math.max(AgendaGridView.COLUMN_MIN_WIDTH, (maxSimultaneous * widthPerSlot) + padding);
         const weekDates = this.getWeekDates(week.weekNumber);
         
         console.log(`🔍 [Week ${week.weekNumber}] maxSimultaneous: ${maxSimultaneous}, widthPerSlot: ${widthPerSlot}px, columnWidth: ${columnWidth}px`);
@@ -1058,7 +1064,7 @@ class AgendaGridView {
             <div class="week-column" 
                  data-week="${week.weekNumber}"
                  data-max-simultaneous="${maxSimultaneous}"
-                 style="width: ${columnWidth}px; flex-shrink: 0; margin-right: 4px;">
+                 style="width: ${columnWidth}px; flex-shrink: 0; margin-right: ${AgendaGridView.COLUMN_MARGIN}px;">
                 <!-- En-tête de la journée -->
                 <div class="column-header week-header">
                     <div class="column-title">${week.label}</div>
@@ -1080,19 +1086,26 @@ class AgendaGridView {
     /**
      * Génère une colonne pour une journée avec largeur personnalisée (mode gymnase)
      */
-    generateWeekColumnWithWidth(week, matches, maxSimultaneous, columnWidth, widthPerSlot, minHour, pixelsPerHour, matchDuration, totalHeight) {
+    generateWeekColumnWithWidth(week, matches, maxSimultaneous, columnWidth, widthPerSlot, minHour, maxHour, pixelsPerHour, matchDuration, totalHeight, showEmptySlots = false, venueId = null) {
         const weekDates = this.getWeekDates(week.weekNumber);
         
-        console.log(`🔍 [Week ${week.weekNumber}] maxSimultaneous: ${maxSimultaneous}, widthPerSlot: ${widthPerSlot}px, columnWidth: ${columnWidth}px`);
+        console.log(`🔍 [Week ${week.weekNumber}] maxSimultaneous: ${maxSimultaneous}, widthPerSlot: ${widthPerSlot}px, columnWidth: ${columnWidth}px, showEmptySlots: ${showEmptySlots}`);
+        
+        // Générer les créneaux libres si demandé (en mode venue avec venueId fourni)
+        let emptySlotsHTML = '';
+        if (showEmptySlots && venueId) {
+            emptySlotsHTML = this.generateEmptySlotsForWeek(matches, venueId, week.weekNumber, minHour, maxHour, pixelsPerHour, widthPerSlot);
+        }
         
         return `
             <div class="week-column" 
                  data-week="${week.weekNumber}"
                  data-max-simultaneous="${maxSimultaneous}"
-                 style="width: ${columnWidth}px; flex-shrink: 0; background: linear-gradient(180deg, #ffffff 0%, #f8f9fa 100%); border-right: 2px solid #e9ecef; margin-right: 4px; border-radius: 0 0 8px 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
+                 style="width: ${columnWidth}px; flex-shrink: 0; background: linear-gradient(180deg, #ffffff 0%, #f8f9fa 100%); border-right: 2px solid #e9ecef; margin-right: ${AgendaGridView.COLUMN_MARGIN}px; border-radius: 0 0 8px 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
                 
-                <!-- Corps avec les matchs (sans en-tête) -->
+                <!-- Corps avec les matchs et créneaux libres (sans en-tête) -->
                 <div class="week-body" style="height: ${totalHeight}px; position: relative; background-image: repeating-linear-gradient(to bottom, transparent 0, transparent 119px, rgba(102, 126, 234, 0.08) 119px, rgba(102, 126, 234, 0.08) 120px);">
+                    ${emptySlotsHTML}
                     ${this.generateWeekMatches(matches, minHour, pixelsPerHour, matchDuration, maxSimultaneous, widthPerSlot)}
                 </div>
             </div>
@@ -1210,7 +1223,7 @@ class AgendaGridView {
         } else if (this.displayMode === 'venue') {
             // MODE GYMNASE: Naviguer entre BESSON, LAENNEC, DESCARTES...
             const currentVenue = this.venues[this.currentVenueIndex];
-            const venueName = currentVenue.key;
+            const venueName = currentVenue.displayName || currentVenue.venueName;
             
             const prevDisabled = this.currentVenueIndex === 0 ? 'disabled' : '';
             const nextDisabled = this.currentVenueIndex === this.venues.length - 1 ? 'disabled' : '';
@@ -1266,80 +1279,20 @@ class AgendaGridView {
                     ${navigationContent}
                 </div>
                 
-                <!-- Section droite: Informations horaires et version -->
+                <!-- Section droite: Informations horaires -->
                 <div class="nav-section nav-right" style="display: flex; align-items: center; gap: 1rem; min-width: 250px; justify-content: flex-end;">
                     <div class="nav-info-group" style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; background: rgba(102, 126, 234, 0.05); border-radius: 8px; transition: all 0.2s ease;">
                         <span class="nav-icon" style="font-size: 1.25rem;">🕒</span>
                         <span class="nav-label" style="font-size: 0.85rem; color: #6c757d; font-weight: 600;">Horaires</span>
                         <span class="nav-value" style="font-size: 1rem; font-weight: 700; color: #667eea;">14h - 23h</span>
                     </div>
-                    <div class="nav-version-badge" style="display: flex; align-items: center; gap: 0.35rem; padding: 0.5rem 1rem; background: linear-gradient(135deg, #667eea, #764ba2); color: white; border-radius: 20px; font-weight: 700; box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);">
-                        <span class="version-icon" style="font-size: 1rem;">✨</span>
-                        <span class="version-text" style="font-size: 0.85rem;">v2.0</span>
-                    </div>
                 </div>
             </div>
         `;
     }
     
     /**
-     * Génère la toolbar avec statistiques et navigation
-     * @deprecated Utiliser generateNavigationBar à la place (ÉTAPE 1)
-     */
-    generateToolbar(matches, venues, data) {
-        const totalVenues = venues.length;
-        const totalMatches = matches.length;
-        
-        // Info sur la semaine courante
-        const currentWeek = this.weeks[this.currentWeekIndex];
-        const weekLabel = this.formatWeekLabel(currentWeek);
-        
-        // Boutons de navigation
-        const prevDisabled = this.currentWeekIndex === 0 ? 'disabled' : '';
-        const nextDisabled = this.currentWeekIndex === this.weeks.length - 1 ? 'disabled' : '';
-        
-        return `
-            <div class="agenda-toolbar">
-                <div class="toolbar-left">
-                    <span class="stat-item">
-                        <span class="stat-icon">🏟️</span>
-                        <strong>${totalVenues}</strong> gymnase${totalVenues > 1 ? 's' : ''}
-                    </span>
-                </div>
-                
-                <div class="toolbar-center">
-                    <div class="week-navigation">
-                        <button id="prev-week" class="week-nav-btn" ${prevDisabled}>
-                            ◀ Semaine précédente
-                        </button>
-                        <div class="current-week-info">
-                            <div class="week-label">${weekLabel}</div>
-                            <div class="week-stats">
-                                <span class="stat-icon">🎯</span>
-                                <strong>${totalMatches}</strong> match${totalMatches > 1 ? 's' : ''}
-                            </div>
-                        </div>
-                        <button id="next-week" class="week-nav-btn" ${nextDisabled}>
-                            Semaine suivante ▶
-                        </button>
-                    </div>
-                </div>
-                
-                <div class="toolbar-right">
-                    <span class="stat-item">
-                        <span class="stat-icon">🕒</span>
-                        13h - 23h
-                    </span>
-                    <span class="stat-item" style="background: linear-gradient(135deg, #4ade80, #22c55e); color: white; font-size: 0.75rem; padding: 0.4rem 0.8rem;">
-                        ✨ V2.0
-                    </span>
-                </div>
-            </div>
-        `;
-    }
-    
-    /**
-     * Génère l'échelle des horaires (13h à 23h)
+     * Génère l'échelle des horaires
      */
     generateTimeScale(minHour, maxHour, pixelsPerHour, totalHeight) {
         let html = '<div class="time-scale" style="height: ' + totalHeight + 'px; position: relative;">';
@@ -1537,6 +1490,94 @@ class AgendaGridView {
     }
     
     /**
+     * Génère les créneaux libres pour une journée spécifique en mode venue
+     * @param {Array} matches - Matchs déjà planifiés dans cette journée
+     * @param {string} venueId - ID du gymnase
+     * @param {number} weekNumber - Numéro de la journée
+     * @param {number} minHour - Heure minimale
+     * @param {number} maxHour - Heure maximale
+     * @param {number} pixelsPerHour - Pixels par heure
+     * @param {number} widthPerSlot - Largeur d'un slot
+     */
+    generateEmptySlotsForWeek(matches, venueId, weekNumber, minHour, maxHour, pixelsPerHour, widthPerSlot) {
+        const data = this.dataManager?.getData();
+        if (!data || !data.slots || !data.slots.available) {
+            console.warn('⚠️ Aucune donnée de slots disponibles');
+            return '';
+        }
+        
+        // Filtrer les slots pour ce gymnase ET cette journée
+        const slots = data.slots.available.filter(slot => {
+            return slot.gymnase === venueId && slot.semaine === weekNumber;
+        });
+        
+        if (slots.length === 0) {
+            return '';
+        }
+        
+        console.log(`🟢 ${slots.length} créneaux libres pour ${venueId} en J${weekNumber}`);
+        
+        let html = '';
+        const slotDuration = AgendaGridView.MATCH_DURATION_HOURS;
+        
+        // Grouper les slots par horaire
+        const slotsByTime = {};
+        slots.forEach(slot => {
+            const time = this.parseTime(slot.horaire);
+            if (!time || time < minHour || time >= maxHour) return;
+            
+            if (!slotsByTime[time]) {
+                slotsByTime[time] = [];
+            }
+            slotsByTime[time].push(slot);
+        });
+        
+        // Pour chaque horaire avec des slots libres
+        Object.entries(slotsByTime).forEach(([timeStr, timeSlots]) => {
+            const time = parseFloat(timeStr);
+            const slotStart = time;
+            const slotEnd = time + slotDuration;
+            
+            // Position verticale
+            const top = (slotStart - minHour) * pixelsPerHour;
+            const height = slotDuration * pixelsPerHour;
+            
+            // Compter combien de slots libres on peut afficher
+            // (limité par le nombre de matchs simultanés pour ne pas déborder)
+            timeSlots.forEach((slot, index) => {
+                const left = index * widthPerSlot + 2;
+                const width = widthPerSlot - 4;
+                
+                html += `
+                    <div class="empty-slot" style="
+                        position: absolute;
+                        top: ${top}px;
+                        left: ${left}px;
+                        width: ${width}px;
+                        height: ${height}px;
+                        background: linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(22, 163, 74, 0.15));
+                        border: 2px dashed rgba(34, 197, 94, 0.4);
+                        border-radius: 8px;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        flex-direction: column;
+                        gap: 0.25rem;
+                        padding: 0.5rem;
+                        pointer-events: none;
+                        z-index: 1;
+                    ">
+                        <div style="font-weight: 700; font-size: 0.8rem; color: rgba(22, 101, 52, 0.9);">Disponible</div>
+                        <div style="font-size: 0.7rem; opacity: 0.8; margin-top: 0.25rem; color: rgba(22, 101, 52, 0.8);">${this.formatTimeRange(slotStart, slotEnd)}</div>
+                    </div>
+                `;
+            });
+        });
+        
+        return html;
+    }
+    
+    /**
      * Formate une plage horaire
      */
     formatTimeRange(startHour, endHour) {
@@ -1596,6 +1637,10 @@ class AgendaGridView {
     assignMatchSlots(matches) {
         const slots = new Map();
         
+        // Récupérer la durée du match depuis la config (en minutes)
+        const matchDurationMinutes = this.dataManager.data?.config?.duree_match_minutes || 90;
+        const MATCH_DURATION = matchDurationMinutes / 60; // Conversion en heures
+        
         // Grouper les matchs qui se chevauchent
         const overlappingGroups = [];
         
@@ -1603,7 +1648,7 @@ class AgendaGridView {
             const startTime = this.parseTime(match.horaire);
             if (!startTime) return;
             
-            const endTime = startTime + 2; // durée fixe de 2h
+            const endTime = startTime + MATCH_DURATION;
             
             // Chercher un groupe existant qui chevauche ce match
             let foundGroup = false;
@@ -1612,7 +1657,7 @@ class AgendaGridView {
                 // Vérifier si ce match chevauche avec au moins un match du groupe
                 const overlaps = group.matches.some(m => {
                     const mStart = this.parseTime(m.horaire);
-                    const mEnd = mStart + 2;
+                    const mEnd = mStart + MATCH_DURATION;
                     // Chevauchement si : !(fin1 <= début2 || début1 >= fin2)
                     return !(endTime <= mStart || startTime >= mEnd);
                 });
@@ -1646,7 +1691,7 @@ class AgendaGridView {
             
             sortedGroupMatches.forEach(match => {
                 const startTime = this.parseTime(match.horaire);
-                const endTime = startTime + 2;
+                const endTime = startTime + MATCH_DURATION;
                 
                 // Nettoyer les slots qui ont expiré avant ce match
                 const activeSlots = usedSlots.filter(s => s.endTime > startTime);
@@ -1673,7 +1718,14 @@ class AgendaGridView {
     /**
      * Attache les événements aux éléments de la vue
      */
+    /**
+     * Attache les événements de la vue (navigation, clics)
+     * Les listeners sont nettoyés à chaque render pour éviter les fuites mémoire
+     */
     attachEvents() {
+        // Note: Les listeners sont automatiquement supprimés quand container.innerHTML est modifié
+        // Pas besoin de nettoyage manuel car render() remplace le HTML complet
+        
         // ═══════════════════════════════════════════════════════════════
         // DUAL MODE: Navigation selon le mode d'affichage
         // ═══════════════════════════════════════════════════════════════

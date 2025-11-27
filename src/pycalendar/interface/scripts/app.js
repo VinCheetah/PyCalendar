@@ -76,8 +76,7 @@ function initializeViews() {
         { name: 'agenda', constructor: 'AgendaView', containerId: 'agenda-view' },
         { name: 'pools', constructor: 'PoolsView', containerId: 'pools-view' },
         { name: 'teams', constructor: 'TeamsView', containerId: 'teams-view' },
-        { name: 'matches', constructor: 'MatchesView', containerId: 'matches-view' },
-        { name: 'penalties', constructor: 'PenaltiesView', containerId: 'penalties-view' }
+        { name: 'matches', constructor: 'MatchesView', containerId: 'matches-view' }
     ];
 
     viewConfigs.forEach(config => {

@@ -45,6 +45,13 @@ class MatchCardRenderer {
         // Niveau/Catégorie - Extract from match data
         const category = this.extractCategory(match);
         
+        // Classes spéciales pour CFU et CFE
+        if (category === 'CFU') {
+            classes.push('match-cfu');
+        } else if (category === 'CFE') {
+            classes.push('match-cfe');
+        }
+        
         // Pénalités
         const hasPenalties = match.penalties && match.penalties.total > 0;
         const penaltyClass = this.getPenaltyClass(match.penalties?.total || 0);
@@ -205,7 +212,19 @@ class MatchCardRenderer {
         const category = this.extractCategory(match);
         if (!category) return '';
         
-        return `<span class="category-compact" style="font-size: 0.65rem; font-weight: 900; padding: 0.15rem 0.4rem; background: rgba(255, 255, 255, 0.35); border-radius: 4px; text-transform: uppercase; letter-spacing: 0.08em; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2); font-family: 'Roboto', 'Arial', sans-serif; border: 1px solid rgba(255, 255, 255, 0.2);" title="Niveau">${category}</span>`;
+        // Ne pas afficher CFU et CFE ici car ils sont déjà affichés comme badges
+        const isCFU = category === 'CFU';
+        const isCFE = category === 'CFE';
+        
+        if (isCFU || isCFE) {
+            return ''; // Les badges CFU/CFE sont gérés par renderMatchBadges
+        }
+        
+        let cssClass = 'category-compact';
+        let title = 'Niveau';
+        let inlineStyle = 'font-size: 0.65rem; font-weight: 900; padding: 0.15rem 0.4rem; border-radius: 4px;';
+        
+        return `<span class="${cssClass}" style="${inlineStyle}" title="${title}">${category}</span>`;
     }
     
     /**
@@ -249,10 +268,20 @@ class MatchCardRenderer {
             badges.push('<span class="match-badge badge-entente" style="font-size: 0.7rem; padding: 0.15rem 0.3rem; border-radius: 4px; background: rgba(255, 255, 255, 0.25); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);" title="Entente">🤝</span>');
         }
         
-        if (badges.length === 0) return '';
+        // Badge spécial pour CFU
+        const category = this.extractCategory(match);
+        if (category === 'CFU') {
+            badges.push('<span class="match-badge badge-cfu" style="font-size: 0.75rem; padding: 0.2rem 0.5rem; border-radius: 5px; background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%); color: #000; border: 2px solid #FFB700; box-shadow: 0 2px 8px rgba(255, 215, 0, 0.5), 0 0 15px rgba(255, 215, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.5); text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;" title="Championnat de France Universitaire">CFU</span>');
+        }
         
-        return `<div class="match-badges" style="display: flex; gap: 0.25rem;">${badges.join('')}</div>`;
+        // Badge spécial pour CFE
+        if (category === 'CFE') {
+            badges.push('<span class="match-badge badge-cfe" style="font-size: 0.75rem; padding: 0.2rem 0.5rem; border-radius: 5px; background: linear-gradient(135deg, #4A90E2 0%, #357ABD 100%); color: #FFF; border: 2px solid #2E5F8D; box-shadow: 0 2px 8px rgba(74, 144, 226, 0.5), 0 0 15px rgba(74, 144, 226, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.3); text-shadow: 0 1px 3px rgba(0, 0, 0, 0.4); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;" title="Championnat de France Établissement">CFE</span>');
+        }
+        
+        return badges.join(' ');
     }
+    
     
     /**
      * Détails du match (poule/championnat, score si disponible)
@@ -445,19 +474,31 @@ class MatchCardRenderer {
         const parts = [];
         
         if (penalties.horaire_prefere > 0) {
-            parts.push(`⏰ Horaire: ${penalties.horaire_prefere.toFixed(1)}`);
+            parts.push(`⏰ Horaire préféré: ${penalties.horaire_prefere.toFixed(1)}`);
+        }
+        if (penalties.gymnase_prefere > 0) {
+            parts.push(`🏟️ Gymnase préféré: ${penalties.gymnase_prefere.toFixed(1)}`);
+        }
+        if (penalties.niveau_gymnase > 0) {
+            parts.push(`📊 Niveau gymnase: ${penalties.niveau_gymnase.toFixed(1)}`);
         }
         if (penalties.espacement > 0) {
             parts.push(`📅 Espacement: ${penalties.espacement.toFixed(1)}`);
         }
-        if (penalties.indisponibilite > 0) {
-            parts.push(`🚫 Indispo: ${penalties.indisponibilite.toFixed(1)}`);
-        }
         if (penalties.compaction > 0) {
             parts.push(`📦 Compaction: ${penalties.compaction.toFixed(1)}`);
         }
-        if (penalties.overlap > 0) {
-            parts.push(`🔀 Overlap: ${penalties.overlap.toFixed(1)}`);
+        if (penalties.overlap_institution > 0) {
+            parts.push(`🔀 Overlap institution: ${penalties.overlap_institution.toFixed(1)}`);
+        }
+        if (penalties.aller_retour > 0) {
+            parts.push(`↔️ Aller-retour: ${penalties.aller_retour.toFixed(1)}`);
+        }
+        if (penalties.contrainte_temporelle > 0) {
+            parts.push(`⏱️ Contrainte temporelle: ${penalties.contrainte_temporelle.toFixed(1)}`);
+        }
+        if (penalties.guidance_qualite > 0) {
+            parts.push(`⚠️ Guidance qualité: ${penalties.guidance_qualite.toFixed(1)}`);
         }
         
         return parts.length > 0 ? parts.join('\n') : 'Aucune pénalité';
@@ -499,7 +540,27 @@ class MatchCardRenderer {
      * Cherche dans le nom des équipes ou dans les données du match
      */
     extractCategory(match) {
-        // 1. Essayer d'extraire depuis le champ poule (ex: "VBFA1PA" -> "A1")
+        // 1. PRIORITÉ: Utiliser le champ championship_type si disponible
+        if (match.championship_type) {
+            const type = match.championship_type.toUpperCase();
+            // CFU et CFE sont directement retournés
+            if (type === 'CFU' || type === 'CFE') {
+                return type;
+            }
+            // Pour 'Acad', extraire le niveau depuis la poule (A1, A2, A3, A4)
+            if (type === 'ACAD' && match.poule) {
+                const pouleMatch = match.poule.match(/A([1-4])/i);
+                if (pouleMatch) {
+                    return `A${pouleMatch[1]}`;
+                }
+            }
+            // 'Autre' type
+            if (type === 'AUTRE') {
+                return 'Autre';
+            }
+        }
+        
+        // 2. FALLBACK: Essayer d'extraire depuis le champ poule (ex: "VBFA1PA" -> "A1")
         if (match.poule) {
             // Chercher A1-A4
             const pouleMatch = match.poule.match(/A([1-4])/i);
@@ -507,14 +568,14 @@ class MatchCardRenderer {
                 return `A${pouleMatch[1]}`;
             }
             
-            // Chercher CFE ou CFU
+            // Chercher CFE ou CFU dans la poule
             const cfeMatch = match.poule.match(/CF[EU]/i);
             if (cfeMatch) {
                 return cfeMatch[0].toUpperCase();
             }
         }
         
-        // 2. Essayer d'extraire depuis le nom de l'équipe
+        // 3. FALLBACK: Essayer d'extraire depuis le nom de l'équipe
         const teamNames = [match.equipe1_nom, match.equipe2_nom].join(' ');
         
         // Chercher A1, A2, A3, A4
@@ -529,7 +590,7 @@ class MatchCardRenderer {
             return cfeMatch[0].toUpperCase();
         }
         
-        // 3. Si le match a un champ category/niveau
+        // 4. FALLBACK: Si le match a un champ category/niveau (ancien format)
         if (match.category) {
             const cat = match.category.toUpperCase();
             if (cat.match(/^(A[1-4]|CFE|CFU)$/)) {

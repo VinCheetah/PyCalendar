@@ -240,3 +240,109 @@ class PreferredTimeConstraint(Constraint):
     
     def get_name(self) -> str:
         return "PreferredTime"
+
+
+class NoBeforePreferredTimeConstraint(Constraint):
+    """
+    Contrainte DURE: Interdit les matchs avant l'horaire préféré des équipes.
+    
+    Cette contrainte empêche strictement qu'un match commence avant l'horaire
+    préféré d'au moins une des deux équipes. Elle est particulièrement utile
+    pour les contraintes physiques (équipes en cours, au travail, etc.) où
+    jouer avant l'horaire préféré est impossible ou inacceptable.
+    
+    Configuration:
+        horaire_avant_interdit: bool - Active/désactive la contrainte
+        horaire_avant_tolerance: int - Tolérance en minutes (0 = strict)
+    
+    Comportement:
+        - Si désactivée: retourne toujours True (pas de restriction)
+        - Si activée: vérifie que le créneau n'est pas avant l'horaire préféré
+        - Tolérance: permet un léger décalage (ex: 30 min de marge)
+    
+    Exemple:
+        Équipe préfère 18:00, tolérance = 0:
+        - 18:00 → OK
+        - 20:00 → OK (après)
+        - 17:59 → INTERDIT
+        
+        Équipe préfère 18:00, tolérance = 30:
+        - 18:00 → OK
+        - 17:30 → OK (dans tolérance)
+        - 17:29 → INTERDIT
+        - 20:00 → OK (après)
+    
+    Note: Cette contrainte est conçue comme feature optionnelle pour
+    déblocage rapide de planifications contraintes. Elle complète
+    le système de pénalités asymétriques existant.
+    """
+    
+    def __init__(self, actif: bool = False, tolerance_minutes: int = 0):
+        """
+        Initialise la contrainte.
+        
+        Args:
+            actif: Si False, la contrainte est inactive (retourne toujours True)
+            tolerance_minutes: Nombre de minutes de tolérance avant l'horaire préféré
+        """
+        super().__init__(weight=1.0, hard=True)
+        self.actif = actif
+        self.tolerance_minutes = tolerance_minutes
+    
+    def _parse_horaire(self, horaire: str) -> int:
+        """
+        Convertit un horaire en minutes depuis minuit.
+        Format attendu: "14H", "14H30", "20H00"
+        
+        Returns:
+            Nombre de minutes depuis minuit
+        """
+        try:
+            # Nettoyer l'horaire
+            horaire = horaire.strip().upper().replace('H', ':')
+            
+            # Ajouter ":00" si pas de minutes
+            if ':' not in horaire:
+                horaire += ':00'
+            
+            parts = horaire.split(':')
+            heures = int(parts[0])
+            minutes = int(parts[1]) if len(parts) > 1 else 0
+            
+            return heures * 60 + minutes
+        except (ValueError, IndexError):
+            # En cas d'erreur de parsing, retourner une valeur par défaut (14h)
+            return 14 * 60
+    
+    def validate(self, match: Match, creneau: Creneau, solution_state: Dict) -> Tuple[bool, float]:
+        """
+        Vérifie si le créneau respecte la contrainte d'horaire minimum.
+        
+        Returns:
+            (False, inf) si au moins UNE équipe ne peut pas jouer à cet horaire
+            (True, 0.0) si toutes les équipes peuvent jouer
+        """
+        if not self.actif:
+            return True, 0.0  # Contrainte désactivée
+        
+        horaire_creneau_min = self._parse_horaire(creneau.horaire)
+        
+        for equipe in [match.equipe1, match.equipe2]:
+            if not equipe.horaires_preferes:
+                continue  # Pas de préférence = toujours valide
+            
+            horaire_prefere_min = self._parse_horaire(equipe.horaires_preferes[0])
+            
+            # Calculer différence en minutes
+            diff_minutes = horaire_creneau_min - horaire_prefere_min
+            
+            # Si avant (négatif) et au-delà de la tolérance
+            if diff_minutes < -self.tolerance_minutes:
+                # ❌ INTERDIT: match avant horaire préféré
+                return False, float('inf')
+        
+        # ✅ OK: toutes les équipes peuvent jouer à cet horaire
+        return True, 0.0
+    
+    def get_name(self) -> str:
+        return "NoBeforePreferredTime"

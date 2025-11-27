@@ -1030,3 +1030,100 @@
     -moz-osx-font-smoothing: grayscale;
 }
 
+/* ==================== MATCHS CFU/CFE - IDENTIFICATION RENFORCÉE ==================== */
+
+/* Matchs CFU - Bordure dorée brillante */
+.match-card.match-cfu {
+    border: 3px solid #FFD700 !important;
+    box-shadow: 0 4px 12px rgba(255, 215, 0, 0.4), 
+                0 0 20px rgba(255, 215, 0, 0.2),
+                inset 0 0 0 1px rgba(255, 255, 255, 0.3) !important;
+}
+
+.match-card.match-cfu:hover {
+    box-shadow: 0 6px 16px rgba(255, 215, 0, 0.6), 
+                0 0 30px rgba(255, 215, 0, 0.3),
+                inset 0 0 0 1px rgba(255, 255, 255, 0.4) !important;
+    transform: translateY(-3px) scale(1.02);
+}
+
+/* Matchs CFE - Bordure bleue brillante */
+.match-card.match-cfe {
+    border: 3px solid #4A90E2 !important;
+    box-shadow: 0 4px 12px rgba(74, 144, 226, 0.4), 
+                0 0 20px rgba(74, 144, 226, 0.2),
+                inset 0 0 0 1px rgba(255, 255, 255, 0.3) !important;
+}
+
+.match-card.match-cfe:hover {
+    box-shadow: 0 6px 16px rgba(74, 144, 226, 0.6), 
+                0 0 30px rgba(74, 144, 226, 0.3),
+                inset 0 0 0 1px rgba(255, 255, 255, 0.4) !important;
+    transform: translateY(-3px) scale(1.02);
+}
+
+/* Badge CFU */
+.match-badge.badge-cfu,
+.category-compact.category-cfu {
+    background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%) !important;
+    color: #000 !important;
+    border: 2px solid #FFB700 !important;
+    box-shadow: 0 2px 8px rgba(255, 215, 0, 0.5), 
+                0 0 15px rgba(255, 215, 0, 0.3),
+                inset 0 1px 0 rgba(255, 255, 255, 0.5) !important;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* Badge CFE */
+.match-badge.badge-cfe,
+.category-compact.category-cfe {
+    background: linear-gradient(135deg, #4A90E2 0%, #357ABD 100%) !important;
+    color: #FFF !important;
+    border: 2px solid #2E5F8D !important;
+    box-shadow: 0 2px 8px rgba(74, 144, 226, 0.5), 
+                0 0 15px rgba(74, 144, 226, 0.3),
+                inset 0 1px 0 rgba(255, 255, 255, 0.3) !important;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* Style de base pour les catégories (A1-A4) */
+.category-compact {
+    font-size: 0.65rem;
+    font-weight: 900;
+    padding: 0.15rem 0.4rem;
+    background: rgba(255, 255, 255, 0.35);
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    font-family: 'Roboto', 'Arial', sans-serif;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    display: inline-block;
+}
+
+/* Animation pulsation pour les badges CFU/CFE */
+@keyframes shimmer-gold {
+    0%, 100% { box-shadow: 0 2px 8px rgba(255, 215, 0, 0.5), 0 0 15px rgba(255, 215, 0, 0.3); }
+    50% { box-shadow: 0 2px 12px rgba(255, 215, 0, 0.7), 0 0 25px rgba(255, 215, 0, 0.5); }
+}
+
+@keyframes shimmer-blue {
+    0%, 100% { box-shadow: 0 2px 8px rgba(74, 144, 226, 0.5), 0 0 15px rgba(74, 144, 226, 0.3); }
+    50% { box-shadow: 0 2px 12px rgba(74, 144, 226, 0.7), 0 0 25px rgba(74, 144, 226, 0.5); }
+}
+
+.match-badge.badge-cfu:hover,
+.category-compact.category-cfu:hover {
+    animation: shimmer-gold 1.5s ease-in-out infinite;
+}
+
+.match-badge.badge-cfe:hover,
+.category-compact.category-cfe:hover {
+    animation: shimmer-blue 1.5s ease-in-out infinite;
+}

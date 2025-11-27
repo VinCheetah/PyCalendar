@@ -226,7 +226,7 @@ class MatchesView {
     
     /**
      * Détermine le statut d'un match
-     * Une entente est un match NON PLANIFIÉ entre institutions de la liste des ententes
+     * CORRECTION: Une entente AVEC CRÉNEAU est considérée comme PLANIFIÉE
      */
     _determineMatchStatus(match) {
         // Vérifier si c'est un match fixé avant planification
@@ -234,13 +234,13 @@ class MatchesView {
             return 'fixed';
         }
         
-        // Vérifier si le match a un gymnase et un horaire (= planifié par le solveur)
+        // CORRECTION: Un match avec créneau est PLANIFIÉ (même s'il est entente)
         if (match.gymnase && match.horaire && match.semaine) {
             return 'scheduled';
         }
         
         // Si le match n'est pas planifié, vérifier si c'est une entente
-        // Une entente = match non planifié spécial (moins pénalisé)
+        // Une entente SANS CRÉNEAU = non planifiée mais identifiée comme entente
         if (match.is_entente || (match.penalties && match.penalties.entente !== undefined)) {
             return 'entente';
         }

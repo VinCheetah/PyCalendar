@@ -631,6 +631,10 @@ class ConfigActualisateurV2:
                 if pd.isna(valeur) or str(valeur).strip() == '':
                     return ValidationResult(True)  # Les préférences vides sont OK
             
+            # Cas spécial pour Matchs_Fixes: accepter "ENTENTE" comme gymnase valide
+            if nom_feuille == 'Matchs_Fixes' and isinstance(valeur, str) and valeur.strip().upper() == 'ENTENTE':
+                return ValidationResult(True)  # ENTENTE est valide pour les matchs en entente
+            
             if self.gymnases_ref:
                 return self.validator.valider_gymnase(valeur, self.gymnases_ref)
         elif colonne == 'Equipe':
@@ -1365,27 +1369,17 @@ class ConfigActualisateurV2:
                         f"Ligne {ligne_num}: Format semaine invalide ('{semaine}'), attendu: nombre entier"
                     )
             
-            # ========== VALIDATION HORAIRE ==========
-            if pd.isna(horaire) or str(horaire).strip() == '':
-                rapport.erreurs_contenu.append(f"Ligne {ligne_num}: Horaire manquant")
-            else:
-                result = self.validator.valider_horaire(horaire)
-                if not result.valide:
-                    rapport.erreurs_contenu.append(
-                        f"Ligne {ligne_num}: Horaire invalide - {result.message}"
-                    )
-                elif result.valeur_corrigee and str(result.valeur_corrigee) != str(horaire).strip():
-                    rapport.corrections_contenu.append(
-                        f"Ligne {ligne_num}: Horaire reformaté: '{horaire}' → '{result.valeur_corrigee}'"
-                    )
-            
-            # ========== VALIDATION GYMNASE ==========
+            # ========== VALIDATION GYMNASE (avant l'horaire pour détecter les ententes) ==========
+            is_entente = False
             if pd.isna(gymnase) or str(gymnase).strip() == '':
                 rapport.erreurs_contenu.append(f"Ligne {ligne_num}: Gymnase manquant")
             else:
                 gymnase_str = str(gymnase).strip()
-                if gymnase_str not in self.gymnases_ref:
-                    # Recherche floue
+                # Cas spécial : ENTENTE = match en entente (pas d'horaire requis, pas de gymnase physique)
+                if gymnase_str.upper() == 'ENTENTE':
+                    is_entente = True
+                elif gymnase_str not in self.gymnases_ref:
+                    # Recherche floue seulement si ce n'est pas ENTENTE
                     matches = difflib.get_close_matches(gymnase_str, self.gymnases_ref, n=1, cutoff=0.6)
                     if matches:
                         rapport.erreurs_contenu.append(
@@ -1395,6 +1389,23 @@ class ConfigActualisateurV2:
                         rapport.erreurs_contenu.append(
                             f"Ligne {ligne_num}: Gymnase '{gymnase_str}' non trouvé dans la feuille Gymnases"
                         )
+            
+            # ========== VALIDATION HORAIRE (optionnel pour les ententes) ==========
+            if pd.isna(horaire) or str(horaire).strip() == '':
+                if not is_entente:
+                    # L'horaire est obligatoire sauf pour les matchs en entente
+                    rapport.erreurs_contenu.append(f"Ligne {ligne_num}: Horaire manquant")
+            else:
+                # Si un horaire est fourni, le valider
+                result = self.validator.valider_horaire(horaire)
+                if not result.valide:
+                    rapport.erreurs_contenu.append(
+                        f"Ligne {ligne_num}: Horaire invalide - {result.message}"
+                    )
+                elif result.valeur_corrigee and str(result.valeur_corrigee) != str(horaire).strip():
+                    rapport.corrections_contenu.append(
+                        f"Ligne {ligne_num}: Horaire reformaté: '{horaire}' → '{result.valeur_corrigee}'"
+                    )
             
             # ========== VALIDATION SCORE (optionnel mais avec format) ==========
             if pd.notna(score) and str(score).strip():

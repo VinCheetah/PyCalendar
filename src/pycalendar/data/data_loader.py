@@ -1108,15 +1108,24 @@ class DataLoader:
                 logger.warning(f"Ligne {ligne_num}: semaine invalide '{semaine}' pour {equipe1_nom} vs {equipe2_nom}, ligne ignorée")
                 continue
             
-            horaire = str(row.get('Horaire', '')).strip()
-            if not horaire or pd.isna(horaire):
-                logger.warning(f"Ligne {ligne_num}: horaire manquant pour {equipe1_nom} vs {equipe2_nom}, ligne ignorée")
-                continue
-            
             gymnase = str(row.get('Gymnase', '')).strip()
             if not gymnase or pd.isna(gymnase):
                 logger.warning(f"Ligne {ligne_num}: gymnase manquant pour {equipe1_nom} vs {equipe2_nom}, ligne ignorée")
                 continue
+            
+            # Détecter les matchs en entente
+            is_entente = gymnase.upper() == 'ENTENTE'
+            
+            # Pour les matchs en entente, l'horaire n'est pas obligatoire
+            horaire = str(row.get('Horaire', '')).strip()
+            if not is_entente and (not horaire or pd.isna(horaire)):
+                logger.warning(f"Ligne {ligne_num}: horaire manquant pour {equipe1_nom} vs {equipe2_nom}, ligne ignorée")
+                continue
+            
+            # Si c'est un match en entente sans horaire, mettre une valeur par défaut
+            if is_entente and (not horaire or pd.isna(horaire) or horaire.lower() == 'nan'):
+                horaire = 'À déterminer'
+                logger.info(f"Ligne {ligne_num}: Match en entente détecté - {equipe1_nom} vs {equipe2_nom}")
             
             # Informations optionnelles
             score = row.get('Score')
@@ -1124,6 +1133,12 @@ class DataLoader:
             
             type_competition = row.get('Type_Competition')
             type_competition_str = str(type_competition).strip() if pd.notna(type_competition) else 'Acad'
+            
+            # Validation du type de compétition
+            valid_types = ['Acad', 'CFU', 'CFE', 'Autre']
+            if type_competition_str not in valid_types:
+                logger.warning(f"Ligne {ligne_num}: Type_Competition invalide '{type_competition_str}', défini à 'Acad'. Valeurs acceptées: {valid_types}")
+                type_competition_str = 'Acad'
             
             remarques = row.get('Remarques')
             remarques_str = str(remarques).strip() if pd.notna(remarques) and str(remarques).strip() else ''
@@ -1135,15 +1150,17 @@ class DataLoader:
                 equipe2=equipe2,
                 poule=poule,
                 creneau=None,  # Sera assigné plus tard dans le pipeline
+                championship_type=type_competition_str,  # Type de championnat depuis Excel
                 metadata={
                     'fixe': True,
                     'semaine': semaine,
                     'horaire': horaire,
                     'gymnase': gymnase,
                     'score': score_str,
-                    'type_competition': type_competition_str,
+                    'type_competition': type_competition_str,  # Garder aussi dans metadata pour compatibilité
                     'remarques': remarques_str,
-                    'genre_fixe': genre if genre in ['F', 'M'] else None  # Préserver le genre du match fixé
+                    'genre_fixe': genre if genre in ['F', 'M'] else None,  # Préserver le genre du match fixé
+                    'is_entente': is_entente  # Marquer explicitement comme match en entente
                 }
             )
             
