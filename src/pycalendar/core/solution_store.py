@@ -238,6 +238,11 @@ class SolutionStore:
             creneaux_disponibles=creneaux,
             types_poules=types_poules
         )
+
+        # Enrichir la metadata avec la source de configuration réelle
+        metadata = data.setdefault("metadata", {})
+        if config is not None:
+            metadata["config_source"] = getattr(config, "source_path", None)
         
         # Ajouter la signature de configuration
         data["config_signature"] = signature.to_dict()

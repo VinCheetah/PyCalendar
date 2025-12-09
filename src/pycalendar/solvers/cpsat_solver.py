@@ -6,10 +6,23 @@ try:
 except ImportError:
     ORTOOLS_AVAILABLE = False
 
-from typing import List, Dict, Optional, Set
-from pycalendar.core.models import Match, Creneau, Gymnase, Solution
+from typing import List, Dict, Optional, Set, Tuple
+from pathlib import Path
+from pycalendar.core.models import Match, Creneau, Gymnase, Solution, CoachGroup, Equipe
 from pycalendar.core.config import Config
+from pycalendar.core.penalties import (
+    compute_time_preference_penalty,
+    compute_gym_preference_penalty,
+    compute_gym_level_penalty,
+    compute_gym_gender_priority_penalty,
+    spacing_penalty_for_gap,
+    aller_retour_gap_penalty,
+    compaction_penalty_for_week,
+    horaire_to_minutes,
+    is_retour_match,
+)
 from .base_solver import BaseSolver
+from collections import defaultdict
 
 
 class CPSATSolver(BaseSolver):
@@ -17,7 +30,9 @@ class CPSATSolver(BaseSolver):
     
     def __init__(self, config: Config, groupes_non_simultaneite: Optional[Dict[str, Set[str]]] = None,
                  ententes: Optional[Dict] = None, contraintes_temporelles: Optional[Dict] = None,
-                 niveaux_gymnases: Optional[Dict[str, str]] = None):
+                 niveaux_gymnases: Optional[Dict[str, str]] = None,
+                 priorites_genre_gymnases: Optional[Dict[str, str]] = None,
+                 coach_groups: Optional[Dict[str, CoachGroup]] = None):
         if not ORTOOLS_AVAILABLE:
             raise ImportError("OR-Tools not installed. Install with: pip install ortools")
         super().__init__(config)
@@ -25,36 +40,8 @@ class CPSATSolver(BaseSolver):
         self.ententes = ententes or {}  # Dict avec paires d'institutions et leurs pénalités
         self.contraintes_temporelles = contraintes_temporelles or {}  # Dict avec paires d'équipes et leurs contraintes temporelles
         self.niveaux_gymnases = niveaux_gymnases or {}  # Dict avec niveaux des gymnases
-    
-    def _get_niveau_match(self, match: Match) -> Optional[int]:
-        """
-        Détermine le niveau d'un match basé sur sa poule.
-        
-        Args:
-            match: Le match dont on veut connaître le niveau
-            
-        Returns:
-            Le niveau (0=A1, 1=A2, 2=A3, 3=A4, etc.) ou None si indéterminé
-        """
-        poule = match.poule.upper()
-        
-        # Chercher un pattern comme A1, A2, A3, A4 ou similaire
-        import re
-        match_niveau = re.search(r'A(\d+)', poule)
-        if match_niveau:
-            return int(match_niveau.group(1)) - 1  # A1=0, A2=1, A3=2, A4=3
-        
-        # Autres patterns possibles
-        if 'A1' in poule or '1' in poule and 'A' in poule:
-            return 0
-        elif 'A2' in poule or '2' in poule and 'A' in poule:
-            return 1
-        elif 'A3' in poule or '3' in poule and 'A' in poule:
-            return 2
-        elif 'A4' in poule or '4' in poule and 'A' in poule:
-            return 3
-        
-        return None  # Niveau indéterminé
+        self.priorites_genre_gymnases = priorites_genre_gymnases or {}
+        self.coach_groups = coach_groups or {}
     
     def _est_entente(self, match: Match) -> bool:
         """
@@ -130,243 +117,62 @@ class CPSATSolver(BaseSolver):
         return int(bonus)
     
     def _get_contrainte_temporelle(self, match: Match):
-        """
-        Récupère la contrainte temporelle pour un match s'il en existe une.
-        
-        Gère le matching avec/sans genre:
-        - Si contrainte spécifie un genre, s'applique uniquement à ce genre
-        - Si contrainte sans genre, s'applique à toutes les équipes de ce nom
-        
-        Args:
-            match: Le match à vérifier
-            
-        Returns:
-            ContrainteTemporelle si elle existe, None sinon
-        """
-        from pycalendar.core.utils import matcher_contrainte_avec_genre
-        
-        if not self.config.contrainte_temporelle_actif or not self.contraintes_temporelles:
+        """Retourne la contrainte temporelle applicable à ce match (si configurée)."""
+        if not self.contraintes_temporelles:
             return None
-        
-        # Extraire les infos des équipes
-        eq1_nom = match.equipe1.nom
-        eq1_genre = match.equipe1.genre
-        eq2_nom = match.equipe2.nom
-        eq2_genre = match.equipe2.genre
-        
-        # Parcourir toutes les contraintes pour trouver celle qui matche
-        for contrainte_key, contrainte in self.contraintes_temporelles.items():
-            if matcher_contrainte_avec_genre(eq1_nom, eq1_genre, eq2_nom, eq2_genre, contrainte_key):
-                return contrainte
-        
+
+        def _candidats(equipe: Equipe) -> Set[str]:
+            candidats = set()
+            if getattr(equipe, 'id_unique', None):
+                candidats.add(equipe.id_unique)
+            nom_sans_genre = (equipe.id_unique.split('|')[0] if getattr(equipe, 'id_unique', None) else equipe.nom)
+            if nom_sans_genre:
+                candidats.add(nom_sans_genre)
+                candidats.add(nom_sans_genre.upper())
+            if equipe.nom:
+                candidats.add(equipe.nom)
+                candidats.add(equipe.nom.upper())
+            return {c for c in candidats if c}
+
+        candidats_eq1 = _candidats(match.equipe1)
+        candidats_eq2 = _candidats(match.equipe2)
+
+        for id1 in candidats_eq1:
+            for id2 in candidats_eq2:
+                cle = tuple(sorted([id1, id2]))
+                contrainte = self.contraintes_temporelles.get(cle)
+                if contrainte:
+                    return contrainte
         return None
-    
-    def _sont_matchs_aller_retour(self, match1: Match, match2: Match) -> bool:
-        """
-        Vérifie si deux matchs sont une paire aller-retour.
-        
-        Une paire aller-retour a les mêmes équipes mais dans l'ordre inverse:
-        - Match aller: Équipe A vs Équipe B
-        - Match retour: Équipe B vs Équipe A
-        
-        Args:
-            match1: Premier match
-            match2: Deuxième match
-            
-        Returns:
-            True si c'est une paire aller-retour, False sinon
-        """
-        return (match1.equipe1.nom == match2.equipe2.nom and
-                match1.equipe2.nom == match2.equipe1.nom and
-                match1.equipe1.genre == match2.equipe2.genre and
-                match1.equipe2.genre == match2.equipe1.genre and
-                match1.poule == match2.poule)
-    
-    def _parse_horaire(self, horaire: str) -> int:
-        """
-        Convertit un horaire en minutes depuis minuit.
-        Format: "14:00", "14H", "14H30", "20:00"
-        
-        Returns:
-            Nombre de minutes depuis minuit
-        """
-        try:
-            # Nettoyer l'horaire
-            horaire = horaire.strip().upper().replace('H', ':')
-            
-            # Ajouter ":00" si pas de minutes
-            if ':' not in horaire:
-                horaire += ':00'
-            
-            parts = horaire.split(':')
-            heures = int(parts[0])
-            minutes = int(parts[1]) if len(parts) > 1 else 0
-            
-            return heures * 60 + minutes
-        except (ValueError, IndexError):
-            print(f"ERREUR: Impossible de parser l'horaire '{horaire}'. Utilisation de 14:00 par défaut.")
-            # En cas d'erreur, retourner 14h par défaut
-            return 14 * 60
-    
+
     def _matchs_partagent_groupe_non_simultaneite(self, match1: Match, match2: Match) -> bool:
-        """
-        Vérifie si deux matchs partagent une entité (institution ou équipe) 
-        dans les groupes de non-simultanéité configurés.
-        
-        Cette méthode est utilisée pour la contrainte d'overlap : éviter que plusieurs matchs
-        liés par un groupe (ex: même institution, même ville) jouent simultanément.
-        
-        Logique:
-        - Si groupes_non_simultaneite est configuré: vérifie si les matchs partagent une entité
-          dans un des groupes (institutions OU noms d'équipes)
-        - Si groupes_non_simultaneite est vide (mode legacy): applique à TOUTES les institutions
-          qui se chevauchent (déprécié car trop large et coûteux)
-        
-        Args:
-            match1: Premier match
-            match2: Deuxième match
-            
-        Returns:
-            True si les matchs doivent être soumis à la contrainte de non-simultanéité
-        """
+        """Vérifie si deux matchs partagent une entité d'un groupe de non-simultanéité."""
         if not self.groupes_non_simultaneite:
-            # Mode legacy (déprécié): appliquer à toutes les institutions communes
-            # NOTE: Ce mode est inefficace et sera supprimé. Configurez des groupes explicites.
-            inst1 = {match1.equipe1.institution, match1.equipe2.institution}
-            inst2 = {match2.equipe1.institution, match2.equipe2.institution}
-            return bool(inst1 & inst2)
-        
-        # Mode configuré (recommandé): vérifier si les matchs partagent une entité dans un groupe
-        # Les entités peuvent être des institutions OU des noms d'équipes
-        entites1 = {
-            match1.equipe1.institution,
-            match1.equipe2.institution,
-            match1.equipe1.nom,
-            match1.equipe2.nom
-        }
-        
-        entites2 = {
-            match2.equipe1.institution,
-            match2.equipe2.institution,
-            match2.equipe1.nom,
-            match2.equipe2.nom
-        }
-        
-        # Vérifier si les matchs partagent une entité dans un des groupes configurés
-        for groupe_nom, groupe_entites in self.groupes_non_simultaneite.items():
-            # Entités du match1 qui sont dans ce groupe
-            entites1_dans_groupe = entites1 & groupe_entites
-            # Entités du match2 qui sont dans ce groupe
-            entites2_dans_groupe = entites2 & groupe_entites
-            
-            # Si les deux matchs ont au moins une entité dans ce groupe → conflit
-            if entites1_dans_groupe and entites2_dans_groupe:
+            return False
+
+        def _collecte_entites(match: Match) -> Set[str]:
+            entites: Set[str] = set()
+            for equipe in (match.equipe1, match.equipe2):
+                if equipe.id_unique:
+                    entites.add(equipe.id_unique.lower())
+                if equipe.nom:
+                    entites.add(equipe.nom.lower())
+                if equipe.institution:
+                    entites.add(equipe.institution.lower())
+            return entites
+
+        entites1 = _collecte_entites(match1)
+        entites2 = _collecte_entites(match2)
+
+        for groupe_entites in self.groupes_non_simultaneite.values():
+            groupe_normalise = {ent.lower() for ent in groupe_entites}
+            if entites1 & groupe_normalise and entites2 & groupe_normalise:
                 return True
-        
         return False
-    
-    def _calculate_time_preference_penalty(self, match: Match, creneau: Creneau) -> float:
-        """Calcule la pénalité pour les horaires préférés avec système de tolérance sophistiqué.
-        
-        LOGIQUE DE TOLÉRANCE:
-        - Fenêtre de tolérance (en minutes) où une équipe peut jouer plus tôt/tard sans pénalité
-        - Si distance <= tolérance : PAS de pénalité (match accepté dans la zone de tolérance)
-        - Si distance > tolérance : pénalité calculée sur la distance TOTALE (pas seulement l'excédent)
-        
-        MULTIPLICATEURS selon position du match par rapport à l'horaire préféré:
-        - 300x : match AVANT horaire préféré des 2 équipes (violation grave)
-        - 100x : match AVANT horaire préféré d'1 seule équipe (violation moyenne)
-        - 10x : match APRÈS horaire préféré (dégradation acceptable)
-        
-        FORMULE DE PÉNALITÉ:
-        pénalité = multiplicateur × ((distance / diviseur)²)
-        où:
-        - distance = distance totale en minutes (si > tolérance)
-        - diviseur = paramètre de normalisation (60=heures, 90=poids plus faible)
-        
-        ALGORITHME:
-        1. Parser les horaires préférés de chaque équipe
-        2. Si horaire match exactement dans préférés → pas de pénalité
-        3. Calculer distance en minutes entre horaire match et horaire préféré
-        4. Vérifier si distance <= tolérance → pas de pénalité (accepté)
-        5. Sinon, déterminer multiplicateur selon combien d'équipes jouent AVANT leur horaire préféré
-        6. Appliquer formule: pénalité += multiplicateur × ((distance / diviseur)²)
-        
-        Returns:
-            float: Pénalité totale pour ce match/créneau
-        """
-        penalty_total = 0.0
-        
-        horaire_match_min = self._parse_horaire(creneau.horaire)
-        
-        # Analyser chaque équipe
-        equipes = [match.equipe1, match.equipe2]
-        horaires_preferes_parsed = []
-        distances = []
-        est_avant = []
-        
-        for equipe in equipes:
-            if not equipe.horaires_preferes:
-                distances.append(0)
-                est_avant.append(False)
-                horaires_preferes_parsed.append(None)
-                continue
-            
-            # Parser l'horaire préféré (un seul par équipe)
-            h_pref_str = equipe.horaires_preferes[0]
-            h_pref_min = self._parse_horaire(h_pref_str)
-            horaires_preferes_parsed.append(h_pref_min)
-            
-            # Si l'horaire match correspond exactement, pas de pénalité
-            if creneau.horaire == h_pref_str:
-                distances.append(0)
-                est_avant.append(False)
-                continue
-            
-            # Calculer la distance en minutes
-            distance_min = abs(horaire_match_min - h_pref_min)
-            distances.append(distance_min)
-            
-            # Vérifier si le match est AVANT l'horaire préféré
-            est_avant.append(horaire_match_min < h_pref_min)
-        
-        # Appliquer la tolérance : si distance <= tolérance, pas de pénalité
-        tolerance = self.config.penalite_horaire_tolerance
-        diviseur = self.config.penalite_horaire_diviseur
-        
-        # CORRECTION : Calculer les pénalités individuellement pour chaque équipe
-        # et déterminer le multiplicateur APRÈS avoir exclu les équipes dans la tolérance
-        
-        # Étape 1 : Identifier les équipes HORS tolérance
-        equipes_hors_tolerance = []
-        for i, distance in enumerate(distances):
-            if distance > tolerance:
-                equipes_hors_tolerance.append((i, distance, est_avant[i]))
-        
-        # Si toutes les équipes sont dans la tolérance, pas de pénalité
-        if not equipes_hors_tolerance:
-            return 0.0
-        
-        # Étape 2 : Compter combien d'équipes HORS tolérance jouent AVANT leur horaire préféré
-        nb_equipes_avant_hors_tolerance = sum(1 for _, _, avant in equipes_hors_tolerance if avant)
-        
-        # Étape 3 : Déterminer le multiplicateur selon les cas (seulement pour les équipes HORS tolérance)
-        if nb_equipes_avant_hors_tolerance == 2:
-            # Les 2 équipes (hors tolérance) jouent avant leur horaire préféré
-            multiplicateur = self.config.penalite_avant_horaire_min_deux
-        elif nb_equipes_avant_hors_tolerance == 1:
-            # 1 seule équipe (hors tolérance) joue avant son horaire préféré
-            multiplicateur = self.config.penalite_avant_horaire_min
-        else:
-            # Les équipes (hors tolérance) jouent après leur horaire préféré
-            multiplicateur = self.config.penalite_apres_horaire_min
-        
-        # Étape 4 : Calculer la pénalité totale avec le bon multiplicateur
-        for i, distance, _ in equipes_hors_tolerance:
-            # Pénalité = multiplicateur * (distance / diviseur)²
-            penalty_total += multiplicateur * ((distance / diviseur) ** 2)
-        
-        return penalty_total
+
+    def _est_match_retour(self, match: Match) -> bool:
+        """Détermine si le match correspond au retour (ordre inversé)."""
+        return is_retour_match(match)
     
     def solve(self, matchs: List[Match], creneaux: List[Creneau], 
              gymnases: Dict[str, Gymnase], obligations_presence: Optional[Dict[str, str]] = None,
@@ -421,6 +227,38 @@ class CPSATSolver(BaseSolver):
             for key, count in matchs_fixes_par_creneau.items():
                 semaine, gym, horaire = key
                 print(f"   S{semaine}, {gym}, {horaire}: {count} match(s) fixé(s)")
+
+        coaches_by_team = defaultdict(set)
+        if self.coach_groups:
+            for coach_name, group in self.coach_groups.items():
+                for team_id in group.team_ids:
+                    coaches_by_team[team_id].add(coach_name)
+
+        coach_fixed_events = defaultdict(list)
+        if self.config.coach_overlap_actif and coaches_by_team and matchs_fixes:
+            semaine_min_coach = max(self.config.coach_overlap_semaine_min, self.config.semaine_min)
+            for match_fixe in matchs_fixes:
+                meta = match_fixe.metadata or {}
+                semaine = meta.get('semaine')
+                horaire = meta.get('horaire')
+                gymnase = meta.get('gymnase')
+                if semaine is None or horaire is None or gymnase is None:
+                    continue
+                try:
+                    semaine_int = int(semaine)
+                except (ValueError, TypeError):
+                    continue
+                if semaine_int < semaine_min_coach:
+                    continue
+                start_min = horaire_to_minutes(str(horaire))
+                gym_nom = str(gymnase).strip()
+                for equipe in [match_fixe.equipe1, match_fixe.equipe2]:
+                    for coach_name in coaches_by_team.get(equipe.id_unique, []):
+                        coach_fixed_events[coach_name].append({
+                            'semaine': semaine_int,
+                            'start': start_min,
+                            'gymnase': gym_nom
+                        })
         
         if obligations_presence is None:
             obligations_presence = {}
@@ -441,13 +279,72 @@ class CPSATSolver(BaseSolver):
             else:
                 matchs_normaux_indices.append(i)
         
+        aller_retour_pairs: List[Tuple[int, int]] = []
+        aller_retour_fixed_pairs: List[Tuple[int, int]] = []  # (match_idx, semaine_fix)
+        match_is_retour = [False] * len(matchs)
+        paire_index = defaultdict(list)
+        for idx in matchs_normaux_indices:
+            match = matchs[idx]
+            key = (match.poule, tuple(sorted([match.equipe1.id_unique, match.equipe2.id_unique])))
+            paire_index[key].append(idx)
+
+        fixed_allers = defaultdict(list)
+        fixed_retours = defaultdict(list)
+        if matchs_fixes:
+            for match_fixe in matchs_fixes:
+                meta = match_fixe.metadata or {}
+                semaine = meta.get('semaine')
+                if semaine is None:
+                    continue
+                try:
+                    semaine_int = int(semaine)
+                except (TypeError, ValueError):
+                    continue
+                key = (match_fixe.poule, tuple(sorted([match_fixe.equipe1.id_unique, match_fixe.equipe2.id_unique])))
+                if self._est_match_retour(match_fixe):
+                    fixed_retours[key].append(semaine_int)
+                else:
+                    fixed_allers[key].append(semaine_int)
+
+        for key, indices in paire_index.items():
+            allers = [i for i in indices if not self._est_match_retour(matchs[i])]
+            retours = [i for i in indices if self._est_match_retour(matchs[i])]
+
+            if allers and retours:
+                for aller_idx, retour_idx in zip(sorted(allers), sorted(retours)):
+                    if aller_idx == retour_idx:
+                        continue
+                    aller_retour_pairs.append((aller_idx, retour_idx))
+                    match_is_retour[retour_idx] = True
+
+            if allers:
+                for semaine_fix in fixed_retours.get(key, []):
+                    for aller_idx in allers:
+                        aller_retour_fixed_pairs.append((aller_idx, semaine_fix))
+            if retours:
+                for semaine_fix in fixed_allers.get(key, []):
+                    for retour_idx in retours:
+                        aller_retour_fixed_pairs.append((retour_idx, semaine_fix))
+
         if self.config.afficher_progression:
             print(f"   → {len(matchs_normaux_indices)} matchs normaux à planifier")
             print(f"   → {len(matchs_ententes_indices)} ententes disponibles (fallback)")
+
+        match_coachs = {i: set() for i in range(len(matchs))}
+        if coaches_by_team:
+            for i, match in enumerate(matchs):
+                for equipe in [match.equipe1, match.equipe2]:
+                    if equipe.id_unique in coaches_by_team:
+                        match_coachs[i].update(coaches_by_team[equipe.id_unique])
+
+        coach_match_indices = defaultdict(list)
+        if coaches_by_team:
+            for i in matchs_normaux_indices:
+                for coach_name in match_coachs.get(i, []):
+                    coach_match_indices[coach_name].append(i)
         
         # Filtrer les créneaux valides selon semaine_min
         creneaux_valides = [creneau for creneau in creneaux if creneau.semaine >= self.config.semaine_min]
-        creneau_index_map = {j: i for i, j in enumerate([idx for idx, c in enumerate(creneaux) if c.semaine >= self.config.semaine_min])}
         
         if self.config.afficher_progression:
             print(f"   → {len(creneaux_valides)} créneaux valides sur {len(creneaux)} total (semaine_min={self.config.semaine_min})")
@@ -485,12 +382,12 @@ class CPSATSolver(BaseSolver):
                 match = matchs[i]
                 for j, creneau in enumerate(creneaux_valides):
                     # Vérifier si ce créneau viole la contrainte pour ce match
-                    horaire_creneau_min = self._parse_horaire(creneau.horaire)
+                    horaire_creneau_min = horaire_to_minutes(creneau.horaire)
                     violation = False
                     
                     for equipe in [match.equipe1, match.equipe2]:
                         if equipe.horaires_preferes:
-                            horaire_prefere_min = self._parse_horaire(equipe.horaires_preferes[0])
+                            horaire_prefere_min = horaire_to_minutes(equipe.horaires_preferes[0])
                             diff_minutes = horaire_creneau_min - horaire_prefere_min
                             
                             # Si avant (négatif) et au-delà de la tolérance
@@ -781,15 +678,25 @@ class CPSATSolver(BaseSolver):
                     # Match normal : bonus fixe
                     bonus = int(self.config.equilibrage_bonus_base)
                 objective_terms.append(bonus * match_assigned[i])
+
+        retour_ratio = getattr(self.config, 'aller_retour_bonus_retour', 1.0) or 1.0
+        if retour_ratio < 1.0:
+            retour_penalty = int(self.config.equilibrage_bonus_base * max(0.0, 1.0 - retour_ratio))
+            if retour_penalty > 0:
+                for i in matchs_normaux_indices:
+                    if match_is_retour[i]:
+                        objective_terms.append(-retour_penalty * match_assigned[i])
         
         # Pénalités pour préférences horaires (sophistiquée avec distance)
         # Appliqué uniquement aux matchs normaux (ententes non assignées à créneaux)
         for i in matchs_normaux_indices:
             match = matchs[i]
             for j, creneau in enumerate(creneaux_valides):
-                penalty = self._calculate_time_preference_penalty(match, creneau)
-                
-                if penalty > 0 and (i, j) in assignment_vars:
+                if (i, j) not in assignment_vars:
+                    continue
+                penalty_ctx = compute_time_preference_penalty(match, creneau, self.config)
+                penalty = penalty_ctx.penalty
+                if penalty > 0:
                     objective_terms.append(-int(penalty) * assignment_vars[(i, j)])
         
         # Pénalité pour contraintes temporelles violées (mode souple uniquement)
@@ -808,137 +715,108 @@ class CPSATSolver(BaseSolver):
         # Pénalités pour préférences de gymnases (système de bonus)
         # Appliqué uniquement aux matchs normaux
         if self.config.bonus_preferences_gymnases:
-            base_penalty = 2 * max(self.config.bonus_preferences_gymnases)
-            
             for i in matchs_normaux_indices:
                 match = matchs[i]
                 for j, creneau in enumerate(creneaux_valides):
                     if (i, j) not in assignment_vars:
                         continue
-                    
-                    penalty = base_penalty
-                    
-                    # Soustraire bonus si équipe 1 a ce gymnase dans ses préférences
-                    if match.equipe1.lieux_preferes:
-                        for rang, gymnase in enumerate(match.equipe1.lieux_preferes):
-                            if gymnase == creneau.gymnase and rang < len(self.config.bonus_preferences_gymnases):
-                                penalty -= self.config.bonus_preferences_gymnases[rang]
-                                break
-                    
-                    # Soustraire bonus si équipe 2 a ce gymnase dans ses préférences
-                    if match.equipe2.lieux_preferes:
-                        for rang, gymnase in enumerate(match.equipe2.lieux_preferes):
-                            if gymnase == creneau.gymnase and rang < len(self.config.bonus_preferences_gymnases):
-                                penalty -= self.config.bonus_preferences_gymnases[rang]
-                                break
-                    
-                    # Ajouter la pénalité (négative car on maximise)
-                    objective_terms.append(-int(penalty) * assignment_vars[(i, j)])
+                    penalty = compute_gym_preference_penalty(match, creneau, self.config)
+                    if penalty != 0:
+                        objective_terms.append(-int(penalty) * assignment_vars[(i, j)])
         
         # Pénalités pour gymnases par niveau (classification haut/bas niveau)
         # Applique une pénalité quand un match est assigné à un gymnase inapproprié
         # Appliqué uniquement aux matchs normaux
         # Valeurs positives = pénalité (augmente le coût, à éviter)
-        if self.niveaux_gymnases and (self.config.penalite_niveau_gymnases_haut or self.config.penalite_niveau_gymnases_bas):
+        poids_haut = (
+            getattr(self.config, 'poids_niveaux_gymnases_haut', None)
+            or getattr(self.config, 'penalite_niveau_gymnases_haut', [])
+        )
+        poids_bas = (
+            getattr(self.config, 'poids_niveaux_gymnases_bas', None)
+            or getattr(self.config, 'penalite_niveau_gymnases_bas', [])
+        )
+
+        if self.niveaux_gymnases and (poids_haut or poids_bas):
             for i in matchs_normaux_indices:
                 match = matchs[i]
-                # Déterminer le niveau du match (basé sur la poule: A1=0, A2=1, A3=2, A4=3)
-                niveau_match = self._get_niveau_match(match)
-                if niveau_match is None:
-                    continue
-                
                 for j, creneau in enumerate(creneaux_valides):
                     if (i, j) not in assignment_vars:
                         continue
-                    
-                    # Récupérer le niveau du gymnase
-                    niveau_gymnase = self.niveaux_gymnases.get(creneau.gymnase)
-                    if not niveau_gymnase:
-                        continue
-                    
-                    # Calculer la pénalité selon le niveau du gymnase et du match
-                    penalite = 0
-                    if niveau_gymnase == 'haut' and niveau_match < len(self.config.penalite_niveau_gymnases_haut):
-                        penalite = self.config.penalite_niveau_gymnases_haut[niveau_match]
-                    elif niveau_gymnase == 'bas' and niveau_match < len(self.config.penalite_niveau_gymnases_bas):
-                        penalite = self.config.penalite_niveau_gymnases_bas[niveau_match]
-                    
-                    # Ajouter la pénalité à l'objectif avec signe NÉGATIF (on maximise l'objectif global)
-                    # Pénalité positive = contribution négative = à éviter
-                    # Exemple: penalite=10 pour A1 en bas niveau -> objective_terms.append(-10) -> on veut éviter
+                    penalite = compute_gym_level_penalty(match, creneau, self.config, self.niveaux_gymnases)
                     if penalite != 0:
                         objective_terms.append(-int(penalite) * assignment_vars[(i, j)])
 
+        penalite_priorite_genre = getattr(self.config, 'penalite_gymnase_priorite_genre', 0.0) or 0.0
+        if self.priorites_genre_gymnases and penalite_priorite_genre > 0:
+            for i in matchs_normaux_indices:
+                match = matchs[i]
+                for j, creneau in enumerate(creneaux_valides):
+                    if (i, j) not in assignment_vars:
+                        continue
+                    penalite = compute_gym_gender_priority_penalty(
+                        match,
+                        creneau,
+                        self.config,
+                        self.priorites_genre_gymnases,
+                    )
+                    if penalite != 0:
+                        objective_terms.append(-int(penalite) * assignment_vars[(i, j)])
 
-        
         # CONTRAINTE SOUPLE: Espacement entre matchs d'une même équipe
         # Pour chaque équipe, pénaliser les matchs trop rapprochés
         # Appliqué uniquement aux matchs normaux
         if self.config.penalites_espacement_repos:
-            # Grouper les créneaux par semaine pour chaque équipe
             for equipe_id in equipes_uniques:
-                # Pour chaque paire de semaines, détecter si l'équipe joue aux deux
                 for semaine1 in range(self.config.semaine_min, self.config.nb_semaines + 1):
                     for semaine2 in range(semaine1 + 1, self.config.nb_semaines + 1):
-                        # Calculer le nombre de semaines de repos entre ces deux semaines
                         weeks_rest = semaine2 - semaine1 - 1
-                        
-                        # Vérifier si on doit pénaliser cet écart
-                        if weeks_rest < len(self.config.penalites_espacement_repos):
-                            penalty_value = self.config.penalites_espacement_repos[weeks_rest]
-                            
-                            if penalty_value > 0:
-                                # Trouver tous les créneaux valides de semaine1 et semaine2
-                                creneaux_s1 = [j for j, c in enumerate(creneaux_valides) if c.semaine == semaine1]
-                                creneaux_s2 = [j for j, c in enumerate(creneaux_valides) if c.semaine == semaine2]
-                                
-                                # Trouver tous les matchs NORMAUX où cette équipe joue
-                                matchs_equipe = [i for i in matchs_normaux_indices 
-                                               if matchs[i].equipe1.id_unique == equipe_id or matchs[i].equipe2.id_unique == equipe_id]
-                                
-                                # Créer une variable pour détecter si l'équipe joue aux deux semaines
-                                plays_s1 = model.NewBoolVar(f'plays_{equipe_id}_s{semaine1}')
-                                plays_s2 = model.NewBoolVar(f'plays_{equipe_id}_s{semaine2}')
-                                
-                                # plays_s1 = 1 si l'équipe joue en semaine1
-                                vars_s1 = [assignment_vars[(i, j)] 
-                                          for i in matchs_equipe for j in creneaux_s1 if (i, j) in assignment_vars]
-                                if vars_s1:
-                                    model.Add(sum(vars_s1) >= 1).OnlyEnforceIf(plays_s1)
-                                    model.Add(sum(vars_s1) == 0).OnlyEnforceIf(plays_s1.Not())
-                                
-                                # plays_s2 = 1 si l'équipe joue en semaine2
-                                vars_s2 = [assignment_vars[(i, j)] 
-                                          for i in matchs_equipe for j in creneaux_s2 if (i, j) in assignment_vars]
-                                if vars_s2:
-                                    model.Add(sum(vars_s2) >= 1).OnlyEnforceIf(plays_s2)
-                                    model.Add(sum(vars_s2) == 0).OnlyEnforceIf(plays_s2.Not())
-                                
-                                # Créer une variable pour détecter si l'équipe joue aux DEUX semaines
-                                plays_both = model.NewBoolVar(f'plays_both_{equipe_id}_s{semaine1}_s{semaine2}')
-                                model.Add(plays_s1 + plays_s2 >= 2).OnlyEnforceIf(plays_both)
-                                model.Add(plays_s1 + plays_s2 <= 1).OnlyEnforceIf(plays_both.Not())
-                                
-                                # Pénaliser si l'équipe joue aux deux semaines
-                                objective_terms.append(-int(penalty_value) * plays_both)
+                        penalty_value = spacing_penalty_for_gap(self.config, weeks_rest)
+                        if penalty_value <= 0:
+                            continue
+
+                        creneaux_s1 = [j for j, c in enumerate(creneaux_valides) if c.semaine == semaine1]
+                        creneaux_s2 = [j for j, c in enumerate(creneaux_valides) if c.semaine == semaine2]
+                        matchs_equipe = [i for i in matchs_normaux_indices
+                                         if matchs[i].equipe1.id_unique == equipe_id or matchs[i].equipe2.id_unique == equipe_id]
+
+                        plays_s1 = model.NewBoolVar(f'plays_{equipe_id}_s{semaine1}')
+                        plays_s2 = model.NewBoolVar(f'plays_{equipe_id}_s{semaine2}')
+
+                        vars_s1 = [assignment_vars[(i, j)]
+                                   for i in matchs_equipe for j in creneaux_s1 if (i, j) in assignment_vars]
+                        if vars_s1:
+                            model.Add(sum(vars_s1) >= 1).OnlyEnforceIf(plays_s1)
+                            model.Add(sum(vars_s1) == 0).OnlyEnforceIf(plays_s1.Not())
+
+                        vars_s2 = [assignment_vars[(i, j)]
+                                   for i in matchs_equipe for j in creneaux_s2 if (i, j) in assignment_vars]
+                        if vars_s2:
+                            model.Add(sum(vars_s2) >= 1).OnlyEnforceIf(plays_s2)
+                            model.Add(sum(vars_s2) == 0).OnlyEnforceIf(plays_s2.Not())
+
+                        plays_both = model.NewBoolVar(f'plays_both_{equipe_id}_s{semaine1}_s{semaine2}')
+                        model.Add(plays_s1 + plays_s2 >= 2).OnlyEnforceIf(plays_both)
+                        model.Add(plays_s1 + plays_s2 <= 1).OnlyEnforceIf(plays_both.Not())
+
+                        objective_terms.append(-int(penalty_value) * plays_both)
         
         # CONTRAINTE SOUPLE 1: Compaction temporelle (prioriser les matchs en début de calendrier)
         # Appliqué uniquement aux matchs normaux
         if self.config.compaction_temporelle_actif:
+            compaction_penalties = list(self.config.compaction_penalites_par_semaine or [])
+            penalties_defined = len(compaction_penalties)
+            if penalties_defined == 0:
+                print("   ⚠️  Compaction active mais aucune pénalité définie (valeur 0 appliquée).")
+            elif penalties_defined < self.config.nb_semaines:
+                print(f"   ⚠️  Compaction: seulement {penalties_defined}/{self.config.nb_semaines} semaines ont une pénalité définie (0 appliqué ensuite).")
+
             for i in matchs_normaux_indices:
                 for j, creneau in enumerate(creneaux_valides):
                     if (i, j) not in assignment_vars:
                         continue
-                    
-                    semaine = creneau.semaine
-                    
-                    # Récupérer la pénalité pour cette semaine (indice 0 = semaine 1)
-                    if semaine <= len(self.config.compaction_penalites_par_semaine):
-                        penalty = int(self.config.compaction_penalites_par_semaine[semaine - 1])
-                    else:
-                        # Si on dépasse le nb de semaines définies, utiliser la dernière pénalité
-                        penalty = int(self.config.compaction_penalites_par_semaine[-1])
-                    
+
+                    penalty = int(compaction_penalty_for_week(self.config, creneau.semaine))
                     if penalty > 0:
                         objective_terms.append(-penalty * assignment_vars[(i, j)])
         
@@ -1014,51 +892,149 @@ class CPSATSolver(BaseSolver):
                     
                     if self.config.afficher_progression and nb_contraintes_overlap > 0:
                         print(f"   Créé {nb_contraintes_overlap} contrainte(s) overlap pour éviter matchs simultanés")
+
+        # CONTRAINTE SOUPLE 2bis: Gestion des coachs (overlaps et bonus consécutifs)
+        if (self.config.coach_overlap_actif and coach_match_indices and
+                (self.config.coach_overlap_penalite_simultane_diff_gym > 0 or
+                 self.config.coach_overlap_penalite_simultane_meme_gym > 0 or
+                 self.config.coach_overlap_penalite_deplacement > 0 or
+                 self.config.coach_overlap_bonus_consecutif > 0)):
+
+            creneau_minutes = [horaire_to_minutes(c.horaire) for c in creneaux_valides]
+            creneaux_par_semaine = defaultdict(list)
+            for idx, creneau in enumerate(creneaux_valides):
+                creneaux_par_semaine[creneau.semaine].append(idx)
+
+            sim_window = max(0, int(self.config.coach_overlap_simultane_minutes))
+            consecutif_min = max(0, int(self.config.coach_overlap_consecutif_min_minutes))
+            consecutif_max = max(consecutif_min, int(self.config.coach_overlap_consecutif_max_minutes))
+            pen_sim_diff = int(self.config.coach_overlap_penalite_simultane_diff_gym)
+            pen_sim_same = int(self.config.coach_overlap_penalite_simultane_meme_gym)
+            pen_move = int(self.config.coach_overlap_penalite_deplacement)
+            bonus_consec = int(self.config.coach_overlap_bonus_consecutif)
+
+            nb_coach_vars = 0
+            nb_coach_terms = 0
+
+            def _sanitize(name: str) -> str:
+                return ''.join(ch if ch.isalnum() else '_' for ch in name)
+
+            for coach_name, match_indices in coach_match_indices.items():
+                if len(match_indices) >= 2:
+                    for idx_a in range(len(match_indices)):
+                        for idx_b in range(idx_a + 1, len(match_indices)):
+                            i1 = match_indices[idx_a]
+                            i2 = match_indices[idx_b]
+                            # Pour chaque semaine possible
+                            for semaine, indices_sem in creneaux_par_semaine.items():
+                                creneaux_i1 = [j for j in indices_sem if (i1, j) in assignment_vars]
+                                creneaux_i2 = [j for j in indices_sem if (i2, j) in assignment_vars]
+                                if not creneaux_i1 or not creneaux_i2:
+                                    continue
+                                for j1 in creneaux_i1:
+                                    for j2 in creneaux_i2:
+                                        delta = abs(creneau_minutes[j1] - creneau_minutes[j2])
+                                        same_gym = creneaux_valides[j1].gymnase == creneaux_valides[j2].gymnase
+                                        if sim_window > 0 and delta <= sim_window:
+                                            penalty = pen_sim_same if same_gym else pen_sim_diff
+                                            if penalty <= 0:
+                                                continue
+                                            var_name = f"coach_overlap_{_sanitize(coach_name)}_{i1}_{i2}_{j1}_{j2}"
+                                            conflict_var = model.NewBoolVar(var_name)
+                                            model.Add(assignment_vars[(i1, j1)] + assignment_vars[(i2, j2)] >= 2).OnlyEnforceIf(conflict_var)
+                                            model.Add(assignment_vars[(i1, j1)] + assignment_vars[(i2, j2)] <= 1).OnlyEnforceIf(conflict_var.Not())
+                                            objective_terms.append(-penalty * conflict_var)
+                                            nb_coach_vars += 1
+                                            nb_coach_terms += 1
+                                        elif consecutif_min <= delta <= consecutif_max:
+                                            if same_gym and bonus_consec > 0:
+                                                var_name = f"coach_bonus_{_sanitize(coach_name)}_{i1}_{i2}_{j1}_{j2}"
+                                                bonus_var = model.NewBoolVar(var_name)
+                                                model.Add(assignment_vars[(i1, j1)] + assignment_vars[(i2, j2)] >= 2).OnlyEnforceIf(bonus_var)
+                                                model.Add(assignment_vars[(i1, j1)] + assignment_vars[(i2, j2)] <= 1).OnlyEnforceIf(bonus_var.Not())
+                                                objective_terms.append(bonus_consec * bonus_var)
+                                                nb_coach_vars += 1
+                                                nb_coach_terms += 1
+                                            elif (not same_gym) and pen_move > 0:
+                                                var_name = f"coach_move_{_sanitize(coach_name)}_{i1}_{i2}_{j1}_{j2}"
+                                                move_var = model.NewBoolVar(var_name)
+                                                model.Add(assignment_vars[(i1, j1)] + assignment_vars[(i2, j2)] >= 2).OnlyEnforceIf(move_var)
+                                                model.Add(assignment_vars[(i1, j1)] + assignment_vars[(i2, j2)] <= 1).OnlyEnforceIf(move_var.Not())
+                                                objective_terms.append(-pen_move * move_var)
+                                                nb_coach_vars += 1
+                                                nb_coach_terms += 1
+
+                # Interactions avec les matchs déjà fixés
+                fixed_events = coach_fixed_events.get(coach_name, [])
+                if fixed_events:
+                    for i in match_indices:
+                        for event in fixed_events:
+                            indices_sem = creneaux_par_semaine.get(event['semaine'], [])
+                            if not indices_sem:
+                                continue
+                            for j in indices_sem:
+                                if (i, j) not in assignment_vars:
+                                    continue
+                                delta = abs(creneau_minutes[j] - event['start'])
+                                same_gym = creneaux_valides[j].gymnase == event['gymnase']
+                                if sim_window > 0 and delta <= sim_window:
+                                    penalty = pen_sim_same if same_gym else pen_sim_diff
+                                    if penalty > 0:
+                                        objective_terms.append(-penalty * assignment_vars[(i, j)])
+                                        nb_coach_terms += 1
+                                elif consecutif_min <= delta <= consecutif_max:
+                                    if same_gym and bonus_consec > 0:
+                                        objective_terms.append(bonus_consec * assignment_vars[(i, j)])
+                                        nb_coach_terms += 1
+                                    elif (not same_gym) and pen_move > 0:
+                                        objective_terms.append(-pen_move * assignment_vars[(i, j)])
+                                        nb_coach_terms += 1
+
+            if self.config.afficher_progression and nb_coach_terms > 0:
+                print(f"   Coach overlap: {nb_coach_terms} terme(s) ajouté(s), {nb_coach_vars} variable(s) auxiliaire(s)")
         
         # CONTRAINTE SOUPLE 3: Espacement aller-retour (pour poules de type Aller-Retour)
         # Appliqué uniquement aux matchs normaux
-        if self.config.aller_retour_espacement_actif:
-            # Détecter toutes les paires aller-retour
-            paires_aller_retour = []
-            for i1 in matchs_normaux_indices:
-                for i2 in matchs_normaux_indices:
-                    if i1 < i2 and self._sont_matchs_aller_retour(matchs[i1], matchs[i2]):
-                        paires_aller_retour.append((i1, i2))
-            
-            if paires_aller_retour:
-                if self.config.afficher_progression:
-                    print(f"   Détecté {len(paires_aller_retour)} paire(s) aller-retour")
-                
-                # Pour chaque paire aller-retour
-                for i1, i2 in paires_aller_retour:
-                    # Variables pour détecter si planifiés dans même semaine ou semaines consécutives
-                    for j1, creneau1 in enumerate(creneaux_valides):
-                        for j2, creneau2 in enumerate(creneaux_valides):
-                            # Vérifier que les variables existent
-                            if (i1, j1) not in assignment_vars or (i2, j2) not in assignment_vars:
-                                continue
-                            
-                            semaine_diff = abs(creneau1.semaine - creneau2.semaine)
-                            
-                            # Pénalité si dans même semaine
-                            if semaine_diff == 0:
-                                conflict_var = model.NewBoolVar(f'aller_retour_meme_semaine_{i1}_{i2}_{j1}_{j2}')
-                                # conflict_var = 1 si les deux matchs sont planifiés dans ces créneaux
-                                model.Add(assignment_vars[(i1, j1)] + assignment_vars[(i2, j2)] >= 2).OnlyEnforceIf(conflict_var)
-                                model.Add(assignment_vars[(i1, j1)] + assignment_vars[(i2, j2)] <= 1).OnlyEnforceIf(conflict_var.Not())
-                                
-                                penalty = int(self.config.aller_retour_penalite_meme_semaine)
-                                objective_terms.append(-penalty * conflict_var)
-                            
-                            # Pénalité si dans semaines consécutives
-                            elif semaine_diff == 1:
-                                conflict_var = model.NewBoolVar(f'aller_retour_consecutif_{i1}_{i2}_{j1}_{j2}')
-                                # conflict_var = 1 si les deux matchs sont planifiés dans ces créneaux
-                                model.Add(assignment_vars[(i1, j1)] + assignment_vars[(i2, j2)] >= 2).OnlyEnforceIf(conflict_var)
-                                model.Add(assignment_vars[(i1, j1)] + assignment_vars[(i2, j2)] <= 1).OnlyEnforceIf(conflict_var.Not())
-                                
-                                penalty = int(self.config.aller_retour_penalite_consecutives)
-                                objective_terms.append(-penalty * conflict_var)
+        if self.config.aller_retour_espacement_actif and (aller_retour_pairs or aller_retour_fixed_pairs):
+            if self.config.afficher_progression:
+                print(f"   Aller/Retour: {len(aller_retour_pairs)} paire(s) détectée(s)")
+                if aller_retour_fixed_pairs:
+                    print(f"      + {len(aller_retour_fixed_pairs)} paire(s) avec match fixé")
+
+            for aller_idx, retour_idx in aller_retour_pairs:
+                for j_aller, creneau_aller in enumerate(creneaux_valides):
+                    if (aller_idx, j_aller) not in assignment_vars:
+                        continue
+                    var_aller = assignment_vars[(aller_idx, j_aller)]
+
+                    for j_retour, creneau_retour in enumerate(creneaux_valides):
+                        if (retour_idx, j_retour) not in assignment_vars:
+                            continue
+                        var_retour = assignment_vars[(retour_idx, j_retour)]
+
+                        semaine_diff = abs(creneau_retour.semaine - creneau_aller.semaine)
+                        gap_penalty = aller_retour_gap_penalty(self.config, semaine_diff)
+                        if gap_penalty <= 0:
+                            continue
+
+                        joint_var = model.NewBoolVar(
+                            f'aller_retour_pair_{aller_idx}_{retour_idx}_{j_aller}_{j_retour}'
+                        )
+                        model.Add(var_aller + var_retour >= 2).OnlyEnforceIf(joint_var)
+                        model.Add(var_aller + var_retour <= 1).OnlyEnforceIf(joint_var.Not())
+
+                        objective_terms.append(-int(round(gap_penalty)) * joint_var)
+
+            if aller_retour_fixed_pairs:
+                for match_idx, semaine_fixe in aller_retour_fixed_pairs:
+                    for j, creneau in enumerate(creneaux_valides):
+                        if (match_idx, j) not in assignment_vars:
+                            continue
+                        semaine_diff = abs(creneau.semaine - semaine_fixe)
+                        gap_penalty = aller_retour_gap_penalty(self.config, semaine_diff)
+                        if gap_penalty <= 0:
+                            continue
+                        objective_terms.append(-int(round(gap_penalty)) * assignment_vars[(match_idx, j)])
         
         # MAXIMISER (bonus - pénalités)
         if objective_terms:
@@ -1078,6 +1054,18 @@ class CPSATSolver(BaseSolver):
                     solution_store = SolutionStore(solution_name=solution_name)
                 
                 previous_solution = solution_store.load_latest()
+                current_config_source = getattr(self.config, 'source_path', None)
+                previous_config_source = None
+                if previous_solution:
+                    previous_config_source = previous_solution.get('metadata', {}).get('config_source')
+                    if current_config_source and previous_config_source:
+                        try:
+                            if Path(previous_config_source).resolve() != Path(current_config_source).resolve():
+                                print("\n⚠️  Warm Start ignoré: configuration YAML différente de la solution sauvegardée")
+                                previous_solution = None
+                        except OSError:
+                            print("\n⚠️  Warm Start: impossible de comparer les chemins de configuration, désactivation par sécurité")
+                            previous_solution = None
                 
                 if previous_solution:
                     solution_name = previous_solution['metadata'].get('solution_name', 'unknown')

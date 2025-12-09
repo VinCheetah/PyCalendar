@@ -64,6 +64,9 @@ class AgendaGridView {
         
         // Stockage des event listeners pour nettoyage
         this._eventListeners = [];
+
+        // Contexte spécifique au mode entente (stats + listes)
+        this.ententeContext = null;
     }
     
     /**
@@ -111,7 +114,8 @@ class AgendaGridView {
                     label: 'Navigation par',
                     values: [
                         { value: 'week', text: '📅 Journée' },
-                        { value: 'venue', text: '🏛️ Gymnase' }
+                        { value: 'venue', text: '🏛️ Gymnase' },
+                        { value: 'entente', text: '🤝 Ententes' }
                     ],
                     default: this.displayMode,
                     action: (value) => {
@@ -255,7 +259,8 @@ class AgendaGridView {
      * @param {string} mode - 'week' pour navigation par journée, 'venue' pour navigation par gymnase
      */
     setDisplayMode(mode) {
-        if (mode !== 'week' && mode !== 'venue') {
+        const validModes = ['week', 'venue', 'entente'];
+        if (!validModes.includes(mode)) {
             console.warn(`Mode d'affichage invalide: ${mode}`);
             return;
         }
@@ -265,8 +270,10 @@ class AgendaGridView {
         // Réinitialiser l'index de navigation
         if (mode === 'week') {
             this.currentWeekIndex = 0;
-        } else {
+        } else if (mode === 'venue') {
             this.currentVenueIndex = 0;
+        } else if (mode === 'entente') {
+            this.currentWeekIndex = 0;
         }
         
         // Re-rendre la vue
@@ -337,10 +344,12 @@ class AgendaGridView {
         
         // Filtre par équipe (recherche texte - ancienne méthode)
         if (this.filters.team) {
-            filtered = filtered.filter(m =>
-                m.equipe1_nom.toLowerCase().includes(this.filters.team.toLowerCase()) ||
-                m.equipe2_nom.toLowerCase().includes(this.filters.team.toLowerCase())
-            );
+            const searchTerm = this.filters.team.toLowerCase();
+            filtered = filtered.filter(m => {
+                const equipe1 = (m.equipe1_nom || m.equipe1_nom_complet || '').toLowerCase();
+                const equipe2 = (m.equipe2_nom || m.equipe2_nom_complet || '').toLowerCase();
+                return (equipe1 && equipe1.includes(searchTerm)) || (equipe2 && equipe2.includes(searchTerm));
+            });
         }
         
         return filtered;
@@ -415,6 +424,17 @@ class AgendaGridView {
         
         return venues;
     }
+
+    countUniqueVenues(matches = []) {
+        const uniqueVenues = new Set();
+        matches.forEach(match => {
+            const venueId = match?.gymnase || match?.gymnase_id;
+            if (venueId) {
+                uniqueVenues.add(venueId);
+            }
+        });
+        return uniqueVenues.size;
+    }
     
     /**
      * Calcule le numéro de semaine ISO 8601
@@ -460,12 +480,39 @@ class AgendaGridView {
                 return;
             }
             
-            const allMatches = data.matches.scheduled || [];
+            const isEntenteMode = this.displayMode === 'entente';
+            const filtersActive = Object.values(this.filters || {}).some(Boolean);
+
+            let matchesSource = data.matches.scheduled || [];
+            let filteredPendingEntentes = [];
+
+            if (isEntenteMode) {
+                const ententeMatches = this.collectEntenteMatches(data);
+                const scheduledEntentes = ententeMatches.filter(match => this.hasEntenteSlot(match));
+                const pendingEntentes = ententeMatches.filter(match => !this.hasEntenteSlot(match));
+
+                this.ententeContext = {
+                    total: ententeMatches.length,
+                    scheduledCount: scheduledEntentes.length,
+                    pendingCount: pendingEntentes.length,
+                    scheduledMatches: scheduledEntentes,
+                    pendingMatches: pendingEntentes
+                };
+
+                matchesSource = scheduledEntentes;
+                filteredPendingEntentes = this.filterMatches(pendingEntentes || []);
+            } else {
+                this.ententeContext = null;
+            }
             
-            const filteredMatches = this.filterMatches(allMatches);
-            
+            const filteredMatches = this.filterMatches(matchesSource);
+
             if (filteredMatches.length === 0) {
-                this.container.innerHTML = '<div class="empty-state">Aucun match ne correspond aux filtres sélectionnés</div>';
+                if (isEntenteMode) {
+                    this.renderEntenteFallbackView(filteredMatches, filteredPendingEntentes, filtersActive);
+                } else {
+                    this.container.innerHTML = '<div class="empty-state">Aucun match ne correspond aux filtres sélectionnés</div>';
+                }
                 return;
             }
             
@@ -474,12 +521,16 @@ class AgendaGridView {
             // ═══════════════════════════════════════════════════════════════
             let matchesToDisplay = [];
             
-            if (this.displayMode === 'week') {
+            if (this.displayMode === 'week' || isEntenteMode) {
                 // MODE JOURNÉE: Organiser par semaine, naviguer entre J1, J2, J4...
                 this.weeks = this.organizeMatchesByWeek(filteredMatches);
                 
                 if (this.weeks.length === 0) {
-                    this.container.innerHTML = '<div class="empty-state">Aucun match trouvé</div>';
+                    if (isEntenteMode) {
+                        this.renderEntenteFallbackView(filteredMatches, filteredPendingEntentes, filtersActive);
+                    } else {
+                        this.container.innerHTML = '<div class="empty-state">Aucun match trouvé</div>';
+                    }
                     return;
                 }
                 
@@ -493,7 +544,7 @@ class AgendaGridView {
                 
                 const currentWeek = this.weeks[this.currentWeekIndex];
                 matchesToDisplay = currentWeek.matches;
-                console.log('🔍 [AgendaGrid] Journée courante:', currentWeek.key, 'matchs:', matchesToDisplay.length);
+                console.log(`🔍 [AgendaGrid] ${isEntenteMode ? 'Mode Entente' : 'Mode Journée'} - ${currentWeek.key} matchs:`, matchesToDisplay.length);
                 
             } else if (this.displayMode === 'venue') {
                 // MODE GYMNASE: Organiser par gymnase, naviguer entre BESSON, LAENNEC...
@@ -521,7 +572,22 @@ class AgendaGridView {
             // ═══════════════════════════════════════════════════════════════
             // GÉNÉRATION DU HTML (commun aux deux modes)
             // ═══════════════════════════════════════════════════════════════
-            const html = this.generateAgendaView(matchesToDisplay, data);
+            const ententePanelContent = isEntenteMode
+                ? this.buildEntentePanelContent(
+                    filteredMatches,
+                    filteredPendingEntentes,
+                    this.ententeContext
+                )
+                : '';
+
+            const ententePanelSection = ententePanelContent
+                ? `<section class="agenda-entente-mode entente-followup">${ententePanelContent}</section>`
+                : '';
+            
+            const html = this.generateAgendaView(matchesToDisplay, data, {
+                ententeMode: isEntenteMode,
+                ententePanel: ententePanelSection
+            });
             
             this.container.innerHTML = html;
             
@@ -558,7 +624,7 @@ class AgendaGridView {
     /**
      * Génère la vue agenda complète avec axe temporel et colonnes de gymnases
      */
-    generateAgendaView(matches, data) {
+    generateAgendaView(matches, data, options = {}) {
         // Utiliser les constantes de classe
         const minHour = AgendaGridView.MIN_HOUR;
         const maxHour = AgendaGridView.MAX_HOUR;
@@ -566,6 +632,8 @@ class AgendaGridView {
         const matchDuration = AgendaGridView.MATCH_DURATION_HOURS;
         const matchDisplayHeight = AgendaGridView.MATCH_DURATION_HOURS;
         const totalHeight = (maxHour - minHour) * pixelsPerHour;
+        const { ententeMode = false, ententePanel = '' } = options;
+        const isWeekLikeMode = this.displayMode === 'week' || ententeMode;
         
         // ═══════════════════════════════════════════════════════════════
         // DUAL MODE: Générer les colonnes selon le mode d'affichage
@@ -581,7 +649,7 @@ class AgendaGridView {
         let weekMaxSimultaneous;
         let matchesByWeek;
         
-        if (this.displayMode === 'week') {
+        if (isWeekLikeMode) {
             // MODE JOURNÉE: Colonnes = Gymnases
             venues = this.getVenuesWithCapacity(matches, data);
             matchesByVenue = this.groupMatchesByVenue(matches);
@@ -668,7 +736,7 @@ class AgendaGridView {
         
         // Générer les en-têtes de colonnes séparément
         let headersHTML = '';
-        if (this.displayMode === 'week') {
+        if (isWeekLikeMode) {
             headersHTML = venues.map(venue => {
                 const widthInfo = columnWidths.get(venue.id) || { width: this.columnMinWidth, widthPerSlot: 200 };
                 const maxSim = venueMaxSimultaneous.get(venue.id) || 1;
@@ -743,6 +811,7 @@ class AgendaGridView {
                         </div>
                     </div>
                 </div>
+                ${ententePanel || ''}
             </div>
         `;
     }
@@ -1172,69 +1241,75 @@ class AgendaGridView {
      * Structure propre avec 3 sections : info gauche, navigation centrale, stats droite
      */
     generateNavigationBar(matches, venues, data) {
-        const totalVenues = venues.length;
-        const totalMatches = matches.length;
+        const isEntenteMode = this.displayMode === 'entente';
+        let totalVenues = venues.length;
+        let totalMatches = matches.length;
         
-        // ═══════════════════════════════════════════════════════════════
-        // DUAL MODE: Informations de navigation selon le mode
-        // ═══════════════════════════════════════════════════════════════
+        if (isEntenteMode) {
+            totalVenues = this.countUniqueVenues(this.ententeContext?.scheduledMatches || []);
+            totalMatches = this.ententeContext?.scheduledCount || 0;
+        }
+        
         let navigationContent = '';
+        const btnStyle = "padding: 0.75rem 1.25rem; background: linear-gradient(135deg, #667eea, #764ba2); color: white; border: none; border-radius: 12px; cursor: pointer; font-weight: 700; box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3); transition: all 0.2s ease;";
+        const btnDisabledStyle = "padding: 0.75rem 1.25rem; background: linear-gradient(135deg, #adb5bd, #868e96); color: white; border: none; border-radius: 12px; cursor: not-allowed; font-weight: 700; box-shadow: none; opacity: 0.3;";
         
-        if (this.displayMode === 'week') {
-            // MODE JOURNÉE: Naviguer entre J1, J2, J4...
+        if (this.displayMode === 'week' || isEntenteMode) {
             const currentWeek = this.weeks[this.currentWeekIndex];
-            const weekLabel = this.formatWeekLabel(currentWeek);
-            const weekDates = this.getWeekDates(currentWeek.weekNumber);
-            
-            const fullDate = weekDates.date.toLocaleDateString('fr-FR', { 
-                weekday: 'long', 
-                year: 'numeric', 
-                month: 'long', 
-                day: 'numeric' 
-            });
-            
-            const prevDisabled = this.currentWeekIndex === 0 ? 'disabled' : '';
-            const nextDisabled = this.currentWeekIndex === this.weeks.length - 1 ? 'disabled' : '';
-            const weekIndicator = `${this.currentWeekIndex + 1}/${this.weeks.length}`;
-            
-            const btnStyle = "padding: 0.75rem 1.25rem; background: linear-gradient(135deg, #667eea, #764ba2); color: white; border: none; border-radius: 12px; cursor: pointer; font-weight: 700; box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3); transition: all 0.2s ease;";
-            const btnDisabledStyle = "padding: 0.75rem 1.25rem; background: linear-gradient(135deg, #adb5bd, #868e96); color: white; border: none; border-radius: 12px; cursor: not-allowed; font-weight: 700; box-shadow: none; opacity: 0.3;";
-            
-            navigationContent = `
-                <button id="prev-week" class="nav-button nav-prev" ${prevDisabled} title="Journée précédente" style="${prevDisabled ? btnDisabledStyle : btnStyle}">
-                    <span class="nav-button-icon" style="font-size: 1.25rem; font-weight: 900;">◀</span>
-                </button>
+            if (currentWeek) {
+                const weekLabel = this.formatWeekLabel(currentWeek);
+                const weekDates = this.getWeekDates(currentWeek.weekNumber);
+                const fullDate = weekDates.date.toLocaleDateString('fr-FR', {
+                    weekday: 'long',
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric'
+                });
+                const prevDisabled = this.currentWeekIndex === 0 ? 'disabled' : '';
+                const nextDisabled = this.currentWeekIndex === this.weeks.length - 1 ? 'disabled' : '';
+                const weekIndicator = `${this.currentWeekIndex + 1}/${this.weeks.length}`;
                 
-                <div class="nav-current-item" style="display: flex; flex-direction: column; align-items: center; gap: 0.5rem; min-width: 350px; padding: 0.75rem 1.5rem; background: white; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08);">
-                    <div class="nav-item-main" style="display: flex; align-items: center; gap: 1rem;">
-                        <span class="nav-item-label" style="font-size: 1.5rem; font-weight: 900; color: #667eea; letter-spacing: 1px;">${weekLabel}</span>
-                        <span class="nav-item-indicator" style="padding: 0.25rem 0.75rem; background: linear-gradient(135deg, #f8f9fa, #e9ecef); border-radius: 20px; font-size: 0.85rem; font-weight: 600; color: #495057;">${weekIndicator}</span>
-                    </div>
-                    <div class="nav-item-subtitle" title="${fullDate}" style="font-size: 0.9rem; color: #6c757d; font-weight: 600;">
-                        ${fullDate}
-                    </div>
-                </div>
+                let subtitle = fullDate;
+                let titleIcon = '';
+                if (isEntenteMode) {
+                    const stats = this.ententeContext || { total: 0, scheduledCount: 0, pendingCount: 0 };
+                    const ratio = stats.total ? Math.round((stats.scheduledCount / stats.total) * 100) : 0;
+                    const progressText = stats.total
+                        ? `${stats.scheduledCount}/${stats.total} planifiées • ${ratio}%`
+                        : 'Aucune entente planifiée';
+                    subtitle = `${fullDate} • ${progressText}`;
+                    titleIcon = '<span class="nav-item-icon" style="font-size: 1.5rem;">🤝</span>';
+                }
                 
-                <button id="next-week" class="nav-button nav-next" ${nextDisabled} title="Journée suivante" style="${nextDisabled ? btnDisabledStyle : btnStyle}">
-                    <span class="nav-button-icon" style="font-size: 1.25rem; font-weight: 900;">▶</span>
-                </button>
-            `;
-            
+                navigationContent = `
+                    <button id="prev-week" class="nav-button nav-prev" ${prevDisabled} title="Journée précédente" style="${prevDisabled ? btnDisabledStyle : btnStyle}">
+                        <span class="nav-button-icon" style="font-size: 1.25rem; font-weight: 900;">◀</span>
+                    </button>
+                    
+                    <div class="nav-current-item" style="display: flex; flex-direction: column; align-items: center; gap: 0.5rem; min-width: 350px; padding: 0.75rem 1.5rem; background: white; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08);">
+                        <div class="nav-item-main" style="display: flex; align-items: center; gap: 1rem;">
+                            ${titleIcon}
+                            <span class="nav-item-label" style="font-size: 1.5rem; font-weight: 900; color: #667eea; letter-spacing: 1px;">${weekLabel}</span>
+                            <span class="nav-item-indicator" style="padding: 0.25rem 0.75rem; background: linear-gradient(135deg, #f8f9fa, #e9ecef); border-radius: 20px; font-size: 0.85rem; font-weight: 600; color: #495057;">${weekIndicator}</span>
+                        </div>
+                        <div class="nav-item-subtitle" title="${fullDate}" style="font-size: 0.9rem; color: #6c757d; font-weight: 600;">
+                            ${subtitle}
+                        </div>
+                    </div>
+                    
+                    <button id="next-week" class="nav-button nav-next" ${nextDisabled} title="Journée suivante" style="${nextDisabled ? btnDisabledStyle : btnStyle}">
+                        <span class="nav-button-icon" style="font-size: 1.25rem; font-weight: 900;">▶</span>
+                    </button>
+                `;
+            }
         } else if (this.displayMode === 'venue') {
-            // MODE GYMNASE: Naviguer entre BESSON, LAENNEC, DESCARTES...
             const currentVenue = this.venues[this.currentVenueIndex];
             const venueName = currentVenue.displayName || currentVenue.venueName;
-            
             const prevDisabled = this.currentVenueIndex === 0 ? 'disabled' : '';
             const nextDisabled = this.currentVenueIndex === this.venues.length - 1 ? 'disabled' : '';
             const venueIndicator = `${this.currentVenueIndex + 1}/${this.venues.length}`;
-            
-            // Compter le nombre de journées différentes dans ce gymnase
             const uniqueWeeks = new Set(currentVenue.matches.map(m => m.semaine));
             const weekCount = uniqueWeeks.size;
-            
-            const btnStyle = "padding: 0.75rem 1.25rem; background: linear-gradient(135deg, #667eea, #764ba2); color: white; border: none; border-radius: 12px; cursor: pointer; font-weight: 700; box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3); transition: all 0.2s ease;";
-            const btnDisabledStyle = "padding: 0.75rem 1.25rem; background: linear-gradient(135deg, #adb5bd, #868e96); color: white; border: none; border-radius: 12px; cursor: not-allowed; font-weight: 700; box-shadow: none; opacity: 0.3;";
             
             navigationContent = `
                 <button id="prev-venue" class="nav-button nav-prev" ${prevDisabled} title="Gymnase précédent" style="${prevDisabled ? btnDisabledStyle : btnStyle}">
@@ -1258,6 +1333,14 @@ class AgendaGridView {
             `;
         }
         
+        const pendingInfo = isEntenteMode ? `
+            <div class="nav-info-group" style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; background: rgba(102, 126, 234, 0.05); border-radius: 8px; transition: all 0.2s ease;">
+                <span class="nav-icon" style="font-size: 1.25rem;">⌛</span>
+                <span class="nav-label" style="font-size: 0.85rem; color: #6c757d; font-weight: 600;">À organiser</span>
+                <span class="nav-value" style="font-size: 1rem; font-weight: 700; color: #f97316;">${this.ententeContext?.pendingCount || 0}</span>
+            </div>
+        ` : '';
+        
         return `
             <div class="agenda-navigation-bar" style="display: flex; justify-content: space-between; align-items: center; padding: 1rem 1.5rem; background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%); border-bottom: 3px solid #667eea; box-shadow: 0 4px 12px rgba(0,0,0,0.08); flex-shrink: 0; gap: 2rem; z-index: 100;">
                 <!-- Section gauche: Informations générales -->
@@ -1272,6 +1355,7 @@ class AgendaGridView {
                         <span class="nav-label" style="font-size: 0.85rem; color: #6c757d; font-weight: 600;">Matchs</span>
                         <span class="nav-value" style="font-size: 1rem; font-weight: 700; color: #667eea;">${totalMatches}</span>
                     </div>
+                    ${pendingInfo}
                 </div>
                 
                 <!-- Section centrale: Navigation dynamique selon le mode -->
@@ -1714,6 +1798,200 @@ class AgendaGridView {
         
         return slots;
     }
+
+    /**
+     * Agrège tous les matchs marqués comme ententes (planifiés ou non)
+     */
+    collectEntenteMatches(data) {
+        const aggregated = [];
+        const seen = new Set();
+        const sources = [
+            ...(data?.matches?.scheduled || []),
+            ...(data?.matches?.unscheduled || []),
+            ...(data?.matches?.fixed || [])
+        ];
+        
+        sources.forEach(match => {
+            if (!this.isEntenteMatch(match)) return;
+            const key = match.match_id || `${match.equipe1_id || match.equipe1_nom}-${match.equipe2_id || match.equipe2_nom}-${match.semaine || 'NA'}`;
+            if (seen.has(key)) return;
+            seen.add(key);
+            aggregated.push(match);
+        });
+        
+        return aggregated;
+    }
+
+    /**
+     * Détermine si un match est une entente
+     */
+    isEntenteMatch(match) {
+        if (!match) return false;
+        return Boolean(
+            match.is_entente ||
+            match.entente_status ||
+            (match.penalties && match.penalties.entente !== undefined)
+        );
+    }
+
+    /**
+     * Vérifie si une entente est planifiée (créneau confirmé)
+     */
+    isEntentePlanned(match) {
+        if (!this.isEntenteMatch(match)) return false;
+        if (match.entente_status) {
+            const status = match.entente_status.toLowerCase();
+            return status === 'planifiee' || status === 'planifiée';
+        }
+        return Boolean(match.semaine && match.gymnase && match.horaire);
+    }
+
+    hasEntenteSlot(match) {
+        if (!match) return false;
+        return Boolean(
+            match.semaine &&
+            match.horaire &&
+            (match.gymnase || match.gymnase_id || match.venue || match.venue_id)
+        );
+    }
+
+    renderEntenteFallbackView(plannedMatches, pendingMatches, filtersActive) {
+        const stats = this.ententeContext || { total: 0, scheduledCount: 0, pendingCount: 0 };
+        const panelContent = this.buildEntentePanelContent(plannedMatches, pendingMatches, stats);
+        let message;
+        if (stats.scheduledCount === 0) {
+            message = stats.pendingCount > 0
+                ? "Aucun match d'entente n'a encore reçu de créneau confirmé."
+                : "Aucune entente enregistrée pour le moment.";
+        } else if (filtersActive) {
+            message = "Aucun match d'entente planifié ne correspond aux filtres sélectionnés.";
+        } else {
+            message = "Aucun match d'entente planifié à afficher pour cette sélection.";
+        }
+        
+        this.container.innerHTML = `
+            <div class="agenda-view-container agenda-entente-mode entente-fallback">
+                <div class="empty-state">${message}</div>
+                ${panelContent ? `<section class="agenda-entente-mode entente-followup">${panelContent}</section>` : ''}
+            </div>
+        `;
+    }
+
+    buildEntentePanelContent(plannedMatches, pendingMatches, stats = null) {
+        const plannedCount = stats?.scheduledCount ?? plannedMatches.length;
+        const pendingCount = stats?.pendingCount ?? pendingMatches.length;
+        const totalCount = stats?.total ?? (plannedCount + pendingCount);
+        
+        if (!totalCount && plannedMatches.length === 0 && pendingMatches.length === 0) {
+            return '';
+        }
+        
+        const plannedFilteredLabel = plannedCount !== plannedMatches.length
+            ? `${plannedMatches.length}/${plannedCount} visibles`
+            : '';
+        const pendingFilteredLabel = pendingCount !== pendingMatches.length
+            ? `${pendingMatches.length}/${pendingCount} visibles`
+            : '';
+        
+        const pendingEmptyMessage = pendingCount > 0 && pendingMatches.length === 0
+            ? 'Les filtres actifs masquent ces ententes.'
+            : undefined;
+        const plannedEmptyMessage = plannedCount > 0 && plannedMatches.length === 0
+            ? 'Les filtres actifs masquent ces ententes planifiées.'
+            : undefined;
+        
+        return `
+            ${this.generateEntenteSummaryBar(totalCount, plannedCount, pendingCount)}
+            <div class="entente-columns">
+                ${this.generateEntenteColumn('À organiser', pendingMatches, 'pending', {
+                    countOverride: pendingCount,
+                    subtitleExtra: pendingFilteredLabel,
+                    emptyMessage: pendingEmptyMessage
+                })}
+                ${this.generateEntenteColumn('Planifiées', plannedMatches, 'planned', {
+                    countOverride: plannedCount,
+                    subtitleExtra: plannedFilteredLabel,
+                    emptyMessage: plannedEmptyMessage
+                })}
+            </div>
+        `;
+    }
+
+    generateEntenteSummaryBar(total, planned, pending) {
+        const ratio = total ? Math.round((planned / total) * 100) : 0;
+        return `
+            <div class="entente-summary-bar">
+                <div class="entente-summary-card">
+                    <div>
+                        <div class="entente-summary-label">Ententes totales</div>
+                        <div class="entente-summary-value">${total}</div>
+                    </div>
+                    <span class="entente-summary-icon">🤝</span>
+                </div>
+                <div class="entente-summary-card pending">
+                    <div>
+                        <div class="entente-summary-label">À organiser</div>
+                        <div class="entente-summary-value">${pending}</div>
+                    </div>
+                    <span class="entente-summary-icon">⌛</span>
+                </div>
+                <div class="entente-summary-card planned">
+                    <div>
+                        <div class="entente-summary-label">Planifiées</div>
+                        <div class="entente-summary-value">${planned}</div>
+                    </div>
+                    <span class="entente-summary-icon">✅</span>
+                </div>
+                <div class="entente-summary-card ratio">
+                    <div>
+                        <div class="entente-summary-label">Avancement</div>
+                        <div class="entente-summary-value">${ratio}%</div>
+                    </div>
+                    <span class="entente-summary-icon">📈</span>
+                </div>
+            </div>
+        `;
+    }
+
+    generateEntenteColumn(title, matches, variant, options = {}) {
+        const count = typeof options.countOverride === 'number' ? options.countOverride : matches.length;
+        const baseSubtitle = options.subtitle || (variant === 'pending'
+            ? 'Créneaux à définir avec les capitaines'
+            : 'Créneaux confirmés pour les ententes');
+        const subtitleExtra = options.subtitleExtra ? ` • ${options.subtitleExtra}` : '';
+        const subtitle = `${baseSubtitle}${subtitleExtra}`;
+        const emptyMessage = options.emptyMessage || (variant === 'pending'
+            ? 'Toutes les ententes sont déjà engagées'
+            : 'Aucune entente confirmée pour l\'instant');
+        const emptyIcon = variant === 'pending' ? '🙌' : '🎯';
+        const cards = count
+            ? matches.map((match, index) => `
+                    <div class="entente-card-wrapper">
+                        ${this.cardRenderer.renderMatchCard(match, false, index, false, null)}
+                    </div>
+                `).join('')
+            : `
+                <div class="entente-empty-state">
+                    <div class="entente-empty-icon">${emptyIcon}</div>
+                    <div>${emptyMessage}</div>
+                </div>
+            `;
+        
+        return `
+            <section class="entente-column entente-${variant}">
+                <header class="entente-column-header">
+                    <div>
+                        <div class="entente-column-title">${title}</div>
+                        <div class="entente-column-subtitle">${subtitle}</div>
+                    </div>
+                    <span class="entente-count">${count}</span>
+                </header>
+                <div class="entente-column-body">
+                    ${cards}
+                </div>
+            </section>
+        `;
+    }
     
     /**
      * Attache les événements aux éléments de la vue
@@ -1730,7 +2008,7 @@ class AgendaGridView {
         // DUAL MODE: Navigation selon le mode d'affichage
         // ═══════════════════════════════════════════════════════════════
         
-        if (this.displayMode === 'week') {
+        if (this.displayMode === 'week' || this.displayMode === 'entente') {
             // MODE JOURNÉE: Navigation entre J1, J2, J4...
             const prevBtn = this.container.querySelector('#prev-week');
             const nextBtn = this.container.querySelector('#next-week');

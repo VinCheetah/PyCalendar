@@ -247,12 +247,17 @@ streamlit run app_penalty_analyzer.py
 
 ### Feuille "Gymnases" (OBLIGATOIRE)
 
-| Gymnase    | Adresse              | Capacite | Creneaux                    |
-|------------|----------------------|----------|-----------------------------|
-| SCIENCES C | Campus Doua          | 1        | 09:00, 12:00, 14:00, 18:00  |
-| ECL        | 36 avenue Guy        | 1        | 14:00, 18:00                |
+| Gymnase    | Adresse              | Capacite | Creneaux                    | Niveau | Genre_Prioritaire |
+|------------|----------------------|----------|-----------------------------|--------|-------------------|
+| SCIENCES C | Campus Doua          | 1        | 09:00, 12:00, 14:00, 18:00  | Haut   | M                 |
+| ECL        | 36 avenue Guy        | 1        | 14:00, 18:00                | Bas    |                   |
 
-**Creneaux** : Liste séparée par des virgules
+**Colonnes clés** :
+
+- `Creneaux` : Liste séparée par des virgules
+- `Niveau` : `Haut` ou `Bas` (remplace l'ancienne feuille `Niveaux_Gymnases`)
+- `Genre_Prioritaire` : `M` ou `F` pour réserver le gymnase à un genre (optionnel)
+
 
 ### Feuille "Indispos_Institutions" (AUTO-GÉNÉRÉE)
 
@@ -266,6 +271,7 @@ Permet de définir des indisponibilités qui s'appliquent à **toutes les équip
 | ENS         | 15      | 18:30         | 21:00       | Événement étudiant  |
 
 **Colonnes** :
+
 - `Institution` : Nom exact de l'institution (obligatoire)
 - `Semaine` : Numéro de la semaine concernée (obligatoire)
 - `Horaire_Debut` : Heure de début de l'indisponibilité (format HH:MM, optionnel)
@@ -273,6 +279,7 @@ Permet de définir des indisponibilités qui s'appliquent à **toutes les équip
 - `Remarques` : Informations complémentaires (optionnel)
 
 **Notes importantes** :
+
 - Si `Horaire_Debut` et `Horaire_Fin` ne sont pas renseignés → indisponibilité sur **toute la semaine**
 - ⚠️ **Actuellement, seules les indisponibilités par semaine complète sont supportées** (les horaires spécifiques seront implémentés dans une version future)
 - L'indisponibilité s'applique automatiquement à toutes les équipes de l'institution
@@ -297,6 +304,7 @@ python actualiser_config.py examples/basic/config_exemple.xlsx
 ```
 
 **Actions automatiques** :
+
 1. ✅ Valide la structure des feuilles manuelles
 2. 🧹 Nettoie les marqueurs `[M]`/`[F]` des noms d'équipes
 3. 🗑️ Supprime les lignes d'exemple
@@ -307,7 +315,7 @@ python actualiser_config.py examples/basic/config_exemple.xlsx
 
 ## 📁 Structure du projet
 
-```
+```text
 PyCalendar/
 ├── core/                       # Modèles et configuration
 │   ├── models.py              # Equipe, Gymnase, Match, Solution
@@ -361,6 +369,7 @@ contraintes:
 ```
 
 **Résultat** :
+
 - ✅ Vérification automatique des contraintes
 - 📊 Statistiques détaillées
 - ⚠️ Violations de contraintes (si présentes)
@@ -368,6 +377,7 @@ contraintes:
 ### Contraintes supportées
 
 **Contraintes DURES** (toujours respectées) :
+
 - ✅ Indisponibilités des équipes
 - ✅ Indisponibilités institutionnelles (toutes équipes d'une institution)
 - ✅ Indisponibilités des gymnases
@@ -376,6 +386,7 @@ contraintes:
 - ✅ Une équipe joue maximum 1 match par semaine
 
 **Contraintes SOUPLES** (optimisées) :
+
 - 📊 Préférences d'horaires
 - 📊 Préférences de gymnases
 - 📊 Espacement entre matchs (avec pénalités progressives)
@@ -391,6 +402,7 @@ Le genre est extrait du code de poule automatiquement.
 ### Planification incomplète
 
 Si tous les matchs ne sont pas planifiés :
+
 1. Vérifiez les indisponibilités (peut-être trop restrictives)
 2. Augmentez le nombre de créneaux (plus de gymnases ou horaires)
 3. Réduisez les contraintes DURES si approprié
@@ -405,6 +417,7 @@ python actualiser_config.py examples/basic/config_exemple.xlsx
 ## 📚 Documentation complète
 
 ### Guides d'utilisation
+
 - **[GUIDE_CONFIGURATION_CENTRALE.md](GUIDE_CONFIGURATION_CENTRALE.md)** - Guide complet de configuration
 - **[GUIDE_INTEGRATION_CONTRAINTES.md](GUIDE_INTEGRATION_CONTRAINTES.md)** - Comment les contraintes fonctionnent
 - **[GUIDE_ACTUALISATION.md](GUIDE_ACTUALISATION.md)** - Utilisation de l'outil d'actualisation
@@ -412,6 +425,7 @@ python actualiser_config.py examples/basic/config_exemple.xlsx
 - **[GUIDE_ANALYSEUR_PENALITES.md](GUIDE_ANALYSEUR_PENALITES.md)** - 🆕 Analyseur avancé avec données réelles
 
 ### Documentation technique
+
 - **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** - Architecture technique du système
 - **[MAX_MIN_DESIGN.md](docs/MAX_MIN_DESIGN.md)** - 🆕 Système d'équilibrage max-min progressif
 - **[ANALYSE_EQUILIBRAGE.md](docs/ANALYSE_EQUILIBRAGE.md)** - 🆕 Guide d'analyse de la qualité d'équilibrage
@@ -436,6 +450,7 @@ python scripts/generate_entente_notifications.py --deadline "31/03/2026"
 **Voir** : [QUICKSTART_NOTIFICATIONS.md](docs/QUICKSTART_NOTIFICATIONS.md) pour le guide rapide complet.
 
 Les **ententes** sont des matchs planifiés sans créneau fixe que les équipes doivent organiser entre elles. Le script génère un fichier texte avec tous les emails formatés, incluant :
+
 - 📧 Coordonnées complètes de chaque adversaire (capitaine, email, téléphone)
 - 📅 Date limite configurable
 - 📝 Instructions claires pour l'organisation
@@ -460,6 +475,7 @@ python test_equilibrage.py --all
 ```
 
 Le script analyse **uniquement le championnat académique** (exclut ententes et matchs externes) et fournit :
+
 - 📊 Statistiques détaillées (min/max/moyenne/écart-type)
 - ⭐ Note de qualité sur 5 étoiles
 - 📈 Distribution visuelle des matchs
@@ -467,7 +483,8 @@ Le script analyse **uniquement le championnat académique** (exclut ententes et 
 - 🎯 Analyse par poule et institution
 
 **Exemple de résultat** :
-```
+
+```text
 Statistiques d'équilibrage:
    MINIMUM : 1 match    MAXIMUM : 6 matchs
    AMPLITUDE : 5        ÉCART-TYPE : 1.15
@@ -497,6 +514,7 @@ Pour ajouter de nouvelles contraintes ou fonctionnalités, consultez [GUIDE_INTE
 ## 🎯 Exemples
 
 Voir le dossier `data_hand/` pour un exemple complet de configuration handball avec :
+
 - 46 équipes réparties en 10 poules
 - 8 gymnases
 - 4 obligations de présence

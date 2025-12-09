@@ -21,7 +21,9 @@ class TeamsView {
             pool: '',
             venue: '',
             week: '',
-            equipe: ''
+            equipe: '',
+            horaireStart: null,
+            horaireEnd: null
         };
         
         // Options d'affichage
@@ -315,6 +317,11 @@ class TeamsView {
         // IMPORTANT: Les matchs "entente" SANS créneau sont considérés comme PLANIFIÉS
         // car ils seront joués en dehors du calendrier officiel
         const ententeMatches = teamMatches.filter(m => m.is_entente);
+
+        const hasRecordedScore = (match) => 
+            match.score && match.score.has_score &&
+            match.score.equipe1 !== null && match.score.equipe1 !== undefined &&
+            match.score.equipe2 !== null && match.score.equipe2 !== undefined;
         
         // Matchs planifiés = matchs avec créneau + matchs entente sans créneau
         const scheduledMatches = teamMatches.filter(m => m.semaine || m.is_entente);
@@ -322,20 +329,11 @@ class TeamsView {
         // Matchs NON planifiés = matchs sans créneau ET non entente
         const unscheduledMatches = teamMatches.filter(m => !m.semaine && !m.is_entente);
         
-        // Matchs joués (avec score) - uniquement parmi les matchs planifiés avec créneau
-        const playedMatches = scheduledMatches.filter(m => 
-            m.semaine && // Doit avoir un créneau pour être considéré "joué"
-            m.score && m.score.has_score &&
-            m.score.equipe1 !== null && m.score.equipe1 !== undefined &&
-            m.score.equipe2 !== null && m.score.equipe2 !== undefined
-        );
+        // Matchs joués = score enregistré, même pour les ententes sans créneau
+        const playedMatches = scheduledMatches.filter(hasRecordedScore);
         
-        const upcomingMatches = scheduledMatches.filter(m => 
-            m.semaine && // Matchs avec créneau seulement
-            (!m.score || !m.score.has_score ||
-            m.score.equipe1 === null || m.score.equipe1 === undefined ||
-            m.score.equipe2 === null || m.score.equipe2 === undefined)
-        );
+        // Matchs à venir = planifiés (créneau ou entente) sans score enregistré
+        const upcomingMatches = scheduledMatches.filter(m => !hasRecordedScore(m));
         
         // Statistiques de performance
         let won = 0, drawn = 0, lost = 0, points = 0;
@@ -374,8 +372,16 @@ class TeamsView {
         });
         
         // Statistiques de planning
-        const weeksPlayed = new Set(scheduledMatches.map(m => m.semaine)).size;
-        const venuesUsed = new Set(scheduledMatches.map(m => m.gymnase)).size;
+        const weeksPlayed = new Set(
+            scheduledMatches
+                .map(m => m.semaine)
+                .filter(week => week !== undefined && week !== null)
+        ).size;
+        const venuesUsed = new Set(
+            scheduledMatches
+                .map(m => m.gymnase)
+                .filter(venue => venue !== undefined && venue !== null)
+        ).size;
         
         // Pénalités
         const totalPenalties = teamMatches.reduce((sum, m) => {
@@ -479,7 +485,7 @@ class TeamsView {
                     return false;
                 }
             }
-            
+
             // Filtres combinés sur les matchs (semaine ET/OU gymnase ET/OU plage horaire)
             // Si au moins un filtre de match est actif, on vérifie que l'équipe a au moins un match
             // qui satisfait TOUS les critères de matchs actifs simultanément

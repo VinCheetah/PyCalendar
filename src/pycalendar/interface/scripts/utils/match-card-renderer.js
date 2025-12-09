@@ -105,6 +105,7 @@ class MatchCardRenderer {
                     </div>
                     
                     ${this.renderCompactMatchInfo(match)}
+                    ${match.is_entente ? this.renderEntenteStatus(match) : ''}
                     
                 </div>
                 ${hasPenalties ? this.renderPenaltyIndicator(match.penalties) : ''}
@@ -249,6 +250,32 @@ class MatchCardRenderer {
         
         return `<div class="match-info-compact" style="display: flex; gap: 0.4rem; align-items: center; justify-content: center; margin-top: 0.4rem; padding-top: 0.4rem; border-top: 1px solid rgba(255, 255, 255, 0.3); font-size: 0.625rem;">${info.join(' ')}</div>`;
     }
+
+    /**
+     * Affiche l'état d'une entente (planifiée ou non) avec l'état du score
+     */
+    renderEntenteStatus(match) {
+        if (!match.is_entente) return '';
+        const planned = match.entente_status === 'planifiee';
+        const hasScore = match.score && match.score.has_score &&
+            match.score.equipe1 !== null && match.score.equipe1 !== undefined &&
+            match.score.equipe2 !== null && match.score.equipe2 !== undefined;
+        const baseColor = planned ? 'rgba(46, 204, 113, 0.25)' : 'rgba(255, 159, 67, 0.25)';
+        const borderColor = planned ? 'rgba(46, 204, 113, 0.6)' : 'rgba(255, 159, 67, 0.6)';
+        const icon = planned ? '✅' : '🕒';
+        const label = planned ? 'Entente planifiée' : 'Entente à planifier';
+        const scoreBlock = hasScore
+            ? `<span style="font-weight: 800; font-family: 'Roboto Mono', monospace;">${match.score.equipe1} - ${match.score.equipe2}</span>`
+            : '<span style="font-weight: 600; opacity: 0.8;">Score non renseigné</span>';
+        return `
+            <div class="entente-status" style="margin-top: 0.35rem; padding: 0.35rem 0.5rem; border-radius: 6px; background: ${baseColor}; border: 1px solid ${borderColor}; display: flex; justify-content: space-between; align-items: center; font-size: 0.6rem; gap: 0.5rem;">
+                <span style="font-weight: 700; display: inline-flex; align-items: center; gap: 0.25rem;">
+                    ${icon} ${label}
+                </span>
+                ${scoreBlock}
+            </div>
+        `;
+    }
     
     /**
      * Badges du match (fixed, external, etc.)
@@ -265,7 +292,10 @@ class MatchCardRenderer {
         }
         
         if (match.is_entente) {
-            badges.push('<span class="match-badge badge-entente" style="font-size: 0.7rem; padding: 0.15rem 0.3rem; border-radius: 4px; background: rgba(255, 255, 255, 0.25); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);" title="Entente">🤝</span>');
+            const planned = match.entente_status === 'planifiee';
+            const title = planned ? 'Entente planifiée' : 'Entente à planifier';
+            const icon = planned ? '🤝✅' : '🤝⌛';
+            badges.push(`<span class="match-badge badge-entente" style="font-size: 0.7rem; padding: 0.15rem 0.3rem; border-radius: 4px; background: rgba(255, 255, 255, 0.25); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);" title="${title}">${icon}</span>`);
         }
         
         // Badge spécial pour CFU
@@ -376,7 +406,10 @@ class MatchCardRenderer {
         // Badges
         if (match.is_fixed) lines.push('📌 Match fixé');
         if (match.is_external) lines.push('🔗 Match externe');
-        if (match.is_entente) lines.push('🤝 Entente');
+        if (match.is_entente) {
+            const planned = match.entente_status === 'planifiee';
+            lines.push(planned ? '🤝 Entente planifiée' : '🤝 Entente à planifier');
+        }
         
         return lines.join('\n');
     }
@@ -488,8 +521,8 @@ class MatchCardRenderer {
         if (penalties.compaction > 0) {
             parts.push(`📦 Compaction: ${penalties.compaction.toFixed(1)}`);
         }
-        if (penalties.overlap_institution > 0) {
-            parts.push(`🔀 Overlap institution: ${penalties.overlap_institution.toFixed(1)}`);
+        if (penalties.overlap > 0) {
+            parts.push(`🔀 Overlap institution: ${penalties.overlap.toFixed(1)}`);
         }
         if (penalties.aller_retour > 0) {
             parts.push(`↔️ Aller-retour: ${penalties.aller_retour.toFixed(1)}`);

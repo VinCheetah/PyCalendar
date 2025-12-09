@@ -45,12 +45,13 @@ class CalendarManager:
         """
         self.config = config
         self._date_debut = datetime.strptime(config.date_debut, "%Y-%m-%d")
-        self._jour_match = config.jour_match
+        self._jour_match = CalendarManager.normaliser_jour_match(config.jour_match)
         self._semaines_banalisees = set(config.semaines_banalisees or [])
 
         # Calculer les dates des semaines
         self._semaine_to_date: Dict[int, datetime] = {}
         self._date_to_semaine: Dict[datetime, int] = {}
+        self._first_week_date: Optional[datetime] = None
         self._build_calendar_mapping()
 
     def _build_calendar_mapping(self):
@@ -67,6 +68,9 @@ class CalendarManager:
                 days_ahead += 1
             current_date = target_day
         
+        # Sauvegarder la toute première date alignée pour les conversions
+        self._first_week_date = current_date
+
         # Construire le mapping pour les semaines suivantes
         semaine_num = 1
         while semaine_num <= 52:  # Maximum 52 semaines par année
@@ -101,6 +105,34 @@ class CalendarManager:
             Numéro de la semaine, ou None si pas de match cette semaine
         """
         return self._date_to_semaine.get(date)
+
+    def infer_semaine_from_date(self, date: datetime) -> Optional[int]:
+        """Déduit le numéro de semaine correspondant à une date arbitraire."""
+        normalized = datetime(date.year, date.month, date.day)
+        mapped = self._date_to_semaine.get(normalized)
+        if mapped:
+            return mapped
+
+        if not self._first_week_date:
+            return None
+
+        delta_days = (normalized - self._first_week_date).days
+        if delta_days < 0:
+            return None
+
+        semaine_estimee = delta_days // 7 + 1
+        if semaine_estimee > 52:
+            return None
+        return semaine_estimee
+
+    def est_jour_officiel(self, date: datetime) -> bool:
+        """Retourne True si la date tombe sur le jour officiel des matchs."""
+        return date.strftime("%A").lower() == self._jour_match.lower()
+
+    @property
+    def jour_match(self) -> str:
+        """Expose le jour officiel des matchs."""
+        return self._jour_match
 
     def est_semaine_banalisee(self, semaine: int) -> bool:
         """

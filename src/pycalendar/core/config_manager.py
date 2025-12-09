@@ -24,7 +24,7 @@ Structure du fichier Excel :
 
 import pandas as pd
 import openpyxl
-from openpyxl.styles import Font, PatternFill, Alignment
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 import logging
@@ -59,15 +59,22 @@ class ConfigManager:
             ]
         },
         'Gymnases': {
-            'colonnes': ['Gymnase', 'Adresse', 'Capacite', 'Creneaux'],
-            'description': 'Gymnases avec capacité et créneaux disponibles (À REMPLIR MANUELLEMENT)',
+            'colonnes': ['Gymnase', 'Adresse', 'Capacite', 'Creneaux', 'Niveau', 'Genre_Prioritaire'],
+            'description': 'Gymnases avec capacité, créneaux disponibles et attributs (niveau, genre prioritaire)',
             'type': 'manuel',
             'exemple': {
                 'Gymnase': 'INSA C',
                 'Adresse': '20 Avenue Albert Einstein, 69100 Villeurbanne',
                 'Capacite': 2,
-                'Creneaux': '09:00, 14:00, 18:00'
-            }
+                'Creneaux': '09:00, 14:00, 18:00',
+                'Niveau': 'Haut niveau',
+                'Genre_Prioritaire': 'F'
+            },
+            'notes': [
+                'Niveau: Optionnel. Valeurs conseillées: "Haut niveau" ou "Bas niveau" (alimentation du mapping de pénalités).',
+                'Genre_Prioritaire: Optionnel. Valeurs: "F" ou "M". Si un match d\'un autre genre est planifié dans ce gymnase, une pénalité souple est appliquée.',
+                'Laisser vide ces colonnes si aucune information n\'est disponible pour un gymnase.'
+            ]
         },
         'Indispos_Gymnases': {
             'colonnes': ['Gymnase', 'Semaine', 'Horaire_Debut', 'Horaire_Fin', 'Capacite_Occupee', 'Remarques'],
@@ -195,6 +202,26 @@ class ConfigManager:
                 'Remarques': 'Grandes écoles d\'ingénieurs qui ne doivent pas jouer simultanément'
             }
         },
+        'Coach_Groups': {
+            'colonnes': ['group_id', 'coach_name'] + [f'slot_{i:02d}' for i in range(1, 21)] + ['notes'],
+            'description': 'Groupes d\'équipes partageant un coach ou responsable commun',
+            'type': 'manuel',
+            'exemple': {
+                'group_id': 'PARIS',
+                'coach_name': 'Jean Dupont',
+                'slot_01': 'institution=PARIS',
+                'slot_02': 'institution=PARIS;gender=F',
+                'slot_03': 'team=LYON 1 (1);gender=M',
+                'notes': 'Coach principal volley'
+            },
+            'notes': [
+                '20 colonnes slot_XX permettent de décrire des règles d\'inclusion',
+                'Chaque slot accepte team=<équipe>, institution=<nom>, ou institution=<nom>;gender=<M/F>',
+                'gender peut aussi être indiqué sous forme genre=<M/F>',
+                'Laisser un slot vide si non utilisé (pas besoin de compacter)',
+                'notes: Commentaires facultatifs (club, contexte, etc.)'
+            ]
+        },
         'Ententes': {
             'colonnes': ['Institution_1', 'Institution_2', 'Penalite_Non_Planif', 'Remarques'],
             'description': 'Paires d\'institutions avec pénalité réduite si match non planifié',
@@ -254,7 +281,7 @@ class ConfigManager:
             ]
         },
         'Matchs_Fixes': {
-            'colonnes': ['Equipe_1', 'Equipe_2', 'Genre', 'Poule', 'Semaine', 'Horaire', 'Gymnase', 'Score', 'Type_Competition', 'Remarques'],
+            'colonnes': ['Equipe_1', 'Equipe_2', 'Genre', 'Poule', 'Semaine', 'Date', 'Horaire', 'Gymnase', 'Score', 'Type_Competition', 'Remarques'],
             'description': 'Matchs déjà joués ou planifiés à intégrer dans le calendrier',
             'type': 'manuel',
             'exemple': {
@@ -263,6 +290,7 @@ class ConfigManager:
                 'Genre': 'F',
                 'Poule': 'VBFA1PA',
                 'Semaine': '1',
+                'Date': '09/10/25',
                 'Horaire': '18:00',
                 'Gymnase': 'PARC DES SPORTS',
                 'Score': '3-1',
@@ -274,6 +302,10 @@ class ConfigManager:
                 'Genre: F ou M (obligatoire)',
                 'Poule: Code de la poule (doit correspondre aux équipes)',
                 'Semaine: Numéro de semaine où le match a été/sera joué (1 à nb_semaines)',
+                'Date: Date réelle du match (DD/MM/YY). Laisser vide si vous ne connaissez que la semaine',
+                '  → Si seule la semaine est renseignée, la date sera auto-remplie avec le jour officiel (ex: jeudi)',
+                '  → Si seule la date est renseignée, la semaine sera déduite automatiquement lorsque le calendrier est actif',
+                '  → Une date en dehors du jour officiel bascule automatiquement le match en entente (horaire et gymnase deviennent optionnels)',
                 'Horaire: Heure du match (format HH:MM)',
                 'Gymnase: Nom exact du gymnase (doit exister dans la feuille Gymnases)',
                 'Score: Score du match si déjà joué (optionnel, format: "X-Y")',
@@ -288,23 +320,6 @@ class ConfigManager:
                 'Ils apparaîtront dans le calendrier final aux créneaux indiqués'
             ]
         },
-                'Niveaux_Gymnases': {
-            'colonnes': ['Gymnase', 'Niveau', 'Remarque'],
-            'description': 'Classification des gymnases par niveau (haut/bas) avec bonus par niveau de match',
-            'type': 'manuel',
-            'exemple': {
-                'Gymnase': 'PARC DES SPORTS',
-                'Niveau': 'Haut niveau',
-                'Remarque': 'Gymnase principal de la ville'
-            },
-            'notes': [
-                'Gymnase: Nom exact du gymnase (doit exister dans la feuille Gymnases)',
-                'Niveau: "Haut niveau" ou "Bas niveau"',
-                'Remarque: Explication ou commentaire optionnel',
-                'Bonus par niveau de match configurés dans YAML: bonus_haut_niveau et bonus_bas_niveau',
-                'Exemple: bonus_haut_niveau: [10, 8, 5, 1] signifie +10 pour A1, +8 pour A2, etc. dans gymnase haut niveau'
-            ]
-        }
     }
     
     def __init__(self, fichier_path: str):
@@ -720,8 +735,6 @@ class ConfigManager:
     def _formater_fichier(self):
         """Applique le formatage au fichier Excel (en-têtes en gras, couleurs, listes déroulantes, centrage, bordures)."""
         try:
-            from openpyxl.styles import Border, Side
-            
             wb = openpyxl.load_workbook(self.fichier_path)
             
             # Extraire les listes pour les validations
@@ -748,7 +761,14 @@ class ConfigManager:
                 bottom=Side(style='thin', color='D3D3D3')
             )
             
-            for nom_feuille in self.STRUCTURES.keys():
+            feuilles_a_formater = []
+            if 'Equipes' in wb.sheetnames:
+                feuilles_a_formater.append('Equipes')
+            for nom_struct in self.STRUCTURES.keys():
+                if nom_struct not in feuilles_a_formater:
+                    feuilles_a_formater.append(nom_struct)
+
+            for nom_feuille in feuilles_a_formater:
                 if nom_feuille not in wb.sheetnames:
                     continue
                 
@@ -839,7 +859,7 @@ class ConfigManager:
                                     if col.startswith('Gymnase_Pref_')]
                     for col_name in colonnes_pref:
                         self._ajouter_validation_liste(ws, col_name, gymnases_list, 2, 1000)
-                
+
                 # Validation pour Applique_A
                 if nom_feuille == 'Indispos_Institutions':
                     self._ajouter_validation_liste(ws, 'Applique_A', 
@@ -876,12 +896,92 @@ class ConfigManager:
                         self._ajouter_validation_liste(ws, 'Equipe_1', equipes_list, 2, 1000)
                         self._ajouter_validation_liste(ws, 'Equipe_2', equipes_list, 2, 1000)
                     self._ajouter_validation_liste(ws, 'Type_Contrainte', ['Avant', 'Apres'], 2, 1000)
+
+                if nom_feuille == 'Equipes':
+                    self._styliser_feuille_equipes(ws)
             
             wb.save(self.fichier_path)
             logger.info("Formatage du fichier appliqué avec succès (avec listes déroulantes)")
             
         except Exception as e:
             logger.error(f"Erreur lors du formatage: {e}")
+
+    def _styliser_feuille_equipes(self, ws):
+        """Ajoute un thème visuel spécifique à la feuille Equipes."""
+        max_row = ws.max_row
+        max_col = ws.max_column
+        if max_row < 1 or max_col < 1:
+            return
+
+        # Palette douce pour faire ressortir la feuille principale
+        header_fill = PatternFill(start_color="FF25324C", end_color="FF25324C", fill_type="solid")
+        even_fill = PatternFill(start_color="FFF3F6FF", end_color="FFF3F6FF", fill_type="solid")
+        odd_fill = PatternFill(start_color="FFFFFFFF", end_color="FFFFFFFF", fill_type="solid")
+        accent_fills = {
+            'equipe': PatternFill(start_color="FFFFF4E6", end_color="FFFFF4E6", fill_type="solid"),
+            'institution': PatternFill(start_color="FFEFFAF5", end_color="FFEFFAF5", fill_type="solid"),
+            'poule': PatternFill(start_color="FFE7F3FF", end_color="FFE7F3FF", fill_type="solid"),
+            'genre': PatternFill(start_color="FFF0FFF4", end_color="FFF0FFF4", fill_type="solid"),
+            'niveau': PatternFill(start_color="FFF7F0FF", end_color="FFF7F0FF", fill_type="solid"),
+            'horaire_prefere': PatternFill(start_color="FFFFF0F0", end_color="FFFFF0F0", fill_type="solid"),
+            'responsable_nom': PatternFill(start_color="FFF7F0FF", end_color="FFF7F0FF", fill_type="solid"),
+            'responsable_email': PatternFill(start_color="FFF7F0FF", end_color="FFF7F0FF", fill_type="solid"),
+            'responsable_telephone': PatternFill(start_color="FFF7F0FF", end_color="FFF7F0FF", fill_type="solid"),
+            'notes': PatternFill(start_color="FFFDF8D7", end_color="FFFDF8D7", fill_type="solid"),
+            'remarques': PatternFill(start_color="FFFDF8D7", end_color="FFFDF8D7", fill_type="solid"),
+        }
+        header_font = Font(bold=True, color="FFFFFFFF", size=12)
+        body_font = Font(size=10, color="FF1C1C1C")
+        border = Border(
+            left=Side(style='thin', color='FFCBD5F5'),
+            right=Side(style='thin', color='FFCBD5F5'),
+            top=Side(style='thin', color='FFCBD5F5'),
+            bottom=Side(style='thin', color='FFCBD5F5')
+        )
+        align_center = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        align_left = Alignment(horizontal="left", vertical="center", wrap_text=True)
+
+        ws.sheet_properties.tabColor = "FF5E6AD2"
+        ws.auto_filter.ref = ws.dimensions
+        ws.row_dimensions[1].height = 28
+
+        # Largeurs recommandées par colonne (appliquées si la colonne existe)
+        largeur_colonnes = {
+            'Equipe': 30,
+            'Poule': 14,
+            'Horaire_Prefere': 16,
+            'Responsable_Nom': 26,
+            'Responsable_Email': 34,
+            'Responsable_Telephone': 20,
+            'Notes': 36,
+        }
+
+        header_names = []
+        for col_idx, cell in enumerate(ws[1], 1):
+            titre = str(cell.value or '').strip()
+            header_names.append(titre)
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = align_center
+            cell.border = border
+            if titre in largeur_colonnes:
+                ws.column_dimensions[cell.column_letter].width = largeur_colonnes[titre]
+
+        for row_idx in range(2, max_row + 1):
+            base_fill = even_fill if (row_idx % 2 == 0) else odd_fill
+            for col_idx in range(1, max_col + 1):
+                cell = ws.cell(row=row_idx, column=col_idx)
+                header_value = header_names[col_idx - 1] if col_idx - 1 < len(header_names) else ''
+                key = header_value.lower()
+                cell.fill = accent_fills.get(key, base_fill)
+                cell.font = body_font
+                if key in ('notes', 'responsable_email', 'responsable_nom'):
+                    cell.alignment = align_left
+                else:
+                    cell.alignment = align_center
+                cell.border = border
+        
+        ws.freeze_panes = "A2"
     
     def reorganiser_feuilles(self):
         """

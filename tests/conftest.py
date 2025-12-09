@@ -37,14 +37,15 @@ def minimal_config():
     # Pénalités/bonus à zéro par défaut
     config.bonus_preferences_gymnases = []
     config.penalites_espacement_repos = []
-    config.penalite_niveau_gymnases_haut = []
-    config.penalite_niveau_gymnases_bas = []
+    config.poids_niveaux_gymnases_haut = []
+    config.poids_niveaux_gymnases_bas = []
     
     # Pénalités horaires désactivées
     config.penalite_avant_horaire_min = 0
     config.penalite_avant_horaire_min_deux = 0
     config.penalite_apres_horaire_min = 0
     config.penalite_horaire_tolerance = 999999  # Tolérance infinie = pas de pénalité
+    config.penalite_gymnase_priorite_genre = 0
     
     # Temps de résolution court pour tests rapides
     config.temps_max_secondes = 5

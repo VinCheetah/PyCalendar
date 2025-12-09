@@ -204,6 +204,7 @@ class TestAllerRetour:
         minimal_config.aller_retour_espacement_actif = True
         minimal_config.aller_retour_penalite_meme_semaine = 1000000
         minimal_config.aller_retour_penalite_consecutives = 10000
+        minimal_config.aller_retour_penalites_par_ecart = [1000000, 10000]
         
         # Résolution
         solver = CPSATSolver(minimal_config)

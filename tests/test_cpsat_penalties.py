@@ -206,7 +206,7 @@ class TestGymLevelPenalties:
         Solution optimale : Gymnase haut niveau.
         """
         # Configuration
-        minimal_config.penalite_niveau_gymnases_bas = [1000, 500, 100, 0]  # Pénalité par niveau match
+        minimal_config.poids_niveaux_gymnases_bas = [1000, 500, 100, 0]  # Pénalité par niveau match
         
         # Setup : match A1 (niveau 0)
         equipe1 = equipe_builder.create(poule="A1")
@@ -231,6 +231,94 @@ class TestGymLevelPenalties:
         # Vérification : DOIT éviter gymnase bas niveau (pénalité 1000)
         assert solution.est_complete()
         assert_match_assigned_to(match, creneau_haut)
+
+
+class TestGymGenderPriorityPenalties:
+    """Vérifie la prise en compte des priorités de genre des gymnases."""
+
+    def test_respects_gym_gender_priority(self, minimal_config, match_builder,
+                                          creneau_builder, gymnase_builder, equipe_builder):
+        """Un gymnase prioritaire F doit rester réservé aux matchs féminins si la pénalité est forte."""
+        minimal_config.penalite_gymnase_priorite_genre = 1000
+
+        equipe1 = equipe_builder.create()
+        equipe2 = equipe_builder.create()
+        equipe1.genre = "M"
+        equipe2.genre = "M"
+        match = match_builder.create(equipe1=equipe1, equipe2=equipe2)
+
+        creneau_masc = creneau_builder.create(semaine=1, horaire="18:00", gymnase="Gym_M")
+        creneau_fem = creneau_builder.create(semaine=1, horaire="18:00", gymnase="Gym_F")
+
+        gymnases = gymnase_builder.create_dict(["Gym_M", "Gym_F"])
+        priorites = {"Gym_M": "M", "Gym_F": "F"}
+
+        solver = CPSATSolver(minimal_config, priorites_genre_gymnases=priorites)
+        solution = solver.solve([match], [creneau_masc, creneau_fem], gymnases)
+
+        assert solution.est_complete()
+        assert_match_assigned_to(match, creneau_masc)
+
+
+class TestAllerRetourPenalties:
+    """Vérifie la prise en compte des pénalités aller/retour."""
+
+    def test_high_penalty_discourages_consecutive_weeks(self, minimal_config, match_builder,
+                                                         creneau_builder, gymnase_builder):
+        minimal_config.aller_retour_espacement_actif = True
+        minimal_config.aller_retour_penalites_par_ecart = [0, 1_000_000, 0, 0]
+        minimal_config.compaction_temporelle_actif = True
+        minimal_config.compaction_penalites_par_semaine = [0, 0, 500, 1000]
+
+        equipe_a = match_builder.equipe_builder.create(nom="VA", poule="A1")
+        equipe_b = match_builder.equipe_builder.create(nom="VB", poule="A1")
+        aller = match_builder.create(equipe1=equipe_a, equipe2=equipe_b, poule="A1")
+        retour = match_builder.create(equipe1=equipe_b, equipe2=equipe_a, poule="A1")
+
+        creneaux = [
+            creneau_builder.create(semaine=1, horaire="18:00", gymnase="Gym1"),
+            creneau_builder.create(semaine=2, horaire="18:00", gymnase="Gym1"),
+            creneau_builder.create(semaine=4, horaire="18:00", gymnase="Gym1"),
+        ]
+        gymnases = gymnase_builder.create_dict(["Gym1"])
+
+        solver = CPSATSolver(minimal_config)
+        solution = solver.solve([aller, retour], creneaux, gymnases)
+
+        assert solution.est_complete()
+        semaines = sorted(match.creneau.semaine for match in solution.matchs_planifies)
+        assert semaines[1] - semaines[0] >= 2, "La forte pénalité d'écart 1 semaine doit l'emporter sur la compaction"
+
+    def test_fixed_aller_still_penalizes_close_retour(self, minimal_config, match_builder,
+                                                      creneau_builder, gymnase_builder):
+        minimal_config.aller_retour_espacement_actif = True
+        minimal_config.aller_retour_penalites_par_ecart = [0, 1_000_000, 0, 0]
+        minimal_config.compaction_temporelle_actif = True
+        minimal_config.compaction_penalites_par_semaine = [0, 1_000, 2_000, 3_000, 4_000]
+
+        equipe_a = match_builder.equipe_builder.create(nom="VA", poule="A1")
+        equipe_b = match_builder.equipe_builder.create(nom="VB", poule="A1")
+
+        retour = match_builder.create(equipe1=equipe_b, equipe2=equipe_a, poule="A1")
+        match_fixe = match_builder.create(equipe1=equipe_a, equipe2=equipe_b, poule="A1")
+        match_fixe.metadata = {
+            "semaine": 1,
+            "horaire": "18:00",
+            "gymnase": "Gym1",
+        }
+
+        creneaux = [
+            creneau_builder.create(semaine=2, horaire="18:00", gymnase="Gym1"),
+            creneau_builder.create(semaine=4, horaire="18:00", gymnase="Gym1"),
+        ]
+        gymnases = gymnase_builder.create_dict(["Gym1"])
+
+        solver = CPSATSolver(minimal_config)
+        solution = solver.solve([retour], creneaux, gymnases, matchs_fixes=[match_fixe])
+
+        assert solution.est_complete()
+        assert retour.est_planifie()
+        assert retour.creneau.semaine == 4, "Le match retour doit éviter la semaine 2 à cause du match aller fixé semaine 1"
 
 
 class TestProgressiveBalancingBonus:

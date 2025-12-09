@@ -12,7 +12,7 @@ Options:
     --solution PATH      Chemin vers le fichier solution JSON (défaut: solutions/latest_volley.json)
     --contacts PATH      Chemin vers le fichier contacts Excel (défaut: config/contacts_equipes.xlsx)
     --output PATH        Chemin vers le fichier de sortie (défaut: notifications_ententes.txt)
-    --deadline DATE      Date limite pour organiser les ententes (format: JJ/MM/AAAA)
+    --deadline DATE      Date limite pour organiser les ententes (format: DD/MM/YY)
     --test              Mode test : affiche seulement les statistiques sans générer le fichier
 """
 
@@ -26,6 +26,12 @@ import sys
 
 # Ajouter le répertoire parent au path pour importer les modules
 sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from pycalendar.core.constants import (
+    DATE_USER_FORMAT_LABEL,
+    format_user_date,
+    parse_user_date,
+)
 
 try:
     import pandas as pd
@@ -44,11 +50,11 @@ class EntenteNotificationGenerator:
         Args:
             solution_path: Chemin vers le fichier solution JSON
             config_path: Chemin vers le fichier config Excel (optionnel, déduit de la solution si absent)
-            deadline_date: Date limite au format JJ/MM/AAAA (optionnel)
+            deadline_date: Date limite au format DD/MM/YY (optionnel)
         """
         self.solution_path = Path(solution_path)
         self.config_path = Path(config_path) if config_path else None
-        self.deadline_date = deadline_date
+        self.deadline_date = self._normalize_deadline(deadline_date)
         
         # Données chargées
         self.solution_data = None
@@ -56,6 +62,15 @@ class EntenteNotificationGenerator:
         self.ententes_par_equipe = defaultdict(list)
         self.equipes_sans_contacts = []  # Liste des équipes sans infos de contact
         
+    def _normalize_deadline(self, deadline: Optional[str]) -> Optional[str]:
+        """Validate and format the provided deadline using DD/MM/YY."""
+        if not deadline:
+            return None
+        parsed = parse_user_date(deadline)
+        if not parsed:
+            raise ValueError(f"Date limite invalide '{deadline}', attendu: {DATE_USER_FORMAT_LABEL}")
+        return format_user_date(parsed)
+
     def load_solution(self) -> bool:
         """Charge le fichier solution JSON."""
         if not self.solution_path.exists():
@@ -437,7 +452,9 @@ class EntenteNotificationGenerator:
                 f.write("║" + " " * 78 + "║\n")
                 f.write("║" + "  NOTIFICATIONS DES MATCHS EN ENTENTE".center(78) + "║\n")
                 f.write("║" + " " * 78 + "║\n")
-                f.write("║" + f"  Généré le: {datetime.now().strftime('%d/%m/%Y à %H:%M')}".ljust(78) + "║\n")
+                now = datetime.now()
+                generation_label = f"{format_user_date(now)} à {now.strftime('%H:%M')}"
+                f.write("║" + f"  Généré le: {generation_label}".ljust(78) + "║\n")
                 f.write("║" + f"  Solution: {self.solution_path.name}".ljust(78) + "║\n")
                 f.write("║" + f"  Nombre d'équipes concernées: {len(self.ententes_par_equipe)}".ljust(78) + "║\n")
                 f.write("║" + " " * 78 + "║\n")
@@ -708,7 +725,7 @@ def main():
     
     parser.add_argument(
         '--deadline',
-        help='Date limite pour organiser les ententes (format: JJ/MM/AAAA)'
+        help='Date limite pour organiser les ententes (format: DD/MM/YY)'
     )
     
     parser.add_argument(
@@ -720,11 +737,15 @@ def main():
     args = parser.parse_args()
     
     # Créer le générateur
-    generator = EntenteNotificationGenerator(
-        solution_path=args.solution,
-        config_path=args.config,
-        deadline_date=args.deadline
-    )
+    try:
+        generator = EntenteNotificationGenerator(
+            solution_path=args.solution,
+            config_path=args.config,
+            deadline_date=args.deadline
+        )
+    except ValueError as err:
+        print(f"❌ {err}")
+        sys.exit(1)
     
     # Exécuter
     success = generator.run(args.output, excel_path=args.excel, test_mode=args.test)

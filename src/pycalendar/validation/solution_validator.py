@@ -604,6 +604,10 @@ class SolutionValidator:
         
         if not self.config.compaction_temporelle_actif:
             return stats
+
+        penalites_config = self.config.compaction_penalites_par_semaine or []
+        if not penalites_config:
+            return stats
         
         for match in matchs:
             if not match.creneau:
@@ -613,11 +617,11 @@ class SolutionValidator:
             stats['matchs_par_semaine'][semaine] += 1
             
             # Récupérer la pénalité pour cette semaine (indice 0 = semaine 1)
-            if semaine <= len(self.config.compaction_penalites_par_semaine):
-                penalty = self.config.compaction_penalites_par_semaine[semaine - 1]
+            if semaine <= len(penalites_config):
+                penalty = penalites_config[semaine - 1]
             else:
                 # Si on dépasse le nb de semaines définies, utiliser la dernière pénalité
-                penalty = self.config.compaction_penalites_par_semaine[-1]
+                penalty = penalites_config[-1]
             
             # Statistiques par catégorie (pour compatibilité avec l'ancienne version)
             if penalty == 0:

@@ -200,7 +200,7 @@ def validate_gymnase(gymnase) -> List[str]:
         for horaire, capa in horaires_capa.items():
             if capa > gymnase.capacite:
                 errors.append(f"capacite_reduite trop élevée S{semaine} {horaire}: {capa} > {gymnase.capacite}")
-    
+
     return errors
 
 
@@ -453,10 +453,10 @@ PRÉFÉRENCES GYMNASE:
 --------------------
 bonus_preferences_gymnases: List[float]         # [bonus_rang1, rang2, ...]
 
-PÉNALITÉS NIVEAU GYMNASE:
---------------------------
-penalite_niveau_gymnases_haut: List[float]     # [A1, A2, A3, A4] sur gym haut
-penalite_niveau_gymnases_bas: List[float]      # [A1, A2, A3, A4] sur gym bas
+PONDÉRATIONS NIVEAU GYMNASE (bonus/malus):
+-----------------------------------------
+poids_niveaux_gymnases_haut: List[float]       # Valeurs négatives = bonus pour alignement A1/A2 sur gym haut
+poids_niveaux_gymnases_bas: List[float]        # Valeurs positives = pénalité pour matchs élevés sur gym bas (et inversement)
 
 ESPACEMENT:
 -----------
@@ -510,9 +510,8 @@ contrainte_temporelle_dure: bool               # true=bloquant, false=pénalité
 ALLER-RETOUR:
 -------------
 aller_retour_espacement_actif: bool            # Activer espacement A/R
-aller_retour_min_semaines: int                 # Espacement min semaines
-aller_retour_penalite_meme_semaine: float     # Pénalité même semaine
-aller_retour_penalite_consecutives: float     # Pénalité semaines consécutives
+aller_retour_penalites_par_ecart: List[float] # Liste pénalités par écart en semaines
+aller_retour_bonus_retour: float              # Ratio bonus appliqué aux matchs retour
 
 CALENDRIER:
 -----------

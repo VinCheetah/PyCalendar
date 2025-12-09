@@ -29,12 +29,13 @@ contraintes:
   # --- Préférences de gymnase ---
   bonus_preferences_gymnases: [10.0, 8.0, 5.0, 2.0, 1.0]  # Réduction de coût par rang de préférence
 
-  # --- Adéquation niveau match / niveau gymnase ---
+  # --- Pondérations globales des gymnases par niveau ---
   # Convention: valeurs NÉGATIVES = bonus (réduction coût), POSITIVES = pénalité (augmentation coût)
   # Exemple: A1 (haut niveau) sur gymnase haut niveau → bonus (valeur négative)
   #          A1 (haut niveau) sur gymnase bas niveau → pénalité (valeur positive)
-  penalite_niveau_gymnases_haut: [-10, -8, -5, -1]  # [A1, A2, A3, A4] sur gymnase HAUT niveau
-  penalite_niveau_gymnases_bas: [8, 6, 4, 2]  # [A1, A2, A3, A4] sur gymnase BAS niveau
+  poids_niveaux_gymnases_haut: [-12, -8, -3, 0]  # Bonus: A1/A2 fortement encouragés sur gym haut (valeurs négatives)
+  poids_niveaux_gymnases_bas: [30, 12, 4, 1]  # Pénalités: évite A1 en gym bas mais tolère A4 (valeur négative)
+  penalite_gymnase_priorite_genre: 25.0  # Pénalité si un gymnase prioritaire M/F reçoit un match du genre opposé
 
   # --- Horaires préférés avec système de tolérance ---
   # Formule: pénalité = multiplicateur × ((distance / diviseur)²)
@@ -75,13 +76,22 @@ contraintes:
   # Si aucun groupe configuré: contrainte automatiquement désactivée (message de warning)
   overlap_institution_actif: false  # Activer/désactiver cette contrainte
   overlap_institution_poids: 10.0  # Pénalité par chevauchement détecté (recommandé: 10-100)
+  coach_overlap_actif: true
+  coach_overlap_penalite_simultane_diff_gym: 20.0
+  coach_overlap_penalite_simultane_meme_gym: 2.0
+  coach_overlap_penalite_deplacement: 8.0
+  coach_overlap_bonus_consecutif: 5.0
+  coach_overlap_simultane_minutes: 60
+  coach_overlap_consecutif_min_minutes: 60
+  coach_overlap_consecutif_max_minutes: 180
+  coach_overlap_semaine_min: 1
 
   # --- Équilibrage des matchs (système max-min avec bonus progressif) ---
   # Garantit que le minimum de matchs par équipe soit maximal
   # Utilise des bonus dégressifs: 1er match = bonus élevé, 2ème = bonus/2, 3ème = bonus/4, etc.
   equilibrage_actif: true
-  equilibrage_bonus_base: 10000000000.0  # Bonus pour le premier match d'une équipe
-  equilibrage_facteur_decroissance: 0.3  # Facteur multiplicatif pour chaque match suivant
+  equilibrage_bonus_base: 5000.0  # Bonus pour le premier match d'une équipe
+  equilibrage_facteur_decroissance: 0.7  # Facteur multiplicatif pour chaque match suivant
   equilibrage_bonus_minimum: 1.0  # Bonus plancher 
 
   # --- Ententes (matchs entre institutions spécifiques) ---
@@ -99,13 +109,13 @@ contraintes:
   # --- Espacement aller-retour ---
   # Force un espacement minimum entre matchs aller et retour (poules Aller-Retour uniquement)
   aller_retour_espacement_actif: true
-  aller_retour_penalite_meme_semaine: 5000.0  # Pénalité très élevée si même semaine
-  aller_retour_penalite_consecutives: 2000.0  # Pénalité si semaines consécutives
+  aller_retour_penalites_par_ecart: [5000.0, 2000.0, 500.0, 200.0, 50, 10]  # Pénalités supplémentaires par écart en semaines (index = écart)
+  aller_retour_bonus_retour: 0.85  # Ratio appliqué au bonus pour les matchs retours (1.0 = pas de réduction)
 
 # Gestion du calendrier avec dates réelles
 calendrier:
-  actif: false  # Activer pour afficher dates réelles au lieu de numéros de semaine
-  date_debut: "2025-10-09"  # Date de début de saison (format YYYY-MM-DD)
+  actif: true  # Activer pour afficher dates réelles au lieu de numéros de semaine
+  date_debut: "2025-10-12"  # Date de début de saison (format YYYY-MM-DD)
   jour_match: "jeudi"  # Jour de la semaine des matchs
   semaines_banalisees: []  # Liste des semaines banalisées (vacances, pas de matchs)
 

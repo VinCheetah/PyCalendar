@@ -1,8 +1,12 @@
 """Excel exporter for scheduling solutions."""
 
-import pandas as pd
-from typing import List
+from datetime import datetime
 from pathlib import Path
+from typing import List
+
+import pandas as pd
+
+from pycalendar.core.constants import format_user_date, parse_user_date
 from pycalendar.core.models import Solution, Match
 from pycalendar.core.utils import determiner_genre_match
 
@@ -103,7 +107,7 @@ class ExcelExporter:
     def _create_dataframe_matchs_fixes_format(matchs: List[Match]) -> pd.DataFrame:
         """
         Create DataFrame with Matchs_Fixes format for easy copy-paste.
-        Format: Equipe_1, Equipe_2, Genre, Poule, Semaine, Horaire, Gymnase, Score, Type_Competition, Remarques
+        Format: Equipe_1, Equipe_2, Genre, Poule, Semaine, Date, Horaire, Gymnase, Score, Type_Competition, Remarques
         Tri: Semaine → Genre (F puis M puis X) → Catégorie (A1, A2, A3, A4)
         """
         data = []
@@ -141,6 +145,7 @@ class ExcelExporter:
             score = match.metadata.get('score', '') if match.metadata.get('fixe', False) else ''
             type_comp = match.metadata.get('type_competition', 'Acad')
             remarques = match.metadata.get('remarques', '')
+            date_str = ExcelExporter._format_date_for_output(match.metadata.get('date'))
             
             # Ordre de tri pour le genre: F=0, M=1, X=2
             ordre_genre = {'F': 0, 'M': 1, 'X': 2}.get(genre, 2)
@@ -151,6 +156,7 @@ class ExcelExporter:
                 'Genre': genre,
                 'Poule': match.poule,
                 'Semaine': match.creneau.semaine if match.creneau else (match.metadata.get('semaine', '') if match.metadata else ''),
+                'Date': date_str,
                 'Horaire': match.creneau.horaire if match.creneau else (match.metadata.get('horaire', '') if match.metadata else ''),
                 'Gymnase': match.creneau.gymnase if match.creneau else (match.metadata.get('gymnase', '') if match.metadata else ''),
                 'Score': score or '',  # Score depuis metadata si match fixe
@@ -195,3 +201,16 @@ class ExcelExporter:
             df.to_excel(filename, index=False)
         
         print(f"✓ {len(poules)} calendriers de poule exportés dans {output_dir}")
+
+    @staticmethod
+    def _format_date_for_output(value) -> str:
+        """Normalize any stored date (str/datetime) to DD/MM/YY for Excel."""
+        if value is None or value == '':
+            return ''
+        if isinstance(value, datetime):
+            return format_user_date(value)
+        parsed = parse_user_date(str(value))
+        if parsed:
+            return format_user_date(parsed)
+        # Unknown format, fall back to raw string to avoid hiding data
+        return str(value)

@@ -5,14 +5,26 @@ This loader reads all data from the Excel file and automatically applies
 institutional constraints to all teams.
 """
 
-import pandas as pd
-from typing import List, Dict, Set, Tuple, Optional
 from pathlib import Path
-from pycalendar.core.models import Equipe, Gymnase, ContrainteTemporelle, Match
-from pycalendar.core.utils import extraire_genre_depuis_poule, parser_nom_avec_genre, formater_nom_avec_genre
-from pycalendar.core.config_manager import ConfigManager
+from datetime import datetime
+import difflib
 import logging
 import re
+from typing import List, Dict, Set, Tuple, Optional
+
+import pandas as pd
+
+from pycalendar.core.models import Equipe, Gymnase, ContrainteTemporelle, Match, CoachGroup
+from pycalendar.core.utils import extraire_genre_depuis_poule, parser_nom_avec_genre, formater_nom_avec_genre
+from pycalendar.core.coach_groups import (
+    COACH_GROUP_SLOT_COLUMNS,
+    CoachSlotParseError,
+    CoachSlotSpec,
+    parse_coach_slot,
+)
+from pycalendar.core.config_manager import ConfigManager
+from pycalendar.core.calendar_manager import CalendarManager
+from pycalendar.core.constants import format_user_date
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +32,7 @@ logger = logging.getLogger(__name__)
 class DataLoader:
     """Loads teams, venues, and constraints data from Excel configuration file."""
     
-    def __init__(self, fichier_config: str):
+    def __init__(self, fichier_config: str, calendar_manager: Optional[CalendarManager] = None):
         """
         Initialise le loader avec le fichier de configuration.
         
@@ -28,6 +40,7 @@ class DataLoader:
             fichier_config: Chemin vers le fichier de configuration central
         """
         self.config = ConfigManager(fichier_config)
+        self.calendar_manager = calendar_manager
         
         if not self.config.fichier_existe():
             raise FileNotFoundError(f"Fichier de configuration non trouvé : {fichier_config}")
@@ -640,12 +653,11 @@ class DataLoader:
                     capacite = int(capacite)
                 except (ValueError, TypeError):
                     capacite = 0
-                
                 gymnases_dict[nom] = Gymnase(
                     nom=nom,
                     capacite=capacite,
                     horaires_disponibles=[],
-                    semaines_indisponibles={}
+                    semaines_indisponibles={},
                 )
             
             # Ajouter le créneau si disponible
@@ -664,7 +676,7 @@ class DataLoader:
         logger.info(f"{len(gymnases)} gymnases chargés")
         
         return gymnases
-    
+
     def charger_contraintes_specifiques(self) -> Dict[str, List[Dict]]:
         """
         Charge les contraintes spécifiques (anti-collisions, etc.).
@@ -763,45 +775,80 @@ class DataLoader:
         return ententes
     
     def charger_niveaux_gymnases(self) -> Dict[str, str]:
-        """
-        Charge les niveaux des gymnases (haut/bas niveau).
-        
-        Structure de la feuille Niveaux_Gymnases:
-        - Gymnase: Nom du gymnase (doit exister dans la feuille Gymnases)
-        - Niveau: "Haut niveau" ou "Bas niveau"
-        - Remarque: Commentaire optionnel
-        
-        Returns:
-            Dictionnaire {nom_gymnase: niveau}
-        """
-        df = self.config.lire_feuille('Niveaux_Gymnases')
-        if df is None or df.empty:
-            logger.debug("Pas de feuille Niveaux_Gymnases")
+        """Charge les niveaux depuis la feuille Gymnases (colonne Niveau)."""
+        df = self.config.lire_feuille('Gymnases')
+        if df is None or df.empty or 'Niveau' not in df.columns:
+            logger.debug("Pas de colonne Niveau dans la feuille Gymnases")
             return {}
-        
-        niveaux = {}
-        
+
+        niveaux: Dict[str, str] = {}
+
+        def _normalize_level(value: str) -> Optional[str]:
+            if not value:
+                return None
+            text = str(value).strip().lower()
+            if 'haut' in text:
+                return 'haut'
+            if 'bas' in text:
+                return 'bas'
+            return None
+
         for idx, row in df.iterrows():
             gymnase = str(row.get('Gymnase', '')).strip()
-            niveau = str(row.get('Niveau', '')).strip()
-            
             if not gymnase or pd.isna(row.get('Gymnase')):
-                logger.warning(f"Ligne {idx+2}: Gymnase manquant, ligne ignorée")
                 continue
-            
-            if not niveau or pd.isna(row.get('Niveau')):
-                logger.warning(f"Ligne {idx+2}: Niveau manquant pour gymnase '{gymnase}', ligne ignorée")
+
+            niveau = row.get('Niveau')
+            if pd.isna(niveau) or str(niveau).strip() == '':
+                continue  # Colonne optionnelle, ignorer si vide
+
+            niveau_normalise = _normalize_level(str(niveau))
+            if not niveau_normalise:
+                logger.warning(
+                    f"Feuille Gymnases ligne {idx+2}: Niveau invalide '{niveau}' pour gymnase '{gymnase}', ignoré"
+                )
                 continue
-            
-            # Validation du niveau
-            if niveau not in ['Haut niveau', 'Bas niveau']:
-                logger.warning(f"Ligne {idx+2}: Niveau invalide '{niveau}' pour gymnase '{gymnase}', doit être 'Haut niveau' ou 'Bas niveau'")
-                continue
-            
-            niveaux[gymnase] = niveau
-        
-        logger.info(f"Niveaux de gymnases chargés: {len(niveaux)} gymnases classés")
+
+            niveaux[gymnase] = niveau_normalise
+
+        if niveaux:
+            logger.info(f"Niveaux de gymnases chargés: {len(niveaux)} gymnases classés")
+        else:
+            logger.info("Aucun niveau de gymnase renseigné")
         return niveaux
+
+    def charger_priorites_genre_gymnases(self) -> Dict[str, str]:
+        """Charge les genres prioritaires configurés sur la feuille Gymnases."""
+        df = self.config.lire_feuille('Gymnases')
+        if df is None or df.empty or 'Genre_Prioritaire' not in df.columns:
+            logger.debug("Pas de colonne Genre_Prioritaire dans la feuille Gymnases")
+            return {}
+
+        priorites: Dict[str, str] = {}
+
+        for idx, row in df.iterrows():
+            gymnase = str(row.get('Gymnase', '')).strip()
+            if not gymnase or pd.isna(row.get('Gymnase')):
+                continue
+
+            priorite = row.get('Genre_Prioritaire')
+            if pd.isna(priorite):
+                continue
+
+            priorite_str = str(priorite).strip().upper()
+            if priorite_str not in {'F', 'M'}:
+                logger.warning(
+                    f"Feuille Gymnases ligne {idx+2}: Genre_Prioritaire '{priorite}' invalide pour '{gymnase}', ignoré"
+                )
+                continue
+
+            priorites[gymnase] = priorite_str
+
+        if priorites:
+            logger.info(f"Genres prioritaires chargés pour {len(priorites)} gymnases")
+        else:
+            logger.info("Aucun genre prioritaire renseigné pour les gymnases")
+        return priorites
     
     def charger_contraintes_temporelles(self) -> Dict[Tuple[str, str], 'ContrainteTemporelle']:
         """
@@ -990,8 +1037,484 @@ class DataLoader:
             logger.info(f"  - {nom_groupe}: {len(entites)} entité(s)")
         
         return groupes
+
+    def charger_groupes_coachs(self) -> Dict[str, CoachGroup]:
+        """Charge les groupes de coachs décrits dans la feuille Coach_Groups."""
+        df = self.config.lire_feuille('Coach_Groups')
+        if df is None or df.empty:
+            logger.info("Aucun coach configuré dans Coach_Groups")
+            return {}
+
+        references = self._build_coach_group_references()
+        slot_lookup = {col.lower(): col for col in df.columns}
+        slot_columns = [
+            slot_lookup[name.lower()]
+            for name in COACH_GROUP_SLOT_COLUMNS
+            if name.lower() in slot_lookup
+        ]
+
+        groupes: Dict[str, CoachGroup] = {}
+        ligne_excel = 1
+        global_team_owner: Dict[str, str] = {}
+
+        def _get(row, key: str) -> Optional[str]:
+            value = row.get(key)
+            if value is None:
+                return None
+            if isinstance(value, float) and pd.isna(value):
+                return None
+            texte = str(value).strip()
+            return texte or None
+
+        for _, row in df.iterrows():
+            ligne_excel += 1
+            coach_name = _get(row, 'coach_name') or _get(row, 'coach')
+            if not coach_name:
+                continue
+
+            group_id = _get(row, 'group_id')
+            notes = _get(row, 'notes') or _get(row, 'remarques') or ''
+
+            coach_key = coach_name.lower()
+            if coach_key not in groupes:
+                groupes[coach_key] = CoachGroup(coach_name=coach_name, group_id=group_id, notes=notes)
+
+            group = groupes[coach_key]
+            if group_id and not group.group_id:
+                group.group_id = group_id
+            if notes:
+                if group.notes and notes not in group.notes:
+                    group.notes = f"{group.notes} | {notes}"
+                elif not group.notes:
+                    group.notes = notes
+
+            equipes_resolues: List[str] = []
+            slots_utilises = 0
+
+            for col in slot_columns:
+                brut = row.get(col)
+                if pd.isna(brut) or str(brut).strip() == '':
+                    continue
+
+                slots_utilises += 1
+                spec = self._parse_or_infer_coach_slot(brut, references, ligne_excel, col)
+                if not spec:
+                    continue
+
+                equipes = self._expand_slot_for_loader(spec, references, ligne_excel, col)
+                if equipes:
+                    for equipe in equipes:
+                        if equipe not in equipes_resolues:
+                            equipes_resolues.append(equipe)
+
+            if slots_utilises == 0:
+                logger.warning(
+                    "Coach_Groups ligne %d: aucune règle renseignée pour coach '%s'",
+                    ligne_excel,
+                    coach_name,
+                )
+                continue
+
+            if not equipes_resolues:
+                logger.warning(
+                    "Coach_Groups ligne %d: aucune équipe résolue pour coach '%s'",
+                    ligne_excel,
+                    coach_name,
+                )
+                continue
+
+            for equipe in equipes_resolues:
+                proprietaire = global_team_owner.get(equipe)
+                if proprietaire and proprietaire != coach_name:
+                    logger.warning(
+                        "Coach_Groups ligne %d: équipe '%s' déjà liée au coach '%s'",
+                        ligne_excel,
+                        equipe,
+                        proprietaire,
+                    )
+                    continue
+
+                global_team_owner[equipe] = coach_name
+                if equipe not in group.team_names:
+                    group.team_names.append(equipe)
+
+        logger.info(f"Coach_Groups: {len(groupes)} coach(s) configuré(s)")
+        return groupes
+
+    def _build_coach_group_references(self):
+        references = {
+            'teams_variants': set(),
+            'teams_plain': set(),
+            'genres_by_name': {},
+            'institutions': {},
+            'lookup': {},
+        }
+
+        def _register_institution(nom: Optional[str]) -> Optional[str]:
+            if not nom:
+                return None
+            propre = nom.strip()
+            if not propre:
+                return None
+            cle = propre.lower()
+            if cle in references['lookup']:
+                return references['lookup'][cle]
+            references['lookup'][cle] = propre
+            return propre
+
+        def _register_team(nom_brut: str, genre_hint: Optional[str], institution_hint: Optional[str]):
+            if not nom_brut:
+                return
+            nom_sans_genre, genre_nom = parser_nom_avec_genre(nom_brut)
+            genre = genre_nom or (genre_hint.strip().upper() if genre_hint else '')
+            if genre not in ['M', 'F']:
+                genre = ''
+
+            etiquette = formater_nom_avec_genre(nom_sans_genre, genre) if genre else nom_sans_genre
+            references['teams_variants'].add(etiquette)
+            references['teams_plain'].add(nom_sans_genre)
+
+            genres = references['genres_by_name'].setdefault(nom_sans_genre, set())
+            if genre in ['M', 'F']:
+                genres.add(genre)
+
+            institution = institution_hint or self._coach_extract_institution(nom_sans_genre)
+            canonical = _register_institution(institution)
+            if not canonical:
+                return
+
+            bucket = references['institutions'].setdefault(
+                canonical,
+                {'ALL': set(), 'M': set(), 'F': set()}
+            )
+            bucket['ALL'].add(etiquette)
+            if genre in ['M', 'F']:
+                bucket[genre].add(formater_nom_avec_genre(nom_sans_genre, genre))
+
+        df_equipes = self.config.lire_feuille('Equipes')
+        if df_equipes is not None and 'Equipe' in df_equipes.columns:
+            has_genre = 'Genre' in df_equipes.columns
+            has_poule = 'Poule' in df_equipes.columns
+            for _, row in df_equipes.iterrows():
+                equipe = row.get('Equipe')
+                if pd.isna(equipe):
+                    continue
+                equipe_str = str(equipe).strip()
+                if not equipe_str:
+                    continue
+
+                genre_hint = ''
+                if has_genre:
+                    genre_col = row.get('Genre')
+                    if pd.notna(genre_col):
+                        genre_candidate = str(genre_col).strip().upper()
+                        if genre_candidate in ['M', 'F']:
+                            genre_hint = genre_candidate
+                if not genre_hint and has_poule:
+                    poule = row.get('Poule')
+                    if pd.notna(poule):
+                        genre_hint = extraire_genre_depuis_poule(str(poule))
+
+                _register_team(equipe_str, genre_hint, None)
+
+        df_equipes_hors = self.config.lire_feuille('Equipes_Hors_Championnat')
+        if df_equipes_hors is not None and not df_equipes_hors.empty:
+            for _, row in df_equipes_hors.iterrows():
+                equipe = row.get('Equipe')
+                if pd.isna(equipe):
+                    continue
+                equipe_str = str(equipe).strip()
+                if not equipe_str:
+                    continue
+
+                genre_col = row.get('Genre')
+                genre_hint = ''
+                if pd.notna(genre_col):
+                    genre_candidate = str(genre_col).strip().upper()
+                    if genre_candidate in ['M', 'F']:
+                        genre_hint = genre_candidate
+
+                institution = row.get('Institution')
+                institution_hint = str(institution).strip() if pd.notna(institution) else None
+
+                _register_team(equipe_str, genre_hint, institution_hint)
+
+        return references
+
+    def _parse_or_infer_coach_slot(self, valeur: Optional[str], references, ligne_excel: int,
+                                   colonne: str) -> Optional[CoachSlotSpec]:
+        texte = '' if valeur is None else str(valeur).strip()
+        if not texte:
+            return None
+
+        try:
+            spec = parse_coach_slot(texte)
+        except CoachSlotParseError:
+            spec = self._spec_from_display_label(texte, references)
+            if not spec:
+                logger.warning(
+                    "Coach_Groups ligne %d: slot invalide colonne %s ('%s')",
+                    ligne_excel,
+                    colonne,
+                    texte,
+                )
+                return None
+
+        return self._normalize_coach_slot_spec(spec, references, ligne_excel, colonne)
+
+    def _expand_slot_for_loader(self, spec, references, ligne_excel: int, colonne: str) -> List[str]:
+        genre = spec.gender.upper() if spec.gender else None
+        if genre and genre not in ['M', 'F']:
+            logger.warning(
+                "Coach_Groups ligne %d: genre '%s' invalide (colonne %s)",
+                ligne_excel,
+                genre,
+                colonne,
+            )
+            return []
+
+        if spec.kind == 'team':
+            equipe = self._resolve_team_for_loader(spec.identifier, genre, references, ligne_excel, colonne)
+            return [equipe] if equipe else []
+
+        return self._resolve_institution_for_loader(spec.identifier, genre, references, ligne_excel, colonne)
+
+    def _resolve_team_for_loader(self, identifiant: str, genre: Optional[str], references,
+                                 ligne_excel: int, colonne: str) -> Optional[str]:
+        identifiant = (identifiant or '').strip()
+        if not identifiant:
+            logger.warning(
+                "Coach_Groups ligne %d: équipe vide (colonne %s)",
+                ligne_excel,
+                colonne,
+            )
+            return None
+
+        nom_sans_genre, genre_dans_nom = parser_nom_avec_genre(identifiant)
+        if genre and genre_dans_nom and genre != genre_dans_nom:
+            logger.warning(
+                "Coach_Groups ligne %d: genre '%s' incompatible avec '%s' (colonne %s)",
+                ligne_excel,
+                genre,
+                identifiant,
+                colonne,
+            )
+            return None
+
+        genre_effectif = genre or genre_dans_nom
+
+        if identifiant in references['teams_variants'] or identifiant in references['teams_plain']:
+            return identifiant
+
+        genres_disponibles = references['genres_by_name'].get(nom_sans_genre, set())
+
+        if genre_effectif:
+            label = formater_nom_avec_genre(nom_sans_genre, genre_effectif)
+            if label in references['teams_variants']:
+                return label
+            if genre_effectif not in genres_disponibles:
+                logger.warning(
+                    "Coach_Groups ligne %d: l'équipe '%s' n'existe pas en genre '%s' (colonne %s)",
+                    ligne_excel,
+                    nom_sans_genre,
+                    genre_effectif,
+                    colonne,
+                )
+                return None
+            if nom_sans_genre in references['teams_plain']:
+                return nom_sans_genre
+            logger.warning(
+                "Coach_Groups ligne %d: équipe '%s' inconnue (colonne %s)",
+                ligne_excel,
+                label,
+                colonne,
+            )
+            return None
+
+        if genres_disponibles:
+            if len(genres_disponibles) > 1:
+                logger.warning(
+                    "Coach_Groups ligne %d: l'équipe '%s' existe en plusieurs genres (%s), préciser gender (colonne %s)",
+                    ligne_excel,
+                    nom_sans_genre,
+                    ', '.join(sorted(genres_disponibles)),
+                    colonne,
+                )
+                return None
+            genre_unique = next(iter(genres_disponibles))
+            label = formater_nom_avec_genre(nom_sans_genre, genre_unique)
+            if label in references['teams_variants']:
+                return label
+
+        if nom_sans_genre in references['teams_plain']:
+            return nom_sans_genre
+
+        logger.warning(
+            "Coach_Groups ligne %d: équipe '%s' inconnue (colonne %s)",
+            ligne_excel,
+            identifiant,
+            colonne,
+        )
+        return None
+
+    def _resolve_institution_for_loader(self, institution: str, genre: Optional[str], references,
+                                        ligne_excel: int, colonne: str) -> List[str]:
+        institution = (institution or '').strip()
+        if not institution:
+            logger.warning(
+                "Coach_Groups ligne %d: institution vide (colonne %s)",
+                ligne_excel,
+                colonne,
+            )
+            return []
+
+        lookup = references['lookup']
+        canonical = lookup.get(institution.lower())
+        if not canonical:
+            suggestion = difflib.get_close_matches(institution, list(lookup.values()), n=1, cutoff=0.6)
+            if suggestion:
+                logger.warning(
+                    "Coach_Groups ligne %d: institution '%s' inconnue (colonne %s). Vouliez-vous dire '%s'?",
+                    ligne_excel,
+                    institution,
+                    colonne,
+                    suggestion[0],
+                )
+            else:
+                logger.warning(
+                    "Coach_Groups ligne %d: institution '%s' inconnue (colonne %s)",
+                    ligne_excel,
+                    institution,
+                    colonne,
+                )
+            return []
+
+        bucket = references['institutions'].get(canonical, {'ALL': set(), 'M': set(), 'F': set()})
+        if genre:
+            equipes = sorted(bucket.get(genre, set()))
+            if not equipes:
+                logger.warning(
+                    "Coach_Groups ligne %d: aucune équipe '%s' pour l'institution '%s' (colonne %s)",
+                    ligne_excel,
+                    genre,
+                    canonical,
+                    colonne,
+                )
+            return equipes
+
+        equipes = sorted(bucket.get('ALL', set()))
+        if not equipes:
+            logger.warning(
+                "Coach_Groups ligne %d: aucune équipe trouvée pour l'institution '%s' (colonne %s)",
+                ligne_excel,
+                canonical,
+                colonne,
+            )
+        return equipes
+
+    def _coach_extract_institution(self, nom: str) -> Optional[str]:
+        if not nom:
+            return None
+        match = re.match(r'^(.+?)\s*\(\d+\)\s*$', nom)
+        if not match:
+            return None
+        return match.group(1).strip()
+
+    def _normalize_gender_token(self, genre: Optional[str]) -> Optional[str]:
+        if not genre:
+            return None
+        genre_clean = genre.strip().upper()
+        if genre_clean in ['M', 'F']:
+            return genre_clean
+        if genre_clean == 'H':
+            return 'M'
+        return None
+
+    def _split_display_label(self, texte: str) -> Tuple[str, Optional[str]]:
+        if not texte:
+            return '', None
+        match = re.match(r'^(?P<nom>.+?)\s*\[(?P<genre>[MFH])\]\s*$', texte.strip())
+        if match:
+            return match.group('nom').strip(), match.group('genre').upper()
+        return texte.strip(), None
+
+    def _spec_from_display_label(self, texte: str, references) -> Optional[CoachSlotSpec]:
+        if not texte:
+            return None
+
+        label, genre_hint = self._split_display_label(texte)
+        genre = self._normalize_gender_token(genre_hint)
+        lookup = references.get('lookup', {})
+
+        canonical = lookup.get(label.lower())
+        if canonical:
+            return CoachSlotSpec(kind='institution', identifier=canonical, gender=genre, raw=texte)
+
+        if texte in references['teams_variants'] or texte in references['teams_plain']:
+            return CoachSlotSpec(kind='team', identifier=texte, gender=genre, raw=texte)
+
+        nom_sans_genre, genre_dans_nom = parser_nom_avec_genre(label)
+        genre_effectif = genre or genre_dans_nom
+        if genre_effectif in ['M', 'F']:
+            etiquette = formater_nom_avec_genre(nom_sans_genre, genre_effectif)
+            if etiquette in references['teams_variants']:
+                return CoachSlotSpec(kind='team', identifier=etiquette, gender=genre_effectif, raw=texte)
+
+        if nom_sans_genre in references['teams_plain']:
+            return CoachSlotSpec(kind='team', identifier=nom_sans_genre, gender=genre_effectif, raw=texte)
+
+        return None
+
+    def _normalize_coach_slot_spec(self, spec: CoachSlotSpec, references, ligne_excel: int,
+                                    colonne: str) -> Optional[CoachSlotSpec]:
+        if not spec:
+            return None
+
+        spec.gender = self._normalize_gender_token(spec.gender)
+        spec.identifier = (spec.identifier or '').strip()
+        if not spec.identifier:
+            logger.warning(
+                "Coach_Groups ligne %d: cible vide (colonne %s)",
+                ligne_excel,
+                colonne,
+            )
+            return None
+
+        lookup = references.get('lookup', {})
+
+        if spec.kind == 'institution':
+            canonical = lookup.get(spec.identifier.lower())
+            if not canonical:
+                nom_normalise, _ = self._split_display_label(spec.identifier)
+                canonical = lookup.get(nom_normalise.lower())
+            if not canonical:
+                logger.warning(
+                    "Coach_Groups ligne %d: institution '%s' inconnue (colonne %s)",
+                    ligne_excel,
+                    spec.identifier,
+                    colonne,
+                )
+                return None
+            spec.identifier = canonical
+            return spec
+
+        if spec.kind == 'team':
+            label, genre_hint = self._split_display_label(spec.identifier)
+            if not spec.gender and genre_hint:
+                spec.gender = self._normalize_gender_token(genre_hint)
+
+            canonical = lookup.get(label.lower())
+            if canonical:
+                return CoachSlotSpec(
+                    kind='institution',
+                    identifier=canonical,
+                    gender=spec.gender,
+                    raw=spec.raw or spec.identifier,
+                )
+
+        return spec
     
-    def charger_matchs_fixes(self) -> List[Match]:
+    def charger_matchs_fixes(self, equipes: Optional[List[Equipe]] = None) -> List[Match]:
         """
         Charge les matchs déjà joués ou planifiés depuis la feuille Matchs_Fixes.
         
@@ -1004,6 +1527,7 @@ class DataLoader:
         - Genre: Genre du match (F ou M)
         - Poule: Code de la poule
         - Semaine: Numéro de semaine
+        - Date: Date réelle du match (optionnelle)
         - Horaire: Heure du match (HH:MM)
         - Gymnase: Nom du gymnase
         - Score: Score du match si joué (optionnel)
@@ -1020,8 +1544,9 @@ class DataLoader:
         
         matchs_fixes = []
         
-        # Charger les équipes pour pouvoir créer les objets Match complets
-        equipes = self.charger_equipes()
+        # Charger ou réutiliser les équipes pour créer les objets Match complets
+        if equipes is None:
+            equipes = self.charger_equipes()
         # Utiliser id_unique comme clé pour éviter les collisions entre équipes de même nom mais genre différent
         # Format: "NOM|GENRE" (ex: "LYON 1 (1)|M", "LYON 1 (1)|F")
         equipes_dict = {eq.id_unique: eq for eq in equipes}
@@ -1035,6 +1560,21 @@ class DataLoader:
             equipe2_nom = str(row.get('Equipe_2', '')).strip()
             genre = str(row.get('Genre', '')).strip().upper()
             poule = str(row.get('Poule', '')).strip()
+            date_brut = row.get('Date')
+            match_date: Optional[datetime] = None
+            date_str = str(date_brut).strip() if pd.notna(date_brut) and str(date_brut).strip() else None
+            if date_str:
+                try:
+                    parsed = pd.to_datetime(date_brut, dayfirst=True)
+                    match_date = datetime(parsed.year, parsed.month, parsed.day)
+                except Exception:
+                    logger.warning(
+                        f"Ligne {ligne_num}: date invalide '{date_brut}' pour {equipe1_nom} vs {equipe2_nom}, ligne ignorée"
+                    )
+                    continue
+            semaine_depuis_date = None
+            if match_date and self.calendar_manager:
+                semaine_depuis_date = self.calendar_manager.infer_semaine_from_date(match_date)
             
             # Nettoyer les données d'entrée
             if pd.isna(equipe1_nom) or equipe1_nom.lower() == 'nan':
@@ -1098,32 +1638,63 @@ class DataLoader:
                 )
                 logger.info(f"Ligne {ligne_num}: équipe externe '{equipe2_nom}' créée pour match fixe (genre: {genre_equipe or 'non défini'})")
             
-            semaine = row.get('Semaine')
-            if pd.isna(semaine):
-                logger.warning(f"Ligne {ligne_num}: semaine manquante pour {equipe1_nom} vs {equipe2_nom}, ligne ignorée")
-                continue
-            try:
-                semaine = int(semaine)
-            except (ValueError, TypeError):
-                logger.warning(f"Ligne {ligne_num}: semaine invalide '{semaine}' pour {equipe1_nom} vs {equipe2_nom}, ligne ignorée")
-                continue
+            semaine_cell = row.get('Semaine')
+            semaine = None
+            if pd.notna(semaine_cell) and str(semaine_cell).strip() and str(semaine_cell).strip().lower() != 'nan':
+                try:
+                    semaine = int(float(semaine_cell))
+                except (ValueError, TypeError):
+                    logger.warning(
+                        f"Ligne {ligne_num}: semaine invalide '{semaine_cell}' pour {equipe1_nom} vs {equipe2_nom}, ligne ignorée"
+                    )
+                    continue
             
-            gymnase = str(row.get('Gymnase', '')).strip()
-            if not gymnase or pd.isna(gymnase):
-                logger.warning(f"Ligne {ligne_num}: gymnase manquant pour {equipe1_nom} vs {equipe2_nom}, ligne ignorée")
-                continue
+            if semaine is None:
+                if semaine_depuis_date is not None:
+                    semaine = semaine_depuis_date
+                else:
+                    logger.warning(
+                        f"Ligne {ligne_num}: semaine manquante pour {equipe1_nom} vs {equipe2_nom} (et impossible de déduire depuis la date)")
+                    continue
+            elif semaine_depuis_date is not None and semaine != semaine_depuis_date:
+                logger.warning(
+                    f"Ligne {ligne_num}: incohérence entre semaine ({semaine}) et date fournie (≈ S{semaine_depuis_date}) pour {equipe1_nom} vs {equipe2_nom}"
+                )
+
+            if not match_date and self.calendar_manager:
+                date_calculee = self.calendar_manager.semaine_to_date(semaine)
+                if date_calculee:
+                    match_date = datetime(date_calculee.year, date_calculee.month, date_calculee.day)
             
-            # Détecter les matchs en entente
+            date_hors_jour = False
+            if match_date and self.calendar_manager:
+                date_hors_jour = not self.calendar_manager.est_jour_officiel(match_date)
+            
+            gymnase_brut = row.get('Gymnase', '')
+            gymnase = str(gymnase_brut).strip() if pd.notna(gymnase_brut) else ''
             is_entente = gymnase.upper() == 'ENTENTE'
             
-            # Pour les matchs en entente, l'horaire n'est pas obligatoire
-            horaire = str(row.get('Horaire', '')).strip()
-            if not is_entente and (not horaire or pd.isna(horaire)):
+            if not gymnase:
+                if date_hors_jour:
+                    gymnase = 'ENTENTE'
+                    is_entente = True
+                else:
+                    logger.warning(f"Ligne {ligne_num}: gymnase manquant pour {equipe1_nom} vs {equipe2_nom}, ligne ignorée")
+                    continue
+            else:
+                if date_hors_jour and not is_entente:
+                    is_entente = True
+                    logger.info(
+                        f"Ligne {ligne_num}: Date non officielle → match traité en entente ({equipe1_nom} vs {equipe2_nom})"
+                    )
+            
+            horaire_brut = row.get('Horaire', '')
+            horaire = str(horaire_brut).strip() if pd.notna(horaire_brut) else ''
+            if not is_entente and (not horaire or horaire.lower() == 'nan'):
                 logger.warning(f"Ligne {ligne_num}: horaire manquant pour {equipe1_nom} vs {equipe2_nom}, ligne ignorée")
                 continue
             
-            # Si c'est un match en entente sans horaire, mettre une valeur par défaut
-            if is_entente and (not horaire or pd.isna(horaire) or horaire.lower() == 'nan'):
+            if is_entente and (not horaire or horaire.lower() == 'nan'):
                 horaire = 'À déterminer'
                 logger.info(f"Ligne {ligne_num}: Match en entente détecté - {equipe1_nom} vs {equipe2_nom}")
             
@@ -1156,6 +1727,7 @@ class DataLoader:
                     'semaine': semaine,
                     'horaire': horaire,
                     'gymnase': gymnase,
+                    'date': format_user_date(match_date) if match_date else None,
                     'score': score_str,
                     'type_competition': type_competition_str,  # Garder aussi dans metadata pour compatibilité
                     'remarques': remarques_str,

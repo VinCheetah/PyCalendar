@@ -48,6 +48,12 @@ from openpyxl.utils.dataframe import dataframe_to_rows
 import tempfile
 import urllib.parse
 
+from pycalendar.core.constants import (
+    DATE_USER_FORMAT_LABEL,
+    format_user_date,
+    parse_user_date,
+)
+
 # Imports optionnels pour l'authentification SharePoint/Microsoft
 try:
     import msal
@@ -135,6 +141,9 @@ class ImporteurMatchsExternes:
         
         # Cache pour l'authentification SharePoint
         self._sharepoint_token: Optional[str] = None
+
+        # Tag utilisé pour annoter les remarques lors de l'import
+        self.import_comment_tag = self._build_import_comment_tag()
     
     def _parse_sharepoint_url(self, url: str) -> Dict[str, Optional[str]]:
         """
@@ -365,11 +374,43 @@ class ImporteurMatchsExternes:
         return score_str
     
     def _parse_date(self, date_str: str) -> datetime:
-        """Parse une date au format DD/MM/YYYY."""
-        try:
-            return datetime.strptime(date_str, "%d/%m/%Y")
-        except ValueError:
-            raise ValueError(f"Format de date invalide: {date_str}. Attendu: DD/MM/YYYY")
+        """Parse une date utilisateur (DD/MM/YY)."""
+        parsed = parse_user_date(date_str)
+        if not parsed:
+            raise ValueError(f"Format de date invalide: {date_str}. Attendu: {DATE_USER_FORMAT_LABEL}")
+        return parsed
+
+    def _build_import_comment_tag(self) -> str:
+        """Construit une étiquette cohérente pour annoter les remarques importées."""
+        parts = []
+        if self.journee is not None:
+            parts.append(f"J{self.journee}")
+        if self.fichier_local:
+            parts.append(self.fichier_local.name)
+        elif self.url_externe:
+            try:
+                host = urllib.parse.urlparse(self.url_externe).netloc
+            except Exception:
+                host = ''
+            if host:
+                parts.append(host)
+        if not parts:
+            return "Import externe"
+        return "Importé " + " | ".join(parts)
+
+    def _merge_import_comment_tag(self, remark: Optional[str]) -> str:
+        """Ajoute l'étiquette d'import aux remarques sans écraser le contenu existant."""
+        remark_str = '' if remark is None else str(remark).strip()
+        if remark_str.lower() == 'nan':
+            remark_str = ''
+        tag = self.import_comment_tag
+        if not tag:
+            return remark_str
+        if not remark_str:
+            return tag
+        if tag in remark_str:
+            return remark_str
+        return f"{remark_str} | {tag}"
     
     def mapper_gymnases(self) -> dict:
         """
@@ -704,7 +745,7 @@ class ImporteurMatchsExternes:
             df_filtre['_Date_parsed'] = pd.to_datetime(df_filtre['Date'], errors='coerce')
             df_filtre = df_filtre[df_filtre['_Date_parsed'] <= self.date_limite]
             df_filtre = df_filtre.drop(columns=['_Date_parsed'])
-            print(f"   → Filtre date ≤ {self.date_limite.strftime('%d/%m/%Y')}: {len(df_filtre)} matchs")
+            print(f"   → Filtre date ≤ {format_user_date(self.date_limite)}: {len(df_filtre)} matchs")
         
         # Filtre par score (résultats)
         if 'Résultats' in df_filtre.columns:
@@ -736,6 +777,8 @@ class ImporteurMatchsExternes:
             DataFrame au format Matchs_Fixes
         """
         mapping = self.mapper_colonnes()
+        computed_weeks = None
+        import_tag = self.import_comment_tag or 'Import externe'
         
         # Créer le DataFrame cible
         df_config = pd.DataFrame()
@@ -762,8 +805,22 @@ class ImporteurMatchsExternes:
                 return max(1, semaine)  # Au minimum semaine 1
             
             df_config['Semaine'] = df['_Date_parsed'].apply(calculer_semaine)
+            computed_weeks = df_config['Semaine'].copy()
         else:
             df_config['Semaine'] = ''
+
+        if self.journee is not None:
+            journee_value = int(self.journee)
+            if computed_weeks is not None:
+                try:
+                    semaine_calculee = pd.to_numeric(computed_weeks, errors='coerce')
+                    mismatches = (semaine_calculee.notna()) & (semaine_calculee != journee_value)
+                    mismatches_count = int(mismatches.sum())
+                    if mismatches_count > 0:
+                        print(f"   ℹ️  {mismatches_count} match(s) hors jour de référence → semaine forcée à J{journee_value}")
+                except Exception:
+                    pass
+            df_config['Semaine'] = journee_value
         
         # Traitement spécial pour l'horaire (convertir format time en HH:MM)
         if 'Horaire' in df_config.columns:
@@ -930,7 +987,7 @@ class ImporteurMatchsExternes:
         for col in colonnes_requises:
             if col not in df_config.columns:
                 if col == 'Remarques':
-                    df_config[col] = 'Importé J1'
+                    df_config[col] = import_tag
                 elif col == 'Genre':
                     df_config[col] = ''
                 elif col == 'Type_Competition':
@@ -951,10 +1008,7 @@ class ImporteurMatchsExternes:
         
         # Compléter les remarques existantes
         if 'Remarques' in df_config.columns:
-            df_config['Remarques'] = df_config['Remarques'].fillna('Importé J1')
-            df_config['Remarques'] = df_config['Remarques'].apply(
-                lambda x: f"{x} | Importé J1" if x and str(x).strip() and 'Importé' not in str(x) else 'Importé J1'
-            )
+            df_config['Remarques'] = df_config['Remarques'].apply(self._merge_import_comment_tag)
         
         # Réordonner les colonnes
         df_config = df_config[colonnes_requises]
@@ -1134,7 +1188,7 @@ class ImporteurMatchsExternes:
         if self.journee:
             print(f"   - Journée: {self.journee}")
         if self.date_limite:
-            print(f"   - Date limite: {self.date_limite.strftime('%d/%m/%Y')}")
+            print(f"   - Date limite: {format_user_date(self.date_limite)}")
         print(f"   - Filtre: {'Avec score' if self.avec_score else 'Sans score' if self.sans_score else 'Tous'}")
         if self.dry_run:
             print(f"   - Mode: SIMULATION (dry-run)")

@@ -18,7 +18,10 @@ class MatchesView {
             pool: '',
             venue: '',
             week: '',
-            team: ''
+            equipe: '',
+            team: '',
+            horaireStart: null,
+            horaireEnd: null
         };
         
         // Options de groupement
@@ -208,16 +211,17 @@ class MatchesView {
         // Matchs non planifiés (peuvent inclure des ententes)
         if (data.matches.unscheduled) {
             data.matches.unscheduled.forEach(match => {
-                const matchWithNulls = {
+                // Conserver les informations existantes (gymnase, horaire...) quand elles sont fournies
+                const matchWithDefaults = {
                     ...match,
-                    semaine: null,
-                    horaire: null,
-                    gymnase: null,
-                    jour: null
+                    semaine: match.semaine ?? null,
+                    horaire: match.horaire ?? null,
+                    gymnase: match.gymnase ?? null,
+                    jour: match.jour ?? null
                 };
                 // Déterminer si c'est une entente ou un match non planifié normal
-                matchWithNulls.status = this._determineMatchStatus(matchWithNulls);
-                allMatches.push(matchWithNulls);
+                matchWithDefaults.status = this._determineMatchStatus(matchWithDefaults);
+                allMatches.push(matchWithDefaults);
             });
         }
         
@@ -285,13 +289,30 @@ class MatchesView {
         if (this.activeFilters.venue) {
             filtered = filtered.filter(m => m.gymnase === this.activeFilters.venue);
         }
+
+        // Filtre par plage horaire (chevauchement)
+        if (this.activeFilters.horaireStart && this.activeFilters.horaireEnd) {
+            const [startHours, startMinutes] = this.activeFilters.horaireStart.split(':').map(Number);
+            const [endHours, endMinutes] = this.activeFilters.horaireEnd.split(':').map(Number);
+            const rangeStart = startHours * 60 + startMinutes;
+            const rangeEnd = endHours * 60 + endMinutes;
+            const matchDuration = 90;
+            filtered = filtered.filter(match => {
+                if (!match.horaire) {
+                    return true;
+                }
+                const [hours, minutes] = match.horaire.split(':').map(Number);
+                const matchStart = hours * 60 + minutes;
+                const matchEnd = matchStart + matchDuration;
+                return matchStart < rangeEnd && matchEnd > rangeStart;
+            });
+        }
         
         // Filtre par semaine
         if (this.activeFilters.week) {
             const weekNum = parseInt(this.activeFilters.week);
             filtered = filtered.filter(m => m.semaine === weekNum);
         }
-        
         // Filtre par équipe - support des IDs multiples (groupe M+F)
         if (this.activeFilters.equipe) {
             const equipeIds = this.activeFilters.equipe.split(',');
@@ -800,9 +821,8 @@ class MatchesView {
         if (!penalties) return '';
         
         const items = Object.entries(penalties)
-            .filter(([key, value]) => value > 0 && key !== 'total')
-            .sort((a, b) => b[1] - a[1])
-            .slice(0, 5); // Top 5
+            .filter(([key, value]) => key !== 'total' && (value || 0) > 0)
+            .sort((a, b) => b[1] - a[1]);
         
         if (items.length === 0) return '';
         
@@ -834,16 +854,26 @@ class MatchesView {
      */
     _getPenaltyLabel(type) {
         const labels = {
-            'consecutive_home': 'Domicile consécutif',
-            'consecutive_away': 'Extérieur consécutif',
-            'same_day': 'Même jour',
-            'unavailable_slot': 'Créneau indisponible',
-            'capacity': 'Capacité dépassée',
-            'institution_conflict': 'Conflit établissement',
-            'time_preference': 'Horaire non préféré',
-            'venue_preference': 'Lieu non préféré',
-            'rest_weeks': 'Semaines de repos',
-            'entente': 'Entente non planifiée'
+            horaire_prefere: 'Horaire préféré',
+            gymnase_prefere: 'Gymnase préféré',
+            niveau_gymnase: 'Niveau gymnase',
+            espacement: 'Espacement / repos',
+            compaction: 'Compaction',
+            overlap: 'Overlap institution',
+            aller_retour: 'Aller-retour',
+            contrainte_temporelle: 'Contrainte temporelle',
+            guidance_qualite: 'Guidance qualité',
+            indisponibilite: 'Indisponibilité',
+            consecutive_home: 'Domicile consécutif',
+            consecutive_away: 'Extérieur consécutif',
+            same_day: 'Même jour',
+            unavailable_slot: 'Créneau indisponible',
+            capacity: 'Capacité dépassée',
+            institution_conflict: 'Conflit établissement',
+            time_preference: 'Horaire non préféré',
+            venue_preference: 'Lieu non préféré',
+            rest_weeks: 'Semaines de repos',
+            entente: 'Entente non planifiée'
         };
         
         return labels[type] || type;

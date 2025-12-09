@@ -76,7 +76,8 @@ function initializeViews() {
         { name: 'agenda', constructor: 'AgendaView', containerId: 'agenda-view' },
         { name: 'pools', constructor: 'PoolsView', containerId: 'pools-view' },
         { name: 'teams', constructor: 'TeamsView', containerId: 'teams-view' },
-        { name: 'matches', constructor: 'MatchesView', containerId: 'matches-view' }
+        { name: 'matches', constructor: 'MatchesView', containerId: 'matches-view' },
+        { name: 'penalties', constructor: 'PenaltiesView', containerId: 'penalties-view' }
     ];
 
     viewConfigs.forEach(config => {
@@ -124,6 +125,9 @@ function initializeViewOptions() {
     if (window.matchesView) {
         window.viewOptionsManager.registerView('matches', window.matchesView);
     }
+    if (window.penaltiesView) {
+        window.viewOptionsManager.registerView('penalties', window.penaltiesView);
+    }
     // Enregistrer d'autres vues ici à l'avenir...
 }
 
@@ -143,7 +147,7 @@ function initializeFilters() {
     window.filterPanel = new FilterPanel(window.dataManager, filtersContainer);
     window.filterPanel.onChange((filters) => {
         // Appliquer les filtres à toutes les vues enregistrées
-        ['agendaView', 'poolsView', 'teamsView', 'matchesView'].forEach(viewName => {
+        ['agendaView', 'poolsView', 'teamsView', 'matchesView', 'penaltiesView'].forEach(viewName => {
             if (window[viewName] && typeof window[viewName].setFilters === 'function') {
                 window[viewName].setFilters(filters);
             } else if (window[viewName] && typeof window[viewName].updateFilters === 'function') {

@@ -23,13 +23,6 @@ cpsat:
 contraintes:
   compaction_penalites_par_semaine: [0, 0, 5, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3]
   
-  # Adéquation niveau match / niveau gymnase
-  # Convention: valeurs NÉGATIVES = bonus (réduction coût), POSITIVES = pénalité (augmentation coût)
-  # Exemple: A1 (haut niveau) sur gymnase haut niveau → bonus (valeur négative)
-  #          A1 (haut niveau) sur gymnase bas niveau → pénalité (valeur positive)
-  penalite_niveau_gymnases_haut: [-5, -3, -1, 0]  # [A1, A2, A3, A4] sur gymnase HAUT niveau (valeurs négatives = bonus)
-  penalite_niveau_gymnases_bas: [8, 5, 2, 1]  # [A1, A2, A3, A4] sur gymnase BAS niveau (valeurs positives = pénalité)
-
 
 calendrier:
   actif: true

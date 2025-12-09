@@ -26,8 +26,6 @@ setup(
         "openpyxl>=3.1.0",
         "pyyaml>=6.0",
         "ortools>=9.7.0",
-        "streamlit>=1.28.0",
-        "plotly>=5.17.0",
         "jsonschema>=4.19.0",
     ],
     extras_require={
@@ -43,7 +41,7 @@ setup(
     entry_points={
         "console_scripts": [
             "pycalendar=pycalendar.__main__:main",
-            "pycalendar-config=pycalendar.cli.config_tools:main",
+            "pycalendar-config=pycalendar.cli.update_config_excel:main",
             "pycalendar-extract=pycalendar.cli.pool_extractor:main",
             "pycalendar-sheet=pycalendar.cli.match_sheet_generator:main",
             "pycalendar-import=pycalendar.cli.external_importer:main",

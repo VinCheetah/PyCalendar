@@ -146,6 +146,7 @@ class InterfaceGenerator:
             # View styles
             'styles/views/agenda-view.css',
             'styles/views/pools-view.css',
+            'styles/views/penalties-view.css',
             
             # Themes (last)
             'styles/themes/default-light.css',
@@ -203,6 +204,7 @@ class InterfaceGenerator:
             'views/pools-view.js',
             'views/teams-view.js',
             'views/matches-view.js',
+            'views/penalties-view.js',
             
             # Application initialization (loaded last)
             'app.js',

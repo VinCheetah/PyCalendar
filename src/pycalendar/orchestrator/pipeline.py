@@ -1,8 +1,8 @@
 """Main scheduling pipeline orchestrator."""
 
-from typing import Dict, List
+from typing import Dict, List, Optional
 from pathlib import Path
-from pycalendar.core.models import Equipe, Gymnase, Solution
+from pycalendar.core.models import Equipe, Gymnase, Solution, CoachGroup
 from pycalendar.core.config import Config
 from pycalendar.data.data_source import DataSource
 from pycalendar.data.validators import DataValidator
@@ -12,6 +12,7 @@ from pycalendar.exporters.excel_exporter import ExcelExporter
 from pycalendar.core.statistics import Statistics
 from pycalendar.interface.core.generator import InterfaceGenerator
 from pycalendar.validation.solution_validator import SolutionValidator, afficher_rapport_validation
+from pycalendar.analysis import calculate_penalty_breakdown
 
 try:
     from pycalendar.solvers.cpsat_solver import CPSATSolver
@@ -25,12 +26,15 @@ class SchedulingPipeline:
     
     def __init__(self, config: Config):
         self.config = config
-        self.source = DataSource(config.fichier_donnees)
+        self.calendar_manager = config.calendar_manager
+        self.source = DataSource(config.fichier_donnees, self.calendar_manager)
         self.obligations_presence = {}
         self.groupes_non_simultaneite = {}
         self.ententes = {}
         self.contraintes_temporelles = {}
         self.niveaux_gymnases = {}
+        self.priorites_genre_gymnases = {}
+        self.coach_groups = {}
         self.types_poules = {}  # Store pool types for export
     
     def run(self):
@@ -43,9 +47,11 @@ class SchedulingPipeline:
         gymnases = self._load_gymnases()
         self.obligations_presence = self._load_obligations()
         self.groupes_non_simultaneite = self._load_groupes_non_simultaneite()
+        self.coach_groups = self._load_coach_groups(equipes)
         self.ententes = self._load_ententes()
         self.contraintes_temporelles = self._load_contraintes_temporelles()
         self.niveaux_gymnases = self._load_niveaux_gymnases()
+        self.priorites_genre_gymnases = self._load_priorites_genres()
         
         if not self._validate_data(equipes, gymnases):
             print("❌ Erreurs de validation. Arrêt du pipeline.")
@@ -55,7 +61,7 @@ class SchedulingPipeline:
         self._afficher_info_donnees(equipes, poules, gymnases)
         
         # Charger les matchs fixes
-        matchs_fixes = self._load_matchs_fixes()
+        matchs_fixes = self._load_matchs_fixes(equipes)
         
         matchs = self._generer_matchs(poules)
         
@@ -63,7 +69,7 @@ class SchedulingPipeline:
         if matchs_fixes:
             matchs = self._exclure_matchs_fixes(matchs, matchs_fixes)
         
-        creneaux = DataTransformer.generer_creneaux(gymnases, self.config.nb_semaines, self.config.calendar_manager)
+        creneaux = DataTransformer.generer_creneaux(gymnases, self.config.nb_semaines, self.calendar_manager)
         
         # Exclure les créneaux occupés par les matchs fixes
         if matchs_fixes:
@@ -88,6 +94,7 @@ class SchedulingPipeline:
                                 if (c.gymnase, c.semaine, c.horaire) not in creneaux_utilises]
             
             Statistics.afficher_stats(solution, creneaux_restants)
+            self._ensure_penalty_breakdown(solution, gymnases)
             
             # Sauvegarder la solution avec les matchs fixes pour traçabilité
             self._save_solution(solution, matchs, creneaux, gymnases, matchs_fixes)
@@ -148,6 +155,29 @@ class SchedulingPipeline:
             print("  ℹ️  Utilisation du mode legacy (toutes institutions)")
             print()
             return {}
+
+    def _load_coach_groups(self, equipes: List[Equipe]) -> Dict[str, CoachGroup]:
+        """Load coach groups for overlap handling."""
+        if not self.config.coach_overlap_actif:
+            return {}
+
+        print("👥 Chargement des groupes coachs...")
+        try:
+            groups = self.source.charger_groupes_coachs(equipes)
+            if groups:
+                print(f"✓ {len(groups)} coach(s) avec équipes suivies")
+                for coach_name, group in list(groups.items())[:5]:
+                    print(f"  • {coach_name}: {len(group.team_ids)} équipe(s)")
+                if len(groups) > 5:
+                    print("  ...")
+            else:
+                print("  ℹ️  Aucun coach utilisable configuré")
+            print()
+            return groups
+        except Exception as e:
+            print(f"  ⚠️  Erreur lors du chargement des coachs: {e}")
+            print()
+            return {}
     
     def _load_ententes(self) -> Dict:
         """Load ententes (special match pairs with reduced unscheduled penalty)."""
@@ -202,8 +232,8 @@ class SchedulingPipeline:
             niveaux = self.source.charger_niveaux_gymnases()
             
             if niveaux:
-                haut_niveau = [g for g, n in niveaux.items() if n == 'Haut niveau']
-                bas_niveau = [g for g, n in niveaux.items() if n == 'Bas niveau']
+                haut_niveau = [g for g, n in niveaux.items() if n == 'haut']
+                bas_niveau = [g for g, n in niveaux.items() if n == 'bas']
                 
                 print(f"✓ {len(niveaux)} gymnases classés:")
                 if haut_niveau:
@@ -218,12 +248,29 @@ class SchedulingPipeline:
             print(f"  ⚠️  Erreur lors du chargement des niveaux de gymnases: {e}")
             print()
             return {}
-    
-    def _load_matchs_fixes(self):
+
+    def _load_priorites_genres(self) -> Dict[str, str]:
+        """Load optional gender priority per venue."""
+        print("🚻 Chargement des genres prioritaires des gymnases...")
+        try:
+            priorites = self.source.charger_priorites_genre_gymnases()
+            if priorites:
+                resume = ', '.join(f"{gym}: {genre}" for gym, genre in sorted(priorites.items()))
+                print(f"✓ {len(priorites)} gymnases avec genre prioritaire ({resume})")
+            else:
+                print("  ℹ️  Aucun genre prioritaire renseigné")
+            print()
+            return priorites
+        except Exception as e:
+            print(f"  ⚠️  Erreur lors du chargement des genres prioritaires: {e}")
+            print()
+            return {}
+
+    def _load_matchs_fixes(self, equipes: List[Equipe]):
         """Load fixed/already played matches."""
         print("📌 Chargement des matchs fixes...")
         try:
-            matchs_fixes = self.source.charger_matchs_fixes()
+            matchs_fixes = self.source.charger_matchs_fixes(equipes)
             
             if matchs_fixes:
                 print(f"✓ {len(matchs_fixes)} matchs fixes chargés:")
@@ -430,7 +477,15 @@ class SchedulingPipeline:
         if not CPSAT_AVAILABLE:
             raise ImportError("OR-Tools n'est pas installé. Installez-le avec: pip install ortools")
         
-        solver = CPSATSolver(self.config, self.groupes_non_simultaneite, self.ententes, self.contraintes_temporelles, self.niveaux_gymnases)
+        solver = CPSATSolver(
+            self.config,
+            groupes_non_simultaneite=self.groupes_non_simultaneite,
+            ententes=self.ententes,
+            contraintes_temporelles=self.contraintes_temporelles,
+            niveaux_gymnases=self.niveaux_gymnases,
+            priorites_genre_gymnases=self.priorites_genre_gymnases,
+            coach_groups=self.coach_groups
+        )
         
         # CP-SAT avec warm start activé par défaut
         use_warm_start = getattr(self.config, 'cpsat_warm_start', True)
@@ -441,6 +496,31 @@ class SchedulingPipeline:
         
         return solution
     
+    def _ensure_penalty_breakdown(self, solution: Solution, gymnases: List[Gymnase]):
+        """Garantit que la solution contient la décomposition des pénalités."""
+        if not solution or not gymnases:
+            return
+        if solution.metadata is None:
+            solution.metadata = {}
+        solution.metadata.setdefault('niveaux_gymnases', self.niveaux_gymnases)
+        solution.metadata.setdefault('priorites_genre_gymnases', self.priorites_genre_gymnases)
+        if solution.metadata.get('penalty_breakdown'):
+            return
+        try:
+            penalty_breakdown = calculate_penalty_breakdown(
+                solution,
+                self.config,
+                gymnases=gymnases,
+                niveaux_gymnases=self.niveaux_gymnases,
+                priorites_genre_gymnases=self.priorites_genre_gymnases,
+                ententes=self.ententes,
+                obligations_presence=self.obligations_presence,
+                groupes_non_simultaneite=self.groupes_non_simultaneite,
+            )
+            solution.metadata['penalty_breakdown'] = penalty_breakdown
+        except Exception as e:
+            print(f"  ⚠️  Impossible de calculer la décomposition des pénalités: {e}")
+
     def _save_solution(self, solution: Solution, matchs, creneaux, gymnases, matchs_fixes=None):
         """Sauvegarde la solution avec sa signature pour réutilisation future."""
         try:
@@ -453,13 +533,18 @@ class SchedulingPipeline:
             # Créer la signature de configuration
             equipes = self.source.charger_equipes()
             
-            # Trouver le fichier YAML de config (heuristique)
-            # Note: Idéalement, Config devrait stocker son chemin d'origine
-            config_yaml_path = Path("configs/default.yaml")
-            for possible_path in [Path("configs/default.yaml"), Path("config.yaml")]:
-                if possible_path.exists():
-                    config_yaml_path = possible_path
-                    break
+            # Utiliser la source YAML réelle si disponible, sinon fallback
+            if getattr(self.config, 'source_path', None):
+                config_yaml_path = Path(self.config.source_path)
+            else:
+                config_yaml_path = Path("configs/default.yaml")
+                for possible_path in [Path("configs/default.yaml"), Path("config.yaml")]:
+                    if possible_path.exists():
+                        config_yaml_path = possible_path
+                        break
+            if not config_yaml_path.exists():
+                print(f"  ⚠️  Fichier YAML introuvable pour la signature ({config_yaml_path}), fallback sur configs/default.yaml")
+                config_yaml_path = Path("configs/default.yaml")
             
             signature = store.create_signature(
                 yaml_path=config_yaml_path,
@@ -560,7 +645,9 @@ class SchedulingPipeline:
         
         # Générer TOUS les créneaux possibles (occupés et libres)
         gymnases = self.source.charger_gymnases()
-        tous_creneaux = DataTransformer.generer_creneaux(gymnases, self.config.nb_semaines, self.config.calendar_manager)
+        self._ensure_penalty_breakdown(solution, gymnases)
+        
+        tous_creneaux = DataTransformer.generer_creneaux(gymnases, self.config.nb_semaines, self.calendar_manager)
         
         # Stocker TOUS les créneaux dans metadata pour l'interface
         solution.metadata['creneaux_disponibles'] = tous_creneaux

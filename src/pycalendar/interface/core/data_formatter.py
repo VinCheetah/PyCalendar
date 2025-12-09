@@ -5,11 +5,25 @@ This module converts internal PyCalendar models into a structured JSON format
 optimized for the web interface, with pre-calculated statistics and enriched data.
 """
 
-from typing import Dict, List, Any, Optional, Set
+from typing import Dict, List, Any, Optional, Set, Tuple
 from datetime import datetime
 from collections import defaultdict
 import hashlib
 import json
+import re
+
+SCORE_PAIR_PATTERN = re.compile(
+    r"""
+        (?P<first>\d+)
+        \s*
+        (
+            [-\u2013\u2014\u2212:/]
+            |\s+à\s+
+        )
+        \s*(?P<second>\d+)
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
 
 from pycalendar.core.models import Solution, Match, Equipe, Creneau, Gymnase
 from pycalendar.core.config import Config
@@ -256,6 +270,9 @@ class DataFormatter:
         
         Note: Compaction penalties are pool-level and not stored per-match.
         """
+        metadata = solution.metadata or {}
+        niveaux_gymnases = metadata.get('niveaux_gymnases', {})
+        priorites_genre = metadata.get('priorites_genre_gymnases', {})
         # Store all matches for PenaltyCalculator
         all_matches = solution.matchs_planifies
         
@@ -311,6 +328,8 @@ class DataFormatter:
                     (match.creneau.semaine, match.creneau.horaire), 
                     []
                 ),
+                "niveaux_gymnases": niveaux_gymnases,
+                "priorites_genre_gymnases": priorites_genre,
             }
     
     @staticmethod
@@ -324,6 +343,8 @@ class DataFormatter:
         
         # Vérifier si le match a un genre fixé explicitement (pour les matchs fixes)
         genre_fixe = match.metadata.get('genre_fixe') if match.metadata else None
+        metadata = match.metadata or {}
+        is_entente = bool(metadata.get("is_entente", False))
         
         # Normalize genres to uppercase
         equipe1_genre = match.equipe1.genre.upper() if match.equipe1.genre else ""
@@ -361,6 +382,10 @@ class DataFormatter:
             "genre": match_genre,  # Genre du match (M, F, ou X)
             "championship_type": match.championship_type,  # Type de championnat (Acad, CFU, CFE, Autre)
         }
+        match_data["is_fixed"] = bool(metadata.get("is_fixed") or metadata.get("fixe"))
+        match_data["is_external"] = metadata.get("is_external", False)
+        match_data["score"] = DataFormatter._extract_score_info(metadata)
+        match_data["is_entente"] = is_entente
         
         if is_scheduled and match.creneau:
             # IMPORTANT: Un match n'est "entente" QUE s'il n'a PAS de créneau
@@ -370,55 +395,8 @@ class DataFormatter:
                 "semaine": match.creneau.semaine,
                 "horaire": match.creneau.horaire,
                 "gymnase": match.creneau.gymnase,
-                "is_fixed": match.metadata.get("is_fixed", False),
-                "is_entente": False,  # Match avec créneau = PAS une entente
-                "is_external": match.metadata.get("is_external", False),
             })
-            
-            # Add score if available
-            score_data = match.metadata.get("score")
-            if isinstance(score_data, dict):
-                # Score déjà au format dictionnaire
-                match_data["score"] = {
-                    "equipe1": score_data.get("equipe1"),
-                    "equipe2": score_data.get("equipe2"),
-                    "has_score": score_data.get("equipe1") is not None,
-                }
-            elif isinstance(score_data, str) and score_data.strip():
-                # Score au format string (ex: "3-1", "21-19")
-                # Parser le score
-                parts = score_data.strip().split('-')
-                if len(parts) == 2:
-                    try:
-                        equipe1_score = int(parts[0].strip())
-                        equipe2_score = int(parts[1].strip())
-                        match_data["score"] = {
-                            "equipe1": equipe1_score,
-                            "equipe2": equipe2_score,
-                            "has_score": True,
-                        }
-                    except ValueError:
-                        # Format invalide, traiter comme pas de score
-                        match_data["score"] = {
-                            "equipe1": None,
-                            "equipe2": None,
-                            "has_score": False,
-                        }
-                else:
-                    # Format invalide
-                    match_data["score"] = {
-                        "equipe1": None,
-                        "equipe2": None,
-                        "has_score": False,
-                    }
-            else:
-                # Pas de score disponible
-                match_data["score"] = {
-                    "equipe1": None,
-                    "equipe2": None,
-                    "has_score": False,
-                }
-            
+
             # Calculate penalties if config available
             if config:
                 penalties = DataFormatter._calculate_match_penalties(match, config)
@@ -437,13 +415,93 @@ class DataFormatter:
             # Unscheduled match
             # IMPORTANT: Un match "entente" = match sans créneau entre institutions en entente
             # Ces matchs doivent être considérés comme "planifiés" (joués en dehors du calendrier)
-            is_entente = match.metadata.get("is_entente", False)
-            
-            match_data["reason"] = match.metadata.get("unscheduled_reason", "Match en entente" if is_entente else "Aucun créneau disponible")
-            match_data["constraints_violated"] = match.metadata.get("constraints_violated", [])
-            match_data["is_entente"] = is_entente
+            match_data["reason"] = metadata.get("unscheduled_reason", "Match en entente" if is_entente else "Aucun créneau disponible")
+            match_data["constraints_violated"] = metadata.get("constraints_violated", [])
+        
+        if is_entente:
+            match_data["entente_status"] = "planifiee" if match.creneau else "non_planifiee"
         
         return match_data
+
+    @staticmethod
+    def _extract_score_info(metadata: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        """Normalize score metadata into a consistent structure."""
+        default_score = {
+            "equipe1": None,
+            "equipe2": None,
+            "has_score": False,
+        }
+        if not metadata:
+            return default_score
+        score_data = metadata.get("score")
+        if not score_data or (isinstance(score_data, str) and not score_data.strip()):
+            return default_score
+        if isinstance(score_data, dict):
+            equipe1 = DataFormatter._safe_int(score_data.get("equipe1"))
+            equipe2 = DataFormatter._safe_int(score_data.get("equipe2"))
+            if equipe1 is not None and equipe1 < 0:
+                equipe1 = None
+            if equipe2 is not None and equipe2 < 0:
+                equipe2 = None
+            has_score = equipe1 is not None and equipe2 is not None
+            return {
+                "equipe1": equipe1,
+                "equipe2": equipe2,
+                "has_score": has_score,
+            }
+        if isinstance(score_data, (int, float)):
+            # Valeur numérique unique -> impossible de déterminer les deux scores
+            return default_score
+        if isinstance(score_data, str):
+            parsed = DataFormatter._parse_score_string(score_data)
+            if parsed:
+                equipe1, equipe2 = parsed
+                return {
+                    "equipe1": equipe1,
+                    "equipe2": equipe2,
+                    "has_score": True,
+                }
+        return default_score
+
+    @staticmethod
+    def _safe_int(value: Any) -> Optional[int]:
+        """Best effort conversion to int, returns None if impossible."""
+        if value is None:
+            return None
+        if isinstance(value, bool):
+            return None
+        if isinstance(value, (int,)):
+            return int(value)
+        if isinstance(value, float) and value.is_integer():
+            return int(value)
+        try:
+            return int(str(value).strip())
+        except (ValueError, TypeError):
+            return None
+
+    @staticmethod
+    def _parse_score_string(score_str: str) -> Optional[Tuple[int, int]]:
+        """Extract two non-negative integers from a free-form score string."""
+        if not score_str:
+            return None
+        cleaned = str(score_str).strip()
+        if not cleaned:
+            return None
+        # Ignorer les détails éventuels situés après parenthèses ou crochets
+        primary_segment = re.split(r"[\(\[\{]", cleaned, maxsplit=1)[0]
+        match = SCORE_PAIR_PATTERN.search(primary_segment)
+        if match:
+            score1 = int(match.group("first"))
+            score2 = int(match.group("second"))
+            if score1 >= 0 and score2 >= 0:
+                return score1, score2
+            return None
+        digits = re.findall(r"\d+", cleaned)
+        if len(digits) >= 2:
+            score1, score2 = int(digits[0]), int(digits[1])
+            if score1 >= 0 and score2 >= 0:
+                return score1, score2
+        return None
     
     @staticmethod
     def _calculate_match_penalties(match: Match, config: Config) -> Dict[str, float]:
@@ -465,18 +523,27 @@ class DataFormatter:
         if not context:
             # Fallback: create minimal context
             all_matches = [match]
+            niveaux_gymnases = {}
+            priorites_genre = {}
         else:
             # Extract all matches from context
             all_matches = context.get("all_matches", [match])
+            niveaux_gymnases = context.get("niveaux_gymnases", {})
+            priorites_genre = context.get("priorites_genre_gymnases", {})
         
         # Use PenaltyCalculator for consistent calculation
-        calculator = PenaltyCalculator(config, all_matches)
+        calculator = PenaltyCalculator(
+            config,
+            all_matches,
+            niveaux_gymnases=niveaux_gymnases,
+            priorites_genre_gymnases=priorites_genre,
+        )
         penalties_dict = calculator.calculate_match_penalties(match)
         
         # Return the complete penalties dictionary
         # It already contains: horaire_prefere, gymnase_prefere, niveau_gymnase,
-        # espacement, compaction, overlap_institution, aller_retour, 
-        # contrainte_temporelle, guidance_qualite, and total
+        # espacement, compaction, overlap, aller_retour, contrainte_temporelle,
+        # guidance_qualite, and total
         return penalties_dict
     
     @staticmethod

@@ -24,6 +24,7 @@ Le `PenaltyCalculator` calcule **toutes** les pénalités et contraintes présen
 **Objectif** : Pénaliser les matchs planifiés loin des horaires préférés des équipes
 
 **Formule** :
+
 ```python
 diff_minutes = abs(horaire_creneau - horaire_prefere) - tolerance
 if diff_minutes > 0:
@@ -32,12 +33,17 @@ if diff_minutes > 0:
 ```
 
 **Paramètres config** :
+
 - `penalite_avant_horaire_min` : Poids si avant horaire préféré
+
 - `penalite_apres_horaire_min` : Poids si après horaire préféré
+
 - `penalite_horaire_tolerance` : Minutes de tolérance (pas de pénalité)
+
 - `penalite_horaire_diviseur` : Diviseur pour normaliser (généralement 60)
 
 **Exemple** :
+
 ```python
 # Horaire préféré: 18:00, planifié à 20:00
 # diff = 120 min - 0 tolérance = 120 min
@@ -53,6 +59,7 @@ if diff_minutes > 0:
 **Objectif** : Système de bonus inversé - pénalité de base moins les bonus
 
 **Formule** :
+
 ```python
 base_penalty = 2 * max(bonus_preferences_gymnases)
 penalite = base_penalty
@@ -65,9 +72,11 @@ for rang, gymnase in enumerate(equipe.lieux_preferes):
 ```
 
 **Paramètres config** :
+
 - `bonus_preferences_gymnases` : Liste de bonus par rang [bonus_rank1, bonus_rank2, ...]
 
 **Exemple** :
+
 ```python
 # bonus_preferences_gymnases = [500, 300, 100]
 # base_penalty = 2 * 500 = 1000
@@ -80,31 +89,35 @@ for rang, gymnase in enumerate(equipe.lieux_preferes):
 
 ### 3. **Niveau Gymnase** (`niveau_gymnase`)
 
-**Objectif** : Pénaliser matchs haut niveau dans gymnases bas niveau (et vice versa)
+**Objectif** : Récompenser les bonnes correspondances (A1 sur gym haut) et pénaliser les mauvaises (A1 sur gym bas).
 
 **Formule** :
+
 ```python
-niveau_match = A1=0, A2=1, A3=2, A4=3  # Extrait de la poule
+niveau_match = A1=0, A2=1, A3=2, A4=3  # Déduit du numéro présent dans la poule, peu importe la lettre
 niveau_gymnase = "haut" ou "bas"
 
 if niveau_gymnase == "haut":
-    penalite = penalite_niveau_gymnases_haut[niveau_match]
-elif niveau_gymnase == "bas":
-    penalite = penalite_niveau_gymnases_bas[niveau_match]
+    poids = poids_niveaux_gymnases_haut[niveau_match]
+else:
+    poids = poids_niveaux_gymnases_bas[niveau_match]
+
+# Convention: valeurs négatives = bonus (on cherche cette affectation)
+#             valeurs positives = pénalité (on évite cette affectation)
 ```
 
 **Paramètres config** :
-- `penalite_niveau_gymnases_haut` : Liste [A1, A2, A3, A4] pour gymnases "haut"
-- `penalite_niveau_gymnases_bas` : Liste [A1, A2, A3, A4] pour gymnases "bas"
+
+- `poids_niveaux_gymnases_haut` : Liste [A1, A2, A3, A4] pour gymnases "haut" (bonus attendus)
+- `poids_niveaux_gymnases_bas` : Liste [A1, A2, A3, A4] pour gymnases "bas" (pénalités attendues)
 
 **Exemple** :
-```python
-# penalite_niveau_gymnases_bas = [8, 4, 2, 1]
-# Match A1 (niveau_match=0) sur gymnase "bas" → pénalité = 8
-# Match A4 (niveau_match=3) sur gymnase "bas" → pénalité = 1
-```
 
-**Note** : Valeurs positives = pénalité, valeurs négatives = bonus
+```python
+# poids_niveaux_gymnases_bas = [15, 8, 2, -2]
+# Match A1 (niveau_match=0) sur gymnase "bas" → pénalité = +15 (à éviter)
+# Match A4 (niveau_match=3) sur gymnase "bas" → bonus = -2 (acceptable)
+```
 
 ---
 
@@ -113,6 +126,7 @@ elif niveau_gymnase == "bas":
 **Objectif** : Pénaliser matchs trop rapprochés pour une même équipe
 
 **Formule** :
+
 ```python
 for chaque autre match de l'équipe:
     semaine_diff = abs(semaine_match - semaine_autre)
@@ -121,9 +135,11 @@ for chaque autre match de l'équipe:
 ```
 
 **Paramètres config** :
+
 - `penalites_espacement_repos` : Liste [diff_0, diff_1, diff_2, ...]
 
 **Exemple** :
+
 ```python
 # penalites_espacement_repos = [5000, 2000, 1000, 500, 0]
 # Match A en S1, Match B en S2 → diff = 1 → pénalité = 2000
@@ -139,6 +155,7 @@ for chaque autre match de l'équipe:
 **Objectif** : Prioriser les matchs en début de calendrier
 
 **Formule** :
+
 ```python
 if semaine <= len(compaction_penalites_par_semaine):
     penalite = compaction_penalites_par_semaine[semaine - 1]
@@ -147,10 +164,13 @@ else:
 ```
 
 **Paramètres config** :
+
 - `compaction_temporelle_actif` : Activer/désactiver
+
 - `compaction_penalites_par_semaine` : Liste [S1, S2, S3, ...]
 
 **Exemple** :
+
 ```python
 # compaction_penalites_par_semaine = [0, 10, 20, 30, 40]
 # Match en S1 → pénalité = 0
@@ -164,6 +184,7 @@ else:
 **Objectif** : Éviter que deux matchs de même institution jouent simultanément
 
 **Formule** :
+
 ```python
 for chaque autre match au même moment (semaine, horaire):
     institutions_match = {equipe1.institution, equipe2.institution}
@@ -174,10 +195,13 @@ for chaque autre match au même moment (semaine, horaire):
 ```
 
 **Paramètres config** :
+
 - `overlap_institution_actif` : Activer/désactiver
+
 - `overlap_institution_poids` : Poids de la pénalité (recommandé > 10^11)
 
 **Exemple** :
+
 ```python
 # overlap_institution_poids = 100000000000
 # Match LYON 1 vs AUTRE à S1 18:00 Gym1
@@ -187,28 +211,38 @@ for chaque autre match au même moment (semaine, horaire):
 
 ---
 
-### 7. **Aller-Retour Espacement** (`aller_retour`) ✨ NOUVEAU
+### 7. **Aller-Retour Espacement** (`aller_retour`)
 
-**Objectif** : Espacer les matchs aller et retour
+**Objectif** : Espacer les matchs aller/retour **et** s'assurer que le retour arrive après l'aller.
 
 **Formule** :
-```python
-# Trouver le match retour (équipes inversées, même poule)
-semaine_diff = abs(semaine_aller - semaine_retour)
 
-if semaine_diff == 0:
-    penalite = aller_retour_penalite_meme_semaine
-elif semaine_diff == 1:
-    penalite = aller_retour_penalite_consecutives
+```python
+weeks_gap = abs(semaine_aller - semaine_retour)
+penalite = aller_retour_gap_penalty(config, weeks_gap)
+
+if match_est_retour and semaine_retour <= semaine_aller:
+    penalite += aller_retour_penalite_ordre_retour
 ```
 
+`aller_retour_gap_penalty` applique la nouvelle liste `aller_retour_penalites_par_ecart`.
+Si la liste est vide, il retombe automatiquement sur `aller_retour_penalite_meme_semaine`
+et `aller_retour_penalite_consecutives` pour conserver la compatibilité historique.
+
 **Paramètres config** :
-- `aller_retour_espacement_actif` : Activer/désactiver
-- `aller_retour_min_semaines` : Espacement minimum recommandé
-- `aller_retour_penalite_meme_semaine` : Pénalité si même semaine
-- `aller_retour_penalite_consecutives` : Pénalité si semaines consécutives
+
+- `aller_retour_espacement_actif` : Activer/désactiver la contrainte
+
+- `aller_retour_penalites_par_ecart` : Pénalités par écart en semaines (index = écart)
+
+- `aller_retour_penalite_meme_semaine` / `aller_retour_penalite_consecutives` : paramètres legacy
+
+- `aller_retour_penalite_ordre_retour` : Pénalise un retour planifié trop tôt
+
+- `aller_retour_bonus_retour` : Ratio appliqué au bonus d'équilibrage pour les matchs retour (solveur)
 
 **Exemple** :
+
 ```python
 # aller_retour_penalite_meme_semaine = 5000
 # aller_retour_penalite_consecutives = 2000
@@ -224,17 +258,22 @@ elif semaine_diff == 1:
 **Objectif** : Pénaliser matchs hors de la fenêtre temporelle autorisée (soft)
 
 **Formule** :
+
 ```python
 if contrainte exists and not contrainte.est_respectee(semaine):
     penalite = contrainte_temporelle_penalite
 ```
 
 **Paramètres config** :
+
 - `contrainte_temporelle_actif` : Activer/désactiver
+
 - `contrainte_temporelle_dure` : Si True, contrainte dure (interdiction), sinon soft
+
 - `contrainte_temporelle_penalite` : Poids de la pénalité
 
 **Exemple** :
+
 ```python
 # Match doit être en S1-S5, planifié en S7
 # → pénalité = contrainte_temporelle_penalite
@@ -249,6 +288,7 @@ if contrainte exists and not contrainte.est_respectee(semaine):
 **Objectif** : Grosse pénalité dissuasive pour créneaux intrinsèquement mauvais
 
 **Formule** :
+
 ```python
 estimation = horaire_prefere + gymnase_prefere + niveau_gymnase
 seuil = qualite_match_seuil * 0.5
@@ -258,11 +298,15 @@ if estimation > seuil:
 ```
 
 **Paramètres config** :
+
 - `qualite_match_actif` : Activer/désactiver le filtrage qualité
+
 - `qualite_match_guidance_cpsat` : Activer la guidance dans CP-SAT
+
 - `qualite_match_seuil` : Seuil qualité (50% utilisé pour estimation)
 
 **Exemple** :
+
 ```python
 # qualite_match_seuil = 100
 # estimation = 30 (horaire) + 40 (gymnase) + 20 (niveau) = 90
@@ -279,7 +323,13 @@ if estimation > seuil:
 ```python
 from pycalendar.core.penalty_calculator import PenaltyCalculator
 
-calculator = PenaltyCalculator(config, all_matches, niveaux_gymnases)
+priorites_genre = {"Gymnase A": "M", "Gymnase B": "F"}
+calculator = PenaltyCalculator(
+    config,
+    all_matches,
+    niveaux_gymnases=niveaux_gymnases,
+    priorites_genre_gymnases=priorites_genre,
+)
 penalties = calculator.calculate_match_penalties(match)
 
 print(f"Total: {penalties['total']}")
@@ -293,7 +343,12 @@ print(f"Gymnase: {penalties['gymnase_prefere']}")
 from pycalendar.core.penalty_calculator import annotate_solution_with_penalties
 
 # Ajoute penalties dans match.metadata['penalties'] pour tous les matchs
-annotate_solution_with_penalties(solution, config, niveaux_gymnases)
+annotate_solution_with_penalties(
+    solution,
+    config,
+    niveaux_gymnases,
+    priorites_genre_gymnases=priorites_genre,
+)
 
 # Accès aux pénalités
 for match in solution.matchs_planifies:
@@ -312,6 +367,7 @@ Le `PenaltyCalculator` reproduit **exactement** les pénalités du solveur CP-SA
 | Horaires préférés | 1205-1230 | `_calculate_preferred_time_penalty` |
 | Préférences gymnases | 813-838 | `_calculate_gym_preference_penalty` |
 | Niveau gymnase | 840-873 | `_calculate_gym_level_penalty` |
+| Priorités gymnase (niveau/genre) | 840-922 | `_calculate_gym_level_penalty`, `compute_gym_gender_priority_penalty` |
 | Espacement repos | 876-928 | `_calculate_spacing_penalty` |
 | Compaction temporelle | 930-946 | `_calculate_compaction_penalty` |
 | Overlap institution | 948-1015 | `_calculate_overlap_penalty` |
@@ -332,8 +388,9 @@ config.penalite_horaire_diviseur
 
 # Gymnases
 config.bonus_preferences_gymnases
-config.penalite_niveau_gymnases_haut
-config.penalite_niveau_gymnases_bas
+config.poids_niveaux_gymnases_haut  # alias historic: penalite_niveau_gymnases_haut
+config.poids_niveaux_gymnases_bas   # alias historic: penalite_niveau_gymnases_bas
+config.penalite_gymnase_priorite_genre
 
 # Espacement/Compaction
 config.penalites_espacement_repos
@@ -346,9 +403,11 @@ config.overlap_institution_poids
 
 # Aller-retour
 config.aller_retour_espacement_actif
-config.aller_retour_min_semaines
+config.aller_retour_penalites_par_ecart
 config.aller_retour_penalite_meme_semaine
 config.aller_retour_penalite_consecutives
+config.aller_retour_penalite_ordre_retour
+config.aller_retour_bonus_retour
 
 # Contrainte temporelle
 config.contrainte_temporelle_actif
@@ -396,10 +455,15 @@ $ PYTHONPATH=src python test_penalty_calculator.py
 Certaines contraintes CP-SAT sont **dures** (interdiction) et n'apparaissent pas dans le PenaltyCalculator :
 
 - **Capacité gymnases** - Impossible de planifier > capacité
+
 - **Indisponibilités équipes** - Match impossible si équipe indisponible
+
 - **Non-simultanéité** - Équipe ne peut jouer 2x en même temps
+
 - **Matchs fixés** - Créneaux imposés non modifiables
+
 - **Obligations présence** - Gymnase réservé à institution
+
 - **Max matchs/semaine** - Limite dure par équipe
 
 Ces contraintes sont **respectées** par le solveur (solution infaisable sinon).
@@ -409,6 +473,7 @@ Ces contraintes sont **respectées** par le solveur (solution infaisable sinon).
 Le système de bonus progressif pour l'équilibrage max-min n'est **pas** calculé rétrospectivement car il dépend de l'ordre de planification global, pas du match individuel.
 
 **Formule CP-SAT** :
+
 ```python
 bonus(n) = bonus_base × (facteur_decroissance ^ n)
 # n = nombre de matchs déjà planifiés pour l'équipe
@@ -421,8 +486,11 @@ Impossible à recalculer sans connaître l'ordre exact de planification.
 ## 🔗 Références
 
 - **Code source** : `src/pycalendar/core/penalty_calculator.py`
+
 - **Solveur CP-SAT** : `src/pycalendar/solvers/cpsat_solver.py`
+
 - **Tests** : `test_penalty_calculator.py`
+
 - **Configuration** : `src/pycalendar/core/config.py`
 
 ---

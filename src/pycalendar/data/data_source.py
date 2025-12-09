@@ -4,10 +4,12 @@ Data source for the scheduling pipeline.
 Provides unified access to teams, venues, and constraints data.
 """
 
-from typing import List, Dict, Set
+from typing import List, Dict, Set, Optional
 from pathlib import Path
-from pycalendar.core.models import Equipe, Gymnase, Creneau
+from pycalendar.core.models import Equipe, Gymnase, Creneau, CoachGroup
 from pycalendar.data.data_loader import DataLoader
+from pycalendar.core.utils import parser_nom_avec_genre
+from pycalendar.core.calendar_manager import CalendarManager
 import logging
 
 logger = logging.getLogger(__name__)
@@ -16,15 +18,16 @@ logger = logging.getLogger(__name__)
 class DataSource:
     """Unified data source for the scheduling pipeline."""
     
-    def __init__(self, fichier_config: str):
+    def __init__(self, fichier_config: str, calendar_manager: Optional[CalendarManager] = None):
         """
         Initialize the data source.
         
         Args:
             fichier_config: Path to the Excel data file
         """
-        self.loader = DataLoader(fichier_config)
+        self.loader = DataLoader(fichier_config, calendar_manager=calendar_manager)
         self.fichier_config = Path(fichier_config)
+        self.calendar_manager = calendar_manager
     
     def charger_equipes(self) -> List[Equipe]:
         """
@@ -73,12 +76,12 @@ class DataSource:
             if creneaux_str and creneaux_str != 'nan':
                 # Format: "09:00, 14:00, 18:00"
                 horaires = [h.strip() for h in creneaux_str.split(',') if h.strip()]
-            
+
             gymnase = Gymnase(
                 nom=nom,
                 capacite=capacite,
                 horaires_disponibles=horaires,
-                semaines_indisponibles={}
+                semaines_indisponibles={},
             )
             
             gymnases.append(gymnase)
@@ -172,14 +175,14 @@ class DataSource:
         
         logger.debug(f"Indisponibilités appliquées aux gymnases")
     
-    def charger_matchs_fixes(self):
+    def charger_matchs_fixes(self, equipes: Optional[List[Equipe]] = None):
         """
         Charge les matchs déjà joués ou planifiés.
         
         Returns:
             Liste des matchs fixes
         """
-        return self.loader.charger_matchs_fixes()
+        return self.loader.charger_matchs_fixes(equipes)
     
     def charger_contraintes_specifiques(self) -> Dict[str, List[Dict]]:
         """
@@ -274,6 +277,49 @@ class DataSource:
             logger.info(f"  Groupe '{nom}': {', '.join(sorted(membres))}")
         
         return groupes
+
+    def charger_groupes_coachs(self, equipes: List[Equipe]) -> Dict[str, CoachGroup]:
+        """Retourne les groupes de coachs avec équipes résolues."""
+
+        groupes = self.loader.charger_groupes_coachs()
+        if not groupes:
+            return {}
+
+        equipes_par_nom: Dict[str, List[Equipe]] = {}
+        for equipe in equipes:
+            equipes_par_nom.setdefault(equipe.nom, []).append(equipe)
+
+        for coach_key, group in groupes.items():
+            group.team_ids.clear()
+            for team_label in group.team_names:
+                nom_sans_genre, genre = parser_nom_avec_genre(team_label)
+                candidats = equipes_par_nom.get(nom_sans_genre, [])
+                if genre:
+                    candidats = [eq for eq in candidats if eq.genre == genre]
+                if not candidats:
+                    logger.warning(
+                        "Coach '%s': équipe '%s' introuvable dans la configuration",
+                        group.coach_name,
+                        team_label
+                    )
+                    continue
+                for eq in candidats:
+                    group.add_team_id(eq.id_unique)
+
+        # Filtrer coachs sans équipes résolues
+        groupes_valides = {
+            group.coach_name: group
+            for group in groupes.values()
+            if group.team_ids
+        }
+
+        coachs_sans_equipes = [g.coach_name for g in groupes.values() if not g.team_ids]
+        if coachs_sans_equipes:
+            logger.warning("Coach_Groups: %d coach(s) ignoré(s) faute d'équipes correspondantes: %s",
+                           len(coachs_sans_equipes), ', '.join(coachs_sans_equipes))
+
+        logger.info("Coach_Groups: %d coach(s) utilisables", len(groupes_valides))
+        return groupes_valides
     
     def charger_ententes(self) -> Dict:
         """
@@ -292,7 +338,11 @@ class DataSource:
             Dictionnaire {nom_gymnase: niveau}
         """
         return self.loader.charger_niveaux_gymnases()
-    
+
+    def charger_priorites_genre_gymnases(self) -> Dict[str, str]:
+        """Charge les genres prioritaires déclarés sur chaque gymnase."""
+        return self.loader.charger_priorites_genre_gymnases()
+
     def charger_contraintes_temporelles(self) -> Dict:
         """
         Charge les contraintes temporelles sur matchs spécifiques.

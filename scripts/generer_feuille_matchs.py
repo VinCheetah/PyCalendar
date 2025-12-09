@@ -3,8 +3,8 @@
 Script pour générer une feuille de matchs formatée à partir de la solution JSON.
 
 Usage:
-    python scripts/generer_feuille_matchs.py --semaine 1 --date-depart "16/10/2025"
-    python scripts/generer_feuille_matchs.py -s 2 -d "23/10/2025"
+    python scripts/generer_feuille_matchs.py --semaine 1 --date-depart "16/10/25"
+    python scripts/generer_feuille_matchs.py -s 2 -d "23/10/25"
     python scripts/generer_feuille_matchs.py -s 3 --solution solutions/solution_volley_2025-11-24.json
 """
 
@@ -16,18 +16,24 @@ from pathlib import Path
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 
+from pycalendar.core.constants import (
+    DATE_USER_FORMAT_LABEL,
+    format_user_date,
+    parse_user_date,
+)
+
 
 # Dictionnaire de mapping des gymnases
 GYMNASES_SIUAPS = {
-    "DESCARTES": "GYMNASE DESCARTES",
-    "ECL": "GYMNASE CENTRALE LYON",
+    "DESCARTES": "ENS DESCARTES",
+    "ECL": "CENTRALE",
     "ESA": "GYMNASE ESA",
     "LYON 2 HC": "HALLE LYON 2",
     "LAENNEC": "HALLE - 3D",
     "BESSON": "HALLE - C.BESSON",
     "L. J. HAUT": "COMPET C (HAUT) - LEON JOUHAUX",
-    "ENTPE": "GYMNASE ENTPE",
-    "GRENOBLE": "GYMNASE GRENOBLE"
+    "ENTPE": "ENTPE",
+    "GRENOBLE": "GRENOBLE"
 }
 
 
@@ -67,16 +73,18 @@ def calculer_date_semaine(date_depart, numero_semaine):
     Calcule la date correspondant à une semaine donnée.
     
     Args:
-        date_depart: Date de départ (semaine 1) au format "JJ/MM/AAAA"
+        date_depart: Date de départ (semaine 1) au format "DD/MM/YY"
         numero_semaine: Numéro de la semaine (1, 2, 3, ...)
     
     Returns:
-        Date au format "JJ/MM/AAAA"
+        Date au format "DD/MM/YY"
     """
-    date_obj = datetime.strptime(date_depart, "%d/%m/%Y")
+    date_obj = parse_user_date(date_depart)
+    if not date_obj:
+        raise ValueError(f"Date de départ invalide '{date_depart}', attendu: {DATE_USER_FORMAT_LABEL}")
     # Ajouter (numero_semaine - 1) semaines
     date_cible = date_obj + timedelta(weeks=(numero_semaine - 1))
-    return date_cible.strftime("%d/%m/%Y")
+    return format_user_date(date_cible)
 
 
 def charger_solution_json(fichier_json):
@@ -139,7 +147,7 @@ def filtrer_matchs_par_semaine(solution, numero_semaine, date_str):
     Args:
         solution: Dictionnaire de solution chargé depuis JSON
         numero_semaine: Numéro de la semaine à extraire
-        date_str: Date au format "JJ/MM/AAAA" pour affichage
+        date_str: Date au format "DD/MM/YY" pour affichage
     
     Returns:
         DataFrame avec les matchs filtrés et formatés
@@ -411,8 +419,8 @@ Exemples:
     parser.add_argument(
         '-d', '--date-depart',
         type=str,
-        default="16/10/2025",
-        help='Date de départ pour la semaine 1 (format: JJ/MM/AAAA). Par défaut: 16/10/2025'
+            default="16/10/25",
+            help='Date de départ pour la semaine 1 (format: DD/MM/YY). Par défaut: 16/10/25'
     )
     
     parser.add_argument(

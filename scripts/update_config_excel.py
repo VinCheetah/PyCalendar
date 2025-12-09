@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Script wrapper pour config_tools.py - Validation et actualisation de configuration.
+Script wrapper pour pycalendar.cli.update_config_excel - Validation et actualisation de configuration.
 
 Usage:
-    python config_tools.py --fichier configs/config_volley.yaml
+    python scripts/update_config_excel.py --fichier configs/config_volley.yaml
 """
 
 import sys
@@ -13,7 +13,7 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root / 'src'))
 
-from pycalendar.cli.config_tools import actualiser_fichier_v2
+from pycalendar.cli.update_config_excel import actualiser_fichier_v2
 
 def main():
     import argparse
@@ -23,9 +23,9 @@ def main():
         description="Actualise et valide un fichier de configuration",
         epilog="""
 Exemples:
-  python config_tools.py --fichier configs/config_volley.yaml
-  python config_tools.py --fichier examples/handball/config_hand.yaml
-  python config_tools.py --fichier examples/volleyball/config_volley.xlsx
+    python scripts/update_config_excel.py --fichier configs/config_volley.yaml
+    python scripts/update_config_excel.py --fichier examples/handball/config_hand.yaml
+    python scripts/update_config_excel.py --fichier examples/volleyball/config_volley.xlsx
         """
     )
     

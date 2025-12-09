@@ -33,10 +33,12 @@ class Config:
     # Préférences de gymnase (nouveau système avec bonus)
     bonus_preferences_gymnases: List[float]  # Bonus par rang [rang1, rang2, ...]
     
-    # Pénalités pour gymnases par niveau (classification haut/bas niveau)
-    # Valeurs positives = pénalités (augmentent le coût)
-    penalite_niveau_gymnases_haut: List[float]  # Pénalité par niveau de match pour gymnases haut niveau
-    penalite_niveau_gymnases_bas: List[float]  # Pénalité par niveau de match pour gymnases bas niveau
+    # Pondérations pour l'adéquation niveau match / niveau gymnase
+    # Valeurs négatives = bonus (match prioritaire sur bon gymnase)
+    # Valeurs positives = malus (match d'un niveau élevé sur gymnase faible)
+    poids_niveaux_gymnases_haut: List[float]
+    poids_niveaux_gymnases_bas: List[float]
+    penalite_gymnase_priorite_genre: float
     
     # Spacing constraint (list of penalties by weeks of rest)
     penalites_espacement_repos: List[float]
@@ -59,6 +61,15 @@ class Config:
     # Institution overlaps (soft constraint)
     overlap_institution_actif: bool
     overlap_institution_poids: float
+    coach_overlap_actif: bool
+    coach_overlap_penalite_simultane_diff_gym: float
+    coach_overlap_penalite_simultane_meme_gym: float
+    coach_overlap_penalite_deplacement: float
+    coach_overlap_bonus_consecutif: float
+    coach_overlap_simultane_minutes: int
+    coach_overlap_consecutif_min_minutes: int
+    coach_overlap_consecutif_max_minutes: int
+    coach_overlap_semaine_min: int
     
     # Équilibrage des matchs (système max-min avec bonus progressif)
     equilibrage_actif: bool  # Activer le système de bonus progressif
@@ -78,8 +89,8 @@ class Config:
     
     # Espacement aller-retour (pour poules de type Aller-Retour)
     aller_retour_espacement_actif: bool  # Activer/désactiver la contrainte d'espacement
-    aller_retour_penalite_meme_semaine: float  # Pénalité si aller et retour dans même semaine
-    aller_retour_penalite_consecutives: float  # Pénalité si aller et retour dans semaines consécutives
+    aller_retour_penalites_par_ecart: List[float]  # Liste de pénalités par écart en semaines
+    aller_retour_bonus_retour: float  # Ratio appliqué au bonus équil. pour les matchs retour
     
     # Calendar management
     calendrier_actif: bool  # Activer/désactiver la gestion calendrier avec dates réelles
@@ -97,6 +108,8 @@ class Config:
     
     # Additional parameters
     extra: Dict[str, Any] = field(default_factory=dict)
+    # Metadata
+    source_path: Optional[str] = None  # Fichier YAML d'origine
     
     @classmethod
     def _load_yaml_file(cls, filepath: str) -> Dict[str, Any]:
@@ -186,10 +199,14 @@ class Config:
             config_dict['bonus_preferences_gymnases'] = ct['bonus_preferences_gymnases']
             
             # Adéquation niveau match / niveau gymnase
-            # Convention: valeurs NÉGATIVES = bonus (réduction coût), POSITIVES = pénalité (augmentation coût)
-            config_dict['penalite_niveau_gymnases_haut'] = ct['penalite_niveau_gymnases_haut']
-            config_dict['penalite_niveau_gymnases_bas'] = ct['penalite_niveau_gymnases_bas']
-            
+            poids_haut = ct.get('poids_niveaux_gymnases_haut', ct.get('penalite_niveau_gymnases_haut'))
+            poids_bas = ct.get('poids_niveaux_gymnases_bas', ct.get('penalite_niveau_gymnases_bas'))
+            if poids_haut is None or poids_bas is None:
+                raise KeyError("Les pondérations de niveaux de gymnase sont manquantes dans la configuration")
+            config_dict['poids_niveaux_gymnases_haut'] = poids_haut
+            config_dict['poids_niveaux_gymnases_bas'] = poids_bas
+            config_dict['penalite_gymnase_priorite_genre'] = ct.get('penalite_gymnase_priorite_genre', 0.0)
+
             config_dict['penalite_avant_horaire_min'] = ct['penalite_avant_horaire_min']
             config_dict['penalite_avant_horaire_min_deux'] = ct['penalite_avant_horaire_min_deux']
             config_dict['penalite_horaire_diviseur'] = ct['penalite_horaire_diviseur']
@@ -211,6 +228,18 @@ class Config:
             # Overlaps institution
             config_dict['overlap_institution_actif'] = ct['overlap_institution_actif']
             config_dict['overlap_institution_poids'] = ct['overlap_institution_poids']
+            config_dict['coach_overlap_actif'] = ct.get('coach_overlap_actif', False)
+            config_dict['coach_overlap_penalite_simultane_diff_gym'] = ct.get('coach_overlap_penalite_simultane_diff_gym', 0.0)
+            config_dict['coach_overlap_penalite_simultane_meme_gym'] = ct.get('coach_overlap_penalite_simultane_meme_gym', 0.0)
+            config_dict['coach_overlap_penalite_deplacement'] = ct.get('coach_overlap_penalite_deplacement', 0.0)
+            config_dict['coach_overlap_bonus_consecutif'] = ct.get('coach_overlap_bonus_consecutif', 0.0)
+            config_dict['coach_overlap_simultane_minutes'] = ct.get('coach_overlap_simultane_minutes', 60)
+            config_dict['coach_overlap_consecutif_min_minutes'] = ct.get('coach_overlap_consecutif_min_minutes', 60)
+            config_dict['coach_overlap_consecutif_max_minutes'] = ct.get('coach_overlap_consecutif_max_minutes', 180)
+            config_dict['coach_overlap_semaine_min'] = ct.get(
+                'coach_overlap_semaine_min',
+                config_dict.get('semaine_min', 1)
+            )
             
             # Équilibrage des matchs (système max-min avec bonus progressif)
             config_dict['equilibrage_actif'] = ct.get('equilibrage_actif', True)
@@ -230,8 +259,8 @@ class Config:
             
             # Espacement aller-retour (pour poules de type Aller-Retour)
             config_dict['aller_retour_espacement_actif'] = ct.get('aller_retour_espacement_actif', True)
-            config_dict['aller_retour_penalite_meme_semaine'] = ct.get('aller_retour_penalite_meme_semaine', 5000.0)
-            config_dict['aller_retour_penalite_consecutives'] = ct.get('aller_retour_penalite_consecutives', 2000.0)
+            config_dict['aller_retour_penalites_par_ecart'] = ct.get('aller_retour_penalites_par_ecart', [])
+            config_dict['aller_retour_bonus_retour'] = ct.get('aller_retour_bonus_retour', 1.0)
         
         # Calendar management
         if 'calendrier' in merged_data:
@@ -248,6 +277,9 @@ class Config:
         
         # Store extra parameters
         config_dict['extra'] = merged_data.get('extra', {})
+
+        # Keep track of YAML path for diagnostics / warm start
+        config_dict['source_path'] = str(user_path)
         
         return cls(**config_dict)
     
@@ -287,8 +319,9 @@ class Config:
                 # Préférences de gymnase
                 'bonus_preferences_gymnases': self.bonus_preferences_gymnases,
                 # Pénalités pour gymnases par niveau
-                'penalite_niveau_gymnases_haut': self.penalite_niveau_gymnases_haut,
-                'penalite_niveau_gymnases_bas': self.penalite_niveau_gymnases_bas,
+                'poids_niveaux_gymnases_haut': self.poids_niveaux_gymnases_haut,
+                'poids_niveaux_gymnases_bas': self.poids_niveaux_gymnases_bas,
+                'penalite_gymnase_priorite_genre': self.penalite_gymnase_priorite_genre,
                 'penalite_avant_horaire_min': self.penalite_avant_horaire_min,
                 'penalite_avant_horaire_min_deux': self.penalite_avant_horaire_min_deux,
                 'penalite_horaire_diviseur': self.penalite_horaire_diviseur,
@@ -303,6 +336,15 @@ class Config:
                 # Overlaps institution
                 'overlap_institution_actif': self.overlap_institution_actif,
                 'overlap_institution_poids': self.overlap_institution_poids,
+                'coach_overlap_actif': self.coach_overlap_actif,
+                'coach_overlap_penalite_simultane_diff_gym': self.coach_overlap_penalite_simultane_diff_gym,
+                'coach_overlap_penalite_simultane_meme_gym': self.coach_overlap_penalite_simultane_meme_gym,
+                'coach_overlap_penalite_deplacement': self.coach_overlap_penalite_deplacement,
+                'coach_overlap_bonus_consecutif': self.coach_overlap_bonus_consecutif,
+                'coach_overlap_simultane_minutes': self.coach_overlap_simultane_minutes,
+                'coach_overlap_consecutif_min_minutes': self.coach_overlap_consecutif_min_minutes,
+                'coach_overlap_consecutif_max_minutes': self.coach_overlap_consecutif_max_minutes,
+                'coach_overlap_semaine_min': self.coach_overlap_semaine_min,
                 # Équilibrage des matchs (système max-min avec bonus progressif)
                 'equilibrage_actif': self.equilibrage_actif,
                 'equilibrage_bonus_base': self.equilibrage_bonus_base,
@@ -318,8 +360,8 @@ class Config:
                 'contrainte_temporelle_dure': self.contrainte_temporelle_dure,
                 # Espacement aller-retour
                 'aller_retour_espacement_actif': self.aller_retour_espacement_actif,
-                'aller_retour_penalite_meme_semaine': self.aller_retour_penalite_meme_semaine,
-                'aller_retour_penalite_consecutives': self.aller_retour_penalite_consecutives,
+                'aller_retour_penalites_par_ecart': self.aller_retour_penalites_par_ecart,
+                'aller_retour_bonus_retour': self.aller_retour_bonus_retour,
             },
             'calendrier': {
                 'actif': self.calendrier_actif,

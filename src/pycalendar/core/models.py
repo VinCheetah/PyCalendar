@@ -263,3 +263,19 @@ class ContrainteTemporelle:
         else:
             # Type invalide, considérer comme respectée
             return True
+
+
+@dataclass
+class CoachGroup:
+    """Represents a group of teams attached to the same coach for overlap handling."""
+
+    coach_name: str
+    group_id: Optional[str] = None
+    notes: str = ""
+    team_names: List[str] = field(default_factory=list)
+    team_ids: Set[str] = field(default_factory=set)
+
+    def add_team_id(self, team_id: str):
+        """Store a resolved team identifier (Equipe.id_unique)."""
+        if team_id:
+            self.team_ids.add(team_id)

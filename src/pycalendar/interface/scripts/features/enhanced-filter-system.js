@@ -31,8 +31,206 @@ class EnhancedFilterSystem {
         this.maxMinutes = 0;
         this.horaireStart = 0;
         this.horaireEnd = 0;
+        this.timelineState = {
+            dragging: null,
+            eventsAttached: false
+        };
         
         console.log('🔍 EnhancedFilterSystem: Initialisation avec timeline horaire');
+    }
+
+    /**
+     * Convertit un nombre de minutes en HH:MM
+     */
+    minutesToTime(minutes) {
+        const safeMinutes = Math.max(0, Math.round(minutes));
+        const hrs = Math.floor(safeMinutes / 60).toString().padStart(2, '0');
+        const mins = (safeMinutes % 60).toString().padStart(2, '0');
+        return `${hrs}:${mins}`;
+    }
+
+    /**
+     * Ramène la valeur au créneau connu le plus proche
+     */
+    snapMinutes(value) {
+        if (!this.availableHoraires.length) {
+            return Math.round(value / 5) * 5;
+        }
+        let closest = this.availableHoraires[0].minutes;
+        let minDelta = Math.abs(closest - value);
+        this.availableHoraires.forEach(h => {
+            const delta = Math.abs(h.minutes - value);
+            if (delta < minDelta) {
+                closest = h.minutes;
+                minDelta = delta;
+            }
+        });
+        return closest;
+    }
+
+    /**
+     * Initialise la timeline horaire et ses éléments de contrôle
+     */
+    initHoraireTimeline() {
+        const track = document.getElementById('horaire-timeline-track');
+        const startCursor = document.getElementById('horaire-cursor-start');
+        const endCursor = document.getElementById('horaire-cursor-end');
+
+        if (!track || !startCursor || !endCursor) {
+            console.warn('⏱️ Impossible d\'initialiser la timeline horaire (éléments manquants)');
+            this.filters.horaireStart = null;
+            this.filters.horaireEnd = null;
+            return;
+        }
+
+        if (this.availableHoraires.length) {
+            this.minMinutes = this.availableHoraires[0].minutes;
+            this.maxMinutes = this.availableHoraires[this.availableHoraires.length - 1].minutes;
+        } else {
+            // Plage par défaut 08:00 → 22:00 si aucun horaire planifié
+            this.minMinutes = 8 * 60;
+            this.maxMinutes = 22 * 60;
+        }
+
+        if (this.minMinutes === this.maxMinutes) {
+            this.maxMinutes = this.minMinutes + 60; // éviter divisions par zéro
+        }
+
+        this.horaireStart = this.minMinutes;
+        this.horaireEnd = this.maxMinutes;
+        this.filters.horaireStart = this.minutesToTime(this.horaireStart);
+        this.filters.horaireEnd = this.minutesToTime(this.horaireEnd);
+
+        this.renderHoraireTicks();
+        this.updateHoraireDisplay();
+        this.attachHoraireTimelineEvents();
+    }
+
+    /**
+     * Affiche des repères horaires sous la timeline
+     */
+    renderHoraireTicks() {
+        const ticksContainer = document.getElementById('horaire-ticks');
+        if (!ticksContainer) return;
+
+        const tickCount = 4;
+        const range = this.maxMinutes - this.minMinutes;
+        ticksContainer.innerHTML = '';
+
+        for (let i = 0; i <= tickCount; i++) {
+            const minutes = this.minMinutes + (range / tickCount) * i;
+            const label = this.minutesToTime(minutes);
+            const tick = document.createElement('span');
+            tick.textContent = label;
+            ticksContainer.appendChild(tick);
+        }
+    }
+
+    /**
+     * Met à jour les libellés et la plage active
+     */
+    updateHoraireDisplay() {
+        const startLabel = document.getElementById('horaire-start-label');
+        const endLabel = document.getElementById('horaire-end-label');
+        const activeRange = document.getElementById('horaire-active-range');
+        const startCursor = document.getElementById('horaire-cursor-start');
+        const endCursor = document.getElementById('horaire-cursor-end');
+
+        const totalRange = this.maxMinutes - this.minMinutes || 1;
+        const startPercent = ((this.horaireStart - this.minMinutes) / totalRange) * 100;
+        const endPercent = ((this.horaireEnd - this.minMinutes) / totalRange) * 100;
+
+        const startLabelText = this.minutesToTime(this.horaireStart);
+        const endLabelText = this.minutesToTime(this.horaireEnd);
+        this.filters.horaireStart = startLabelText;
+        this.filters.horaireEnd = endLabelText;
+
+        if (startLabel) {
+            startLabel.textContent = `Début: ${startLabelText}`;
+        }
+        if (endLabel) {
+            endLabel.textContent = `Fin: ${endLabelText}`;
+        }
+        if (startCursor) {
+            startCursor.style.left = `${startPercent}%`;
+        }
+        if (endCursor) {
+            endCursor.style.left = `${endPercent}%`;
+        }
+        if (activeRange) {
+            activeRange.style.left = `${startPercent}%`;
+            activeRange.style.right = `${100 - endPercent}%`;
+        }
+    }
+
+    /**
+     * Gère les interactions (drag/reset) de la timeline
+     */
+    attachHoraireTimelineEvents() {
+        if (this.timelineState.eventsAttached) {
+            return;
+        }
+
+        const track = document.getElementById('horaire-timeline-track');
+        const startCursor = document.getElementById('horaire-cursor-start');
+        const endCursor = document.getElementById('horaire-cursor-end');
+        const resetBtn = document.getElementById('horaire-reset');
+
+        if (!track || !startCursor || !endCursor) {
+            return;
+        }
+
+        const clampMinutes = (value) => {
+            return Math.min(Math.max(value, this.minMinutes), this.maxMinutes);
+        };
+
+        const updateFromPointer = (event) => {
+            if (!this.timelineState.dragging) return;
+            const rect = track.getBoundingClientRect();
+            if (!rect.width) return;
+            const ratio = (event.clientX - rect.left) / rect.width;
+            const clampedRatio = Math.min(Math.max(ratio, 0), 1);
+            const minutes = this.minMinutes + clampedRatio * (this.maxMinutes - this.minMinutes);
+            const snapped = clampMinutes(this.snapMinutes(minutes));
+            const minGap = 15; // minutes
+
+            if (this.timelineState.dragging === 'start') {
+                this.horaireStart = Math.min(snapped, this.horaireEnd - minGap);
+            } else {
+                this.horaireEnd = Math.max(snapped, this.horaireStart + minGap);
+            }
+
+            this.updateHoraireDisplay();
+        };
+
+        const stopDragging = () => {
+            if (!this.timelineState.dragging) return;
+            this.timelineState.dragging = null;
+            document.removeEventListener('pointermove', updateFromPointer);
+            document.removeEventListener('pointerup', stopDragging);
+            this.apply();
+        };
+
+        const startDragging = (type) => (event) => {
+            event.preventDefault();
+            this.timelineState.dragging = type;
+            document.addEventListener('pointermove', updateFromPointer);
+            document.addEventListener('pointerup', stopDragging);
+        };
+
+        startCursor.addEventListener('pointerdown', startDragging('start'));
+        endCursor.addEventListener('pointerdown', startDragging('end'));
+
+        if (resetBtn) {
+            resetBtn.addEventListener('click', () => {
+                this.horaireStart = this.minMinutes;
+                this.horaireEnd = this.maxMinutes;
+                this.updateHoraireDisplay();
+                this.apply();
+            });
+        }
+
+        this.timelineState.eventsAttached = true;
     }
     
     /**
@@ -95,7 +293,7 @@ class EnhancedFilterSystem {
             const radio = document.querySelector(`input[name="filter-gender"][value="${this.filters.gender}"]`);
             if (radio) radio.checked = true;
         }
-        
+
         // Selects (institution, pool, venue, week, equipe, horaire)
         ['week', 'pool', 'institution', 'equipe', 'venue', 'horaire'].forEach(key => {
             const select = document.getElementById(`filter-${key}`);
@@ -240,23 +438,42 @@ class EnhancedFilterSystem {
         }
         
         // Horaires - Timeline interactive
-        const horaires = new Set();
+        const horaireValues = new Set();
         if (data.matches?.scheduled) {
             data.matches.scheduled.forEach(match => {
                 if (match.horaire) {
-                    horaires.add(match.horaire);
+                    horaireValues.add(match.horaire);
                 }
             });
         }
-        
-        // Convertir les horaires en minutes depuis minuit pour faciliter les calculs
-        this.availableHoraires = Array.from(horaires).sort().map(h => {
-            const [hours, minutes] = h.split(':').map(Number);
-            return {
-                time: h,
-                minutes: hours * 60 + minutes
-            };
-        });
+
+        const invalidHoraireEntries = [];
+        this.availableHoraires = Array.from(horaireValues)
+            .map(raw => (typeof raw === 'string' ? raw.trim() : ''))
+            .filter(Boolean)
+            .map(raw => {
+                const parts = raw.split(':');
+                if (parts.length < 2) {
+                    invalidHoraireEntries.push(raw);
+                    return null;
+                }
+                const hours = Number(parts[0]);
+                const minutes = Number(parts[1]);
+                if (!Number.isFinite(hours) || !Number.isFinite(minutes)) {
+                    invalidHoraireEntries.push(raw);
+                    return null;
+                }
+                return {
+                    time: raw,
+                    minutes: hours * 60 + minutes
+                };
+            })
+            .filter(Boolean)
+            .sort((a, b) => a.minutes - b.minutes);
+
+        if (invalidHoraireEntries.length) {
+            console.warn('⏰ Certains horaires sont ignorés car invalides:', invalidHoraireEntries);
+        }
         
         // Initialiser la timeline avec les horaires disponibles
         this.initHoraireTimeline();
@@ -267,7 +484,7 @@ class EnhancedFilterSystem {
             poules: data.entities?.poules?.length || 0,
             gymnases: data.entities?.gymnases?.length || 0,
             semaines: weeks.size,
-            horaires: horaires.size
+            horaires: horaireValues.size
         });
     }
     
@@ -481,7 +698,7 @@ class EnhancedFilterSystem {
                 this.apply();
             });
         });
-        
+
         // Week select
         const weekSelect = document.getElementById('filter-week');
         if (weekSelect) {
@@ -618,7 +835,7 @@ class EnhancedFilterSystem {
         // Status
         const statusAll = document.querySelector('input[name="filter-status"][value="all"]');
         if (statusAll) statusAll.checked = true;
-        
+
         // Selects
         ['filter-week', 'filter-pool', 'filter-institution', 'filter-equipe', 'filter-venue'].forEach(id => {
             const select = document.getElementById(id);
@@ -845,7 +1062,7 @@ class EnhancedFilterSystem {
                     return false;
                 }
             }
-            
+
             // Plage horaire (NOUVEAU - filtrage par plage avec chevauchement de créneaux)
             if (this.filters.horaireStart && this.filters.horaireEnd) {
                 // Si le match n'a pas d'horaire, on le garde visible (matchs non planifiés ou ententes)
@@ -879,8 +1096,8 @@ class EnhancedFilterSystem {
             // Search
             if (this.filters.search) {
                 const searchLower = this.filters.search.toLowerCase();
-                const equipe1 = data.entities.equipes.find(e => e.id === match.equipes[0]);
-                const equipe2 = data.entities.equipes.find(e => e.id === match.equipes[1]);
+                const equipe1 = data.entities.equipes.find(e => e.id === equipe1Id);
+                const equipe2 = data.entities.equipes.find(e => e.id === equipe2Id);
                 
                 const matchText = [
                     equipe1?.nom,

@@ -5,7 +5,7 @@ Scripts utilitaires en ligne de commande pour PyCalendar.
 """
 
 __all__ = [
-    "config_tools",
+    "update_config_excel",
     "pool_extractor",
     "match_sheet_generator",
     "external_importer",
