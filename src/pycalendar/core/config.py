@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from typing import Dict, Any, Optional, List
 from pathlib import Path
 from .calendar_manager import CalendarManager, CalendarConfig
+from .sport_config import SportConfig, get_sport_presets
 
 
 @dataclass
@@ -28,6 +29,17 @@ class Config:
     temps_max_secondes: int
     cpsat_warm_start: bool  # Utilise solution précédente comme point de départ
     cpsat_warm_start_file: str  # Nom du fichier de solution (défaut: "default")
+    cpsat_use_prefilter: bool  # Si True, préfiltre les combinaisons impossibles (plus rapide)
+    cpsat_num_search_workers: int  # Nombre de threads pour la recherche parallèle
+    cpsat_relative_gap_limit: float  # Limite d'écart relatif (0 = continuer jusqu'au timeout)
+    cpsat_absolute_gap_limit: float  # Limite d'écart absolu (0 = continuer jusqu'au timeout)
+    
+    # Mode performance - contrôle la complexité du modèle
+    cpsat_mode_fast: bool  # Si True, désactive automatiquement les contraintes coûteuses
+    cpsat_enable_espacement_repos: bool  # Activer l'espacement repos (coûteux O(équipes×semaines²))
+    cpsat_enable_aller_retour: bool  # Activer l'espacement aller-retour (coûteux O(paires×créneaux²))
+    cpsat_espacement_repos_simplifie: bool  # Mode simplifié pour espacement repos
+    cpsat_aller_retour_simplifie: bool  # Mode simplifié pour aller-retour
     
     # Soft constraints weights
     # Préférences de gymnase (nouveau système avec bonus)
@@ -76,10 +88,10 @@ class Config:
     equilibrage_bonus_base: float  # Bonus pour le 1er match d'une équipe
     equilibrage_facteur_decroissance: float  # Multiplicateur pour chaque match suivant
     equilibrage_bonus_minimum: float  # Bonus plancher (éviter d'atteindre 0)
+    equilibrage_mode_simplifie: bool  # Mode simplifié O(équipes×seuils) sans gestion fine des ententes
     
     # Ententes (specific institution pairs - reduced priority)
     entente_actif: bool  # Activer/désactiver la contrainte
-    entente_penalite_non_planif: float  # Bonus réduit pour ententes (si système progressif désactivé)
     entente_facteur_reduction_bonus: float  # Facteur de réduction multiplicative du bonus total de l'équipe (ex: 0.90 = 10% de réduction par entente)
     
     # Contraintes temporelles (matches before/after specific week - e.g. CFE)
@@ -101,10 +113,19 @@ class Config:
     # Advanced settings
     max_matchs_par_equipe_par_semaine: int
     afficher_progression: bool
-    niveau_log: int
     
-    # Sport-specific parameters
-    duree_match_minutes: int  # Durée d'un match en minutes (ex: 90 pour handball, 120 pour volley)
+    # Sport-specific parameters (from sport presets)
+    sport_type: str = "volleyball"           # Type de sport (ex: "volleyball", "handball")
+    sport_prefix: str = "VB"                 # Préfixe dans les codes de poule (ex: "VB", "HB")
+    sport_name: str = "Volleyball"           # Nom complet du sport
+    sport_name_short: str = "Volley"         # Nom court
+    sport_emoji: str = "🏐"                  # Emoji du sport
+    duree_match_minutes: int = 90            # Durée d'un match en minutes
+    duree_entre_matchs_minutes: int = 15     # Temps entre deux matchs
+    sport_score_format: str = "points"       # Format des scores (sets ou points)
+    sport_niveaux: List[str] = field(default_factory=lambda: ["A1", "A2", "A3", "A4"])
+    sport_genres: List[str] = field(default_factory=lambda: ["M", "F"])
+    sport_types_championnat: List[str] = field(default_factory=lambda: ["Acad", "CFE", "CFU"])
     
     # Additional parameters
     extra: Dict[str, Any] = field(default_factory=dict)
@@ -186,9 +207,19 @@ class Config:
             c = merged_data['cpsat']
             config_dict['temps_max_secondes'] = c['temps_max_secondes']
             config_dict['afficher_progression'] = c['afficher_progression']
-            config_dict['niveau_log'] = c['niveau_log']
             config_dict['cpsat_warm_start'] = c.get('warm_start', True)  # Par défaut True
             config_dict['cpsat_warm_start_file'] = c.get('warm_start_file', 'default')  # Par défaut "default"
+            config_dict['cpsat_use_prefilter'] = c.get('use_prefilter', True)  # Par défaut True (préfiltrage actif)
+            config_dict['cpsat_num_search_workers'] = c.get('num_search_workers', 8)  # Par défaut 8 threads
+            config_dict['cpsat_relative_gap_limit'] = c.get('relative_gap_limit', 0.0)  # Par défaut 0
+            config_dict['cpsat_absolute_gap_limit'] = c.get('absolute_gap_limit', 0.0)  # Par défaut 0
+            
+            # Mode performance
+            config_dict['cpsat_mode_fast'] = c.get('mode_fast', False)  # Par défaut False
+            config_dict['cpsat_enable_espacement_repos'] = c.get('enable_espacement_repos', True)
+            config_dict['cpsat_enable_aller_retour'] = c.get('enable_aller_retour_espacement', True)
+            config_dict['cpsat_espacement_repos_simplifie'] = c.get('espacement_repos_simplifie', False)
+            config_dict['cpsat_aller_retour_simplifie'] = c.get('aller_retour_simplifie', False)
         
         # Constraints
         if 'contraintes' in merged_data:
@@ -246,10 +277,10 @@ class Config:
             config_dict['equilibrage_bonus_base'] = ct.get('equilibrage_bonus_base', 100000.0)
             config_dict['equilibrage_facteur_decroissance'] = ct.get('equilibrage_facteur_decroissance', 0.5)
             config_dict['equilibrage_bonus_minimum'] = ct.get('equilibrage_bonus_minimum', 1000.0)
+            config_dict['equilibrage_mode_simplifie'] = ct.get('equilibrage_mode_simplifie', False)
             
             # Ententes (paires d'institutions spécifiques)
             config_dict['entente_actif'] = ct['entente_actif']
-            config_dict['entente_penalite_non_planif'] = ct.get('entente_penalite_non_planif', 30.0)
             config_dict['entente_facteur_reduction_bonus'] = ct.get('entente_facteur_reduction_bonus', 0.90)
             
             # Contraintes temporelles (matchs avant/après semaine X)
@@ -270,10 +301,26 @@ class Config:
             config_dict['calendrier_jour_match'] = cal.get('jour_match', 'jeudi')
             config_dict['calendrier_semaines_banalisees'] = cal.get('semaines_banalisees', [])
         
-        # Sport-specific parameters
-        if 'sport' in merged_data:
-            sport = merged_data['sport']
-            config_dict['duree_match_minutes'] = sport.get('duree_match_minutes', 90)
+        # Sport-specific parameters - Load from presets first, then override with config
+        sport_data = merged_data.get('sport', {})
+        sport_type_or_preset = sport_data.get('type', sport_data.get('preset', 'volleyball'))
+        
+        # Get sport preset as base
+        sport_presets = get_sport_presets()
+        sport_preset = sport_presets.get_sport(sport_type_or_preset) or sport_presets.default_sport
+        
+        # Apply preset values as defaults, then override with explicit config
+        config_dict['sport_type'] = sport_data.get('type', sport_preset.type)
+        config_dict['sport_prefix'] = sport_data.get('prefix', sport_preset.prefix)
+        config_dict['sport_name'] = sport_data.get('name', sport_preset.name)
+        config_dict['sport_name_short'] = sport_data.get('name_short', sport_preset.name_short)
+        config_dict['sport_emoji'] = sport_data.get('emoji', sport_preset.emoji)
+        config_dict['duree_match_minutes'] = sport_data.get('duree_match_minutes', sport_preset.duree_match_minutes)
+        config_dict['duree_entre_matchs_minutes'] = sport_data.get('duree_entre_matchs_minutes', sport_preset.duree_entre_matchs_minutes)
+        config_dict['sport_score_format'] = sport_data.get('score_format', sport_preset.score_format)
+        config_dict['sport_niveaux'] = sport_data.get('niveaux', sport_preset.niveaux)
+        config_dict['sport_genres'] = sport_data.get('genres', sport_preset.genres)
+        config_dict['sport_types_championnat'] = sport_data.get('types_championnat', sport_preset.types_championnat)
         
         # Store extra parameters
         config_dict['extra'] = merged_data.get('extra', {})
@@ -310,9 +357,12 @@ class Config:
             'cpsat': {
                 'temps_max_secondes': self.temps_max_secondes,
                 'afficher_progression': self.afficher_progression,
-                'niveau_log': self.niveau_log,
                 'warm_start': self.cpsat_warm_start,
                 'warm_start_file': self.cpsat_warm_start_file,
+                'use_prefilter': self.cpsat_use_prefilter,
+                'num_search_workers': self.cpsat_num_search_workers,
+                'relative_gap_limit': self.cpsat_relative_gap_limit,
+                'absolute_gap_limit': self.cpsat_absolute_gap_limit,
             },
             'contraintes': {
                 'penalite_apres_horaire_min': self.penalite_apres_horaire_min,
@@ -352,7 +402,6 @@ class Config:
                 'equilibrage_bonus_minimum': self.equilibrage_bonus_minimum,
                 # Ententes (paires d'institutions spécifiques)
                 'entente_actif': self.entente_actif,
-                'entente_penalite_non_planif': self.entente_penalite_non_planif,
                 'entente_facteur_reduction_bonus': self.entente_facteur_reduction_bonus,
                 # Contraintes temporelles (matchs avant/après semaine X)
                 'contrainte_temporelle_actif': self.contrainte_temporelle_actif,
@@ -370,7 +419,17 @@ class Config:
                 'semaines_banalisees': self.calendrier_semaines_banalisees,
             },
             'sport': {
+                'type': self.sport_type,
+                'prefix': self.sport_prefix,
+                'name': self.sport_name,
+                'name_short': self.sport_name_short,
+                'emoji': self.sport_emoji,
                 'duree_match_minutes': self.duree_match_minutes,
+                'duree_entre_matchs_minutes': self.duree_entre_matchs_minutes,
+                'score_format': self.sport_score_format,
+                'niveaux': self.sport_niveaux,
+                'genres': self.sport_genres,
+                'types_championnat': self.sport_types_championnat,
             },
             'extra': self.extra,
         }

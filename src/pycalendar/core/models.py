@@ -3,6 +3,28 @@
 from dataclasses import dataclass, field
 from typing import List, Set, Tuple, Optional, Dict
 from datetime import time
+from enum import Enum
+
+
+class EntenteStatus(Enum):
+    """
+    États possibles d'un match en entente.
+    
+    Une entente est un match entre équipes d'institutions partenaires qui peut être
+    joué en dehors du calendrier officiel (les jeudis) quand celui-ci est surchargé.
+    
+    Cycle de vie d'une entente:
+    1. NOT_ENTENTE: Match normal (pas une entente)
+    2. SUGGESTED: Le solver suggère que ce match soit joué en entente (pas de créneau assigné)
+    3. CONFIRMED: L'organisation a confirmé l'entente (importé comme match fixe avec gymnase='ENTENTE')
+    4. SCHEDULED: Les équipes ont communiqué un créneau hors calendrier officiel
+    5. PLAYED: Le match en entente a été joué (score renseigné)
+    """
+    NOT_ENTENTE = "not_entente"      # Pas une entente (match normal)
+    SUGGESTED = "suggested"           # Solver suggère entente (non planifié)
+    CONFIRMED = "confirmed"           # Entente confirmée par l'organisation
+    SCHEDULED = "scheduled"           # Créneau communiqué par les équipes  
+    PLAYED = "played"                 # Match joué (score disponible)
 
 
 @dataclass
@@ -185,6 +207,11 @@ class Match:
             - CFU: Championnat de France Universitaire
             - CFE: Championnat de France Établissement
             - Autre: Autres compétitions (amicaux, tournois, etc.)
+            
+    Ententes:
+        Une entente est un match entre institutions partenaires qui peut être joué
+        en dehors du calendrier officiel. Utilisez les propriétés is_entente,
+        entente_status, et les méthodes associées pour gérer les ententes.
     """
     equipe1: Equipe
     equipe2: Equipe
@@ -201,9 +228,85 @@ class Match:
     def est_planifie(self) -> bool:
         return self.creneau is not None
     
+    @property
+    def is_entente(self) -> bool:
+        """Vérifie si ce match est une entente (marquée ou suggérée)."""
+        return self.metadata.get('is_entente', False)
+    
+    @is_entente.setter
+    def is_entente(self, value: bool):
+        """Marque ce match comme entente."""
+        self.metadata['is_entente'] = value
+    
+    @property
+    def is_fixed(self) -> bool:
+        """Vérifie si ce match est un match fixe (importé manuellement)."""
+        return self.metadata.get('is_fixed', False)
+    
+    @is_fixed.setter
+    def is_fixed(self, value: bool):
+        """Marque ce match comme fixe."""
+        self.metadata['is_fixed'] = value
+    
+    @property
+    def has_score(self) -> bool:
+        """Vérifie si ce match a un score enregistré."""
+        score = self.metadata.get('score')
+        if not score:
+            return False
+        if isinstance(score, dict):
+            return score.get('has_score', False)
+        if isinstance(score, str):
+            # Format "3-2" ou similaire
+            return '-' in score or ':' in score
+        return False
+    
+    @property
+    def entente_status(self) -> EntenteStatus:
+        """
+        Détermine l'état de l'entente pour ce match.
+        
+        Returns:
+            EntenteStatus correspondant à l'état actuel du match
+        """
+        if not self.is_entente:
+            return EntenteStatus.NOT_ENTENTE
+        
+        # A un score → entente jouée
+        if self.has_score:
+            return EntenteStatus.PLAYED
+        
+        # A un créneau (date/horaire communiqué par les équipes)
+        if self.creneau is not None:
+            return EntenteStatus.SCHEDULED
+        
+        # Match fixe avec gymnase='ENTENTE' → confirmée par l'organisation
+        if self.is_fixed:
+            gymnase = self.metadata.get('gymnase', '')
+            if isinstance(gymnase, str) and gymnase.upper() == 'ENTENTE':
+                return EntenteStatus.CONFIRMED
+            # Fixe avec autre gymnase mais hors calendrier
+            return EntenteStatus.SCHEDULED
+        
+        # Sinon, c'est une suggestion du solver
+        return EntenteStatus.SUGGESTED
+    
+    @property
+    def entente_status_label(self) -> str:
+        """Label lisible pour l'état de l'entente."""
+        labels = {
+            EntenteStatus.NOT_ENTENTE: "Match normal",
+            EntenteStatus.SUGGESTED: "Entente suggérée",
+            EntenteStatus.CONFIRMED: "Entente confirmée",
+            EntenteStatus.SCHEDULED: "Entente planifiée",
+            EntenteStatus.PLAYED: "Entente jouée",
+        }
+        return labels.get(self.entente_status, "Inconnu")
+    
     def __repr__(self):
         creneau_str = str(self.creneau) if self.creneau else "Non planifié"
-        return f"{self.equipe1.nom_complet} vs {self.equipe2.nom_complet} [{creneau_str}]"
+        entente_marker = " [ENTENTE]" if self.is_entente else ""
+        return f"{self.equipe1.nom_complet} vs {self.equipe2.nom_complet} [{creneau_str}]{entente_marker}"
 
 
 @dataclass

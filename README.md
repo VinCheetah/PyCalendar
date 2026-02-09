@@ -22,6 +22,8 @@ python main.py configs/config_volley.yaml
 ## 🎯 Fonctionnalités
 
 - **Configuration centrale** : Un seul fichier Excel contient équipes, gymnases et **toutes les contraintes**
+- **Éditeur de poules visuel** : Interface web moderne pour gérer les équipes et poules (`tools/pool_editor`)
+- **Synchronisation Pool Editor ↔ Excel** : Actualisez automatiquement votre config depuis l'éditeur de poules
 - **Contraintes institutionnelles** : Appliquez des contraintes à toutes les équipes d'une institution
 - **Obligations de présence** : Garantissez qu'une institution utilise son propre gymnase
 - **Génération de matchs** : Round-robin automatique pour poules multiples
@@ -421,6 +423,7 @@ python actualiser_config.py examples/basic/config_exemple.xlsx
 - **[GUIDE_CONFIGURATION_CENTRALE.md](GUIDE_CONFIGURATION_CENTRALE.md)** - Guide complet de configuration
 - **[GUIDE_INTEGRATION_CONTRAINTES.md](GUIDE_INTEGRATION_CONTRAINTES.md)** - Comment les contraintes fonctionnent
 - **[GUIDE_ACTUALISATION.md](GUIDE_ACTUALISATION.md)** - Utilisation de l'outil d'actualisation
+- **[GUIDE_POOL_EDITOR_SYNC.md](docs/GUIDE_POOL_EDITOR_SYNC.md)** - 🆕 Synchronisation Pool Editor → Excel
 - **[GUIDE_SIMULATEUR_PENALITES.md](GUIDE_SIMULATEUR_PENALITES.md)** - 🆕 Simulateur pédagogique pour comprendre la formule
 - **[GUIDE_ANALYSEUR_PENALITES.md](GUIDE_ANALYSEUR_PENALITES.md)** - 🆕 Analyseur avancé avec données réelles
 
@@ -446,6 +449,23 @@ python scripts/create_contacts_template.py
 # Générer les notifications
 python scripts/generate_entente_notifications.py --deadline "31/03/2026"
 ```
+
+### 🔄 Synchronisation Pool Editor
+
+Actualisez automatiquement votre fichier Excel depuis l'éditeur de poules :
+
+```bash
+# Mode mise à jour (ajoute et modifie, mais conserve les équipes absentes)
+python scripts/update_teams_from_pool_editor.py poules_export.json --config configs/config_volley.yaml
+
+# Mode interactif avec prévisualisation
+python scripts/update_teams_from_pool_editor.py poules_export.json --config configs/config_volley.yaml -i
+
+# Synchronisation complète (avec suppression)
+python scripts/update_teams_from_pool_editor.py poules_export.json --config configs/config_volley.yaml --sync
+```
+
+➡️ **Guide complet** : [GUIDE_POOL_EDITOR_SYNC.md](docs/GUIDE_POOL_EDITOR_SYNC.md)
 
 **Voir** : [QUICKSTART_NOTIFICATIONS.md](docs/QUICKSTART_NOTIFICATIONS.md) pour le guide rapide complet.
 

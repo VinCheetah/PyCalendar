@@ -27,13 +27,6 @@ from pycalendar.core.config import Config
 from pycalendar.orchestrator.pipeline import SchedulingPipeline
 
 
-def print_banner():
-    """Affiche la bannière du programme."""
-    print("\n" + "="*70)
-    print(" " * 15 + "🏐 PYCALENDAR - Sports Scheduling System 🏀")
-    print("="*70)
-
-
 def print_usage():
     """Affiche les instructions d'utilisation."""
     print("\n📖 Usage:")
@@ -64,7 +57,7 @@ def main():
         print_usage()
         return 1
     
-    print_banner()
+    # Note: La bannière est maintenant affichée par le pipeline
     print(f"\n📄 Configuration: {config_file}")
     
     try:

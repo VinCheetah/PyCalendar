@@ -240,6 +240,84 @@ class DataManager {
         return this.original.config;
     }
     
+    /**
+     * Get the date for a specific week number
+     * Returns a Date object for the Thursday of that week
+     */
+    getWeekDate(weekNumber) {
+        const config = this.getConfig();
+        const calendrier = config?.calendrier;
+        
+        if (!calendrier?.date_debut) {
+            return null;
+        }
+        
+        // Parse the start date (date_debut is the first Thursday)
+        const [year, month, day] = calendrier.date_debut.split('-').map(Number);
+        const startDate = new Date(year, month - 1, day);
+        
+        // Calculate the date for the requested week
+        // Week 1 = startDate, Week 2 = startDate + 7 days, etc.
+        const weekDate = new Date(startDate);
+        weekDate.setDate(startDate.getDate() + (weekNumber - 1) * 7);
+        
+        return weekDate;
+    }
+    
+    /**
+     * Get formatted date string for a week
+     * @param {number} weekNumber - The week number
+     * @param {string} format - 'short' (DD/MM), 'medium' (DD MMM), 'long' (Jeudi DD MMMM YYYY)
+     */
+    getWeekDateFormatted(weekNumber, format = 'medium') {
+        const date = this.getWeekDate(weekNumber);
+        if (!date) return '';
+        
+        const months = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 
+                       'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+        const monthsShort = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 
+                            'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+        
+        const day = date.getDate().toString().padStart(2, '0');
+        const monthIdx = date.getMonth();
+        const year = date.getFullYear();
+        
+        switch (format) {
+            case 'short':
+                return `${day}/${(monthIdx + 1).toString().padStart(2, '0')}`;
+            case 'medium':
+                return `${day} ${monthsShort[monthIdx]}`;
+            case 'long':
+                return `Jeudi ${day} ${months[monthIdx]} ${year}`;
+            case 'iso':
+                return `${year}-${(monthIdx + 1).toString().padStart(2, '0')}-${day}`;
+            default:
+                return `${day} ${monthsShort[monthIdx]}`;
+        }
+    }
+    
+    /**
+     * Get all weeks with their dates
+     * Returns an array of {week, date, dateFormatted, isBanalisee}
+     */
+    getAllWeeksWithDates() {
+        const config = this.getConfig();
+        const nbSemaines = config?.nb_semaines || 14;
+        const semainesBanalisees = config?.calendrier?.semaines_banalisees || [];
+        
+        const weeks = [];
+        for (let i = 1; i <= nbSemaines; i++) {
+            weeks.push({
+                week: i,
+                date: this.getWeekDate(i),
+                dateFormatted: this.getWeekDateFormatted(i, 'long'),
+                dateShort: this.getWeekDateFormatted(i, 'medium'),
+                isBanalisee: semainesBanalisees.includes(i)
+            });
+        }
+        return weeks;
+    }
+    
     // ==================== MODIFICATION METHODS ====================
     
     /**
@@ -306,26 +384,89 @@ class DataManager {
         });
     }
     
+    /**
+     * Unschedule a match (move from scheduled to unscheduled)
+     * @param {string} matchId - Match ID to unschedule
+     * @returns {boolean} Success status
+     */
+    unscheduleMatch(matchId) {
+        const match = this.getMatch(matchId);
+        if (!match) {
+            console.error(`[DataManager] Match ${matchId} not found`);
+            return false;
+        }
+        
+        // Store original slot for potential undo
+        const originalSlot = {
+            semaine: match.semaine,
+            horaire: match.horaire,
+            gymnase: match.gymnase
+        };
+        
+        // Free the slot
+        if (originalSlot.semaine && originalSlot.horaire && originalSlot.gymnase) {
+            this._updateSlotStatus(originalSlot, 'libre', null);
+        }
+        
+        // Move match from scheduled to unscheduled
+        const scheduledIndex = this.current.matches.scheduled.findIndex(m => m.match_id === matchId);
+        if (scheduledIndex >= 0) {
+            const [unscheduledMatch] = this.current.matches.scheduled.splice(scheduledIndex, 1);
+            
+            // Clear scheduling info
+            unscheduledMatch.semaine = null;
+            unscheduledMatch.horaire = null;
+            unscheduledMatch.gymnase = null;
+            
+            this.current.matches.unscheduled.push(unscheduledMatch);
+        }
+        
+        // Rebuild indexes
+        this._rebuildIndexes();
+        
+        // Notify observers
+        this._notifyObservers({
+            type: 'MATCH_UNSCHEDULED',
+            matchId,
+            originalSlot
+        });
+        
+        return true;
+    }
+    
     // ==================== OBSERVER PATTERN ====================
     
     /**
      * Subscribe to data changes
-     * @param {Function} callback - Called with event object
+     * @param {string|Function} topicOrCallback - Topic string (ignored for compatibility) or callback function
+     * @param {Function} [callback] - Callback function when topic is provided
      * @returns {Function} Unsubscribe function
      */
-    subscribe(callback) {
-        this.observers.add(callback);
-        return () => this.observers.delete(callback);
+    subscribe(topicOrCallback, callback) {
+        // Support both signatures for backward compatibility:
+        // subscribe(callback) - standard usage
+        // subscribe(topic, callback) - legacy usage (topic ignored)
+        const actualCallback = typeof topicOrCallback === 'function' ? topicOrCallback : callback;
+        
+        if (typeof actualCallback !== 'function') {
+            console.warn('[DataManager] subscribe called without valid callback');
+            return () => {};
+        }
+        
+        this.observers.add(actualCallback);
+        return () => this.observers.delete(actualCallback);
     }
     
     /**
      * Notify all observers of a change
+     * @param {Object} event - Event object with type and additional data
      */
     _notifyObservers(event) {
         this.observers.forEach(callback => {
             try {
                 callback(event);
             } catch (error) {
+                console.error('[DataManager] Error in observer callback:', error);
             }
         });
     }

@@ -1,16 +1,7 @@
 """
 Gestionnaire du fichier de configuration central.
 
-Ce module gère un fichier Excel unique contenant toutes        'Groupes_Non_Simultaneite': {
-            'colonnes': ['Nom_Groupe', 'Entites', 'Remarques'],
-            'description': 'Groupes d\'équipes/institutions à ne pas faire jouer simultanément',
-            'type': 'manuel',
-            'exemple': {
-                'Nom_Groupe': 'Grandes Écoles Lyon',
-                'Entites': 'ECL, EML, CENTRALE',
-                'Remarques': 'Grandes écoles d\'ingénieurs qui ne doivent pas jouer simultanément'
-            }
-        }tions nécessaires
+Ce module gère un fichier Excel unique contenant toutes les informations nécessaires
 à la planification : équipes, gymnases, indisponibilités, préférences, contraintes.
 
 Structure du fichier Excel :
@@ -20,6 +11,7 @@ Structure du fichier Excel :
 - Indispos_Institutions : Indisponibilités par institution (appliquées à toutes les équipes)
 - Preferences_Institutions : Lieux préférés par institution avec classement
 - Contraintes_Specifiques : Contraintes particulières (anti-collisions, etc.)
+- Groupes_Non_Simultaneite : Groupes d'équipes/institutions à ne pas faire jouer simultanément
 """
 
 import pandas as pd
@@ -204,22 +196,43 @@ class ConfigManager:
         },
         'Coach_Groups': {
             'colonnes': ['group_id', 'coach_name'] + [f'slot_{i:02d}' for i in range(1, 21)] + ['notes'],
-            'description': 'Groupes d\'équipes partageant un coach ou responsable commun',
+            'description': 'Groupes d\'équipes partageant un coach ou responsable commun (anti-chevauchement)',
             'type': 'manuel',
             'exemple': {
-                'group_id': 'PARIS',
+                'group_id': 'PARIS_VOLLEY',
                 'coach_name': 'Jean Dupont',
-                'slot_01': 'institution=PARIS',
-                'slot_02': 'institution=PARIS;gender=F',
-                'slot_03': 'team=LYON 1 (1);gender=M',
-                'notes': 'Coach principal volley'
+                'slot_01': 'team=PARIS 7 (1) [M]',
+                'slot_02': 'institution=PARIS 7',
+                'slot_03': 'institution=LYON 1;gender=F',
+                'notes': 'Coach principal volley féminin'
             },
             'notes': [
-                '20 colonnes slot_XX permettent de décrire des règles d\'inclusion',
-                'Chaque slot accepte team=<équipe>, institution=<nom>, ou institution=<nom>;gender=<M/F>',
-                'gender peut aussi être indiqué sous forme genre=<M/F>',
-                'Laisser un slot vide si non utilisé (pas besoin de compacter)',
-                'notes: Commentaires facultatifs (club, contexte, etc.)'
+                '═══════════════════════════════════════════════════════════════',
+                'FORMATS ACCEPTÉS POUR LES SLOTS:',
+                '───────────────────────────────────────────────────────────────',
+                '',
+                '1️⃣  ÉQUIPE GENRÉE - Cible une seule équipe spécifique',
+                '    → team=NOM (N) [M]     ou    team=NOM (N) [F]',
+                '    → Exemple: team=PARIS 7 (1) [M]',
+                '',
+                '2️⃣  INSTITUTION - Cible TOUTES les équipes d\'une institution',
+                '    → institution=NOM',
+                '    → Exemple: institution=LYON 1',
+                '    → Inclut: LYON 1 (1) [M], LYON 1 (1) [F], LYON 1 (2) [M]...',
+                '',
+                '3️⃣  INSTITUTION GENRÉE - Cible les équipes d\'un genre d\'une institution',
+                '    → institution=NOM;gender=M   ou   institution=NOM;gender=F',
+                '    → Exemple: institution=PARIS 7;gender=F',
+                '    → Inclut: PARIS 7 (1) [F], PARIS 7 (2) [F]...',
+                '',
+                '═══════════════════════════════════════════════════════════════',
+                'UTILISATION:',
+                '───────────────────────────────────────────────────────────────',
+                '- Un coach ne peut pas être à deux matchs au même moment',
+                '- Chaque ligne représente un coach avec ses équipes',
+                '- 20 colonnes slot_XX disponibles (laisser vide si non utilisé)',
+                '- Les listes déroulantes proposent les formats valides',
+                ''
             ]
         },
         'Ententes': {
@@ -281,7 +294,7 @@ class ConfigManager:
             ]
         },
         'Matchs_Fixes': {
-            'colonnes': ['Equipe_1', 'Equipe_2', 'Genre', 'Poule', 'Semaine', 'Date', 'Horaire', 'Gymnase', 'Score', 'Type_Competition', 'Remarques'],
+            'colonnes': ['Equipe_1', 'Equipe_2', 'Genre', 'Poule', 'Semaine', 'Date', 'Horaire', 'Gymnase', 'Score', 'Type_Competition', 'Remarques', 'Arbitres', 'Ignorer'],
             'description': 'Matchs déjà joués ou planifiés à intégrer dans le calendrier',
             'type': 'manuel',
             'exemple': {
@@ -295,7 +308,9 @@ class ConfigManager:
                 'Gymnase': 'PARC DES SPORTS',
                 'Score': '3-1',
                 'Type_Competition': 'CFE',
-                'Remarques': 'Match déjà joué'
+                'Remarques': 'Match déjà joué',
+                'Arbitres': '',
+                'Ignorer': ''
             },
             'notes': [
                 'Equipe_1 et Equipe_2: Noms exacts des équipes sans le genre (Institution (numéro) seulement)',
@@ -315,9 +330,42 @@ class ConfigManager:
                 '  → Acad: Match de championnat régulier',
                 '  → Autre: Autre type de match',
                 'Remarques: Informations complémentaires (optionnel)',
+                'Arbitres: Nom(s) des arbitres du match (optionnel, informatif uniquement)',
+                'Ignorer: Flag pour exclure temporairement le match de la planification fixée',
+                '  → Laisser vide ou "Non" pour que le match soit traité comme fixé normalement',
+                '  → Mettre "Oui" ou "X" pour que le planificateur replanifie ce match',
+                '  → Utile pour demander au solveur de repositionner certains matchs',
                 '',
                 '⚠️ IMPORTANT: Ces matchs seront exclus de la planification automatique',
                 'Ils apparaîtront dans le calendrier final aux créneaux indiqués'
+            ]
+        },
+        'Matchs_Annules': {
+            'colonnes': ['Equipe_1', 'Equipe_2', 'Genre', 'Poule', 'Semaine', 'Date', 'Horaire', 'Gymnase', 'Score', 'Type_Competition', 'Remarques', 'Arbitres'],
+            'description': 'Matchs annulés (sans score) - non utilisés dans la planification',
+            'type': 'auto',
+            'exemple': {
+                'Equipe_1': 'LYON 1 (1)',
+                'Equipe_2': 'LYON 2 (1)',
+                'Genre': 'F',
+                'Poule': 'VBFA1PA',
+                'Semaine': '1',
+                'Date': '09/10/25',
+                'Horaire': '18:00',
+                'Gymnase': 'PARC DES SPORTS',
+                'Score': '',
+                'Type_Competition': 'Acad',
+                'Remarques': 'Match annulé - reporté',
+                'Arbitres': ''
+            },
+            'notes': [
+                'Cette feuille contient les matchs annulés/reportés sans score',
+                'Ces matchs NE sont PAS utilisés dans la planification',
+                'Ils sont conservés pour référence et historique',
+                'Format identique à Matchs_Fixes',
+                '',
+                'Note: Un match forfait AVEC score va dans Matchs_Fixes',
+                'Seuls les matchs vraiment annulés (sans score) vont ici'
             ]
         },
     }
@@ -352,10 +400,11 @@ class ConfigManager:
         
         try:
             df = pd.read_excel(self.fichier_path, sheet_name=nom_feuille)
-            logger.info(f"Feuille '{nom_feuille}' lue avec succès ({len(df)} lignes)")
+            logger.debug(f"Feuille '{nom_feuille}' lue avec succès ({len(df)} lignes)")
             return df
         except ValueError:
-            logger.warning(f"La feuille '{nom_feuille}' n'existe pas dans le fichier")
+            # La feuille n'existe pas - c'est souvent attendu pour les feuilles optionnelles
+            logger.debug(f"La feuille '{nom_feuille}' n'existe pas dans le fichier")
             return None
         except Exception as e:
             logger.error(f"Erreur lors de la lecture de '{nom_feuille}': {e}")

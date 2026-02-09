@@ -124,6 +124,11 @@
               "gymnase": {"type": "string"},
               "is_fixed": {"type": "boolean"},
               "is_entente": {"type": "boolean"},
+              "entente_status": {
+                "type": "string",
+                "enum": ["not_entente", "suggested", "confirmed", "scheduled", "played"],
+                "description": "État de l'entente: not_entente (match normal), suggested (suggéré par le solver), confirmed (confirmée par l'organisation), scheduled (créneau communiqué par les équipes), played (match joué avec score)"
+              },
               "is_external": {"type": "boolean"},
               "score": {
                 "type": "object",

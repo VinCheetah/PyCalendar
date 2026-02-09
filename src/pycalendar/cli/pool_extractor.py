@@ -5,20 +5,34 @@ Script d'extraction des poules depuis un fichier Excel et génération d'un fich
 de configuration compatible avec l'algorithme de calendrier PyCalendar.
 
 USAGE:
-    # Volleyball (défaut)
+    # Volleyball (par défaut)
     python extract_poules.py
     python extract_poules.py --sport VB
     
     # Handball
-    python extract_poules.py --sport VB --input exemple/poules.xlsx
     python extract_poules.py --sport HB --input exemple/poules.xlsx
+    
+    # Basketball
+    python extract_poules.py --sport BB --input exemple/poules.xlsx
+    
+    # Autres sports supportés: FB (Football), FS (Futsal), RG (Rugby), BD (Badminton), TT (Tennis Table)
     
     # Personnalisé
     python extract_poules.py -i mon_fichier.xlsx -o ma_config.xlsx -s VB
 
+SPORTS SUPPORTÉS:
+    VB - Volleyball 🏐
+    HB - Handball 🤾
+    BB - Basketball 🏀
+    FB - Football ⚽
+    FS - Futsal ⚽
+    RG - Rugby 🏉
+    BD - Badminton 🏸
+    TT - Tennis de Table 🏓
+
 FORMAT D'ENTRÉE:
     Fichier Excel avec poules disposées en colonnes, format attendu:
-    - Chaque poule identifiée par un code (ex: VBFA1PA, HBMA2PB)
+    - Chaque poule identifiée par un code (ex: VBFA1PA, HBMA2PB, BBMA3PC)
     - Les équipes listées sous chaque poule avec leur numéro
     - Optionnel: horaires préférés dans la colonne suivante
 
@@ -137,17 +151,45 @@ def normalize_team_name(team_name: str) -> str:
     return f"{team_name} (1)"
 
 
-def extract_poules_from_excel(input_file: str, output_file: str, sport_prefix: str = 'HB'):
+# Mapping des préfixes de sport vers leurs emojis
+SPORT_EMOJIS = {
+    'VB': '🏐',  # Volleyball
+    'HB': '🤾',  # Handball
+    'BB': '🏀',  # Basketball
+    'FB': '⚽',  # Football
+    'FS': '⚽',  # Futsal
+    'RG': '🏉',  # Rugby
+    'BD': '🏸',  # Badminton
+    'TT': '🏓',  # Tennis de Table
+}
+
+# Mapping des préfixes vers les noms complets
+SPORT_NAMES = {
+    'VB': 'Volleyball',
+    'HB': 'Handball',
+    'BB': 'Basketball',
+    'FB': 'Football',
+    'FS': 'Futsal',
+    'RG': 'Rugby',
+    'BD': 'Badminton',
+    'TT': 'Tennis de Table',
+}
+
+
+def extract_poules_from_excel(input_file: str, output_file: str, sport_prefix: str = 'VB'):
     """
     Extrait les poules depuis un fichier Excel et génère un fichier de configuration multi-feuilles.
     
     Args:
         input_file: Chemin vers le fichier Excel d'entrée
         output_file: Chemin vers le fichier Excel de sortie
-        sport_prefix: Préfixe du sport (HB pour handball, VB pour volleyball, etc.)
+        sport_prefix: Préfixe du sport (VB, HB, BB, FB, FS, RG, BD, TT)
     """
+    sport_emoji = SPORT_EMOJIS.get(sport_prefix.upper(), '🏆')
+    sport_name = SPORT_NAMES.get(sport_prefix.upper(), sport_prefix)
+    
     print(f"📖 Lecture du fichier: {input_file}")
-    print(f"🏐 Sport: {sport_prefix}")
+    print(f"{sport_emoji} Sport: {sport_name} ({sport_prefix})")
     
     # Lire le fichier Excel sans header
     df = pd.read_excel(input_file, sheet_name=0, header=None)

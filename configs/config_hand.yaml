@@ -1,16 +1,39 @@
-# Configuration PyCalendar - Handball avec CP-SAT
+# Configuration PyCalendar - Handball
 # ====================================
 # Seules les valeurs différentes des défauts sont spécifiées
 
 # Fichiers
 fichiers:
-  donnees: "examples/handball/config_handball.xlsx"
-  sortie: "examples/handball/calendrier_handball_cpsat.xlsx"
+  donnees: "data/handball/config_handball.xlsx"
+  sortie: "data/handball/calendrier_handball.xlsx"
+
+# Paramètres de planification (seulement valeurs différentes des défauts)
+planification:
+  semaine_min: 1     # Première semaine où le planificateur peut poser de nouveaux matchs
+  nb_semaines: 10    # Nombre total de semaines de compétition (calendrier: semaine 1 à 10)
+
+
 
 # Configuration CP-SAT (OR-Tools)
 cpsat:
   temps_max_secondes: 60    # Défaut: 300 - Limite temps pour tests rapides
-  niveau_log: 0             # Défaut: 1 - Plus de détails dans les logs
-  warm_start: true
+  warm_start: false
   warm_start_file: "handball"  # Solutions spécifiques au handball
+
+
+contraintes:
+  compaction_penalites_par_semaine: [0, 1, 2, 3, 0, 4, 5, 6, 7, 8]
   
+
+calendrier:
+  actif: true
+  date_debut: "2026-01-20"  # Date de début de saison (premier jour possible pour les matchs)
+  jour_match: "jeudi"  # Jour de la semaine où se déroulent les matchs
+  semaines_banalisees: [5]  # Liste des numéros de semaines banalisées (vacances, périodes sans match)
+
+
+# Configuration du sport
+# Utilise les préréglages du handball depuis sports_presets.yaml
+sport:
+  type: "handball"                # Charge automatiquement les paramètres du handball
+  # duree_match_minutes: 90       # Valeur par défaut pour le handball (depuis preset)

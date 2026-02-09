@@ -30,8 +30,9 @@ class MatchCardRenderer {
         if (match.is_external) classes.push('match-external');
         if (isDraggable && !match.is_fixed) classes.push('match-draggable');
         
-        // Genre - Add proper classes for color coding
-        const genre = match.equipe1_genre || match.equipe2_genre;
+        // Genre - Utiliser match.genre en priorité (déterminé par le serveur)
+        // Fallback sur equipe1_genre/equipe2_genre si match.genre n'est pas défini
+        const genre = match.genre || match.equipe1_genre || match.equipe2_genre;
         if (genre) {
             if (genre === 'M') {
                 classes.push('match-male', 'male');
@@ -69,7 +70,7 @@ class MatchCardRenderer {
         const html = `
             <div class="${classes.join(' ')}" 
                  data-match-id="${match.match_id}"
-                 data-category="${category}"
+                 data-category="${category.toLowerCase()}"
                  data-genre="${genre || ''}"
                  data-penalties="${match.penalties?.total || 0}"
                  ${isDraggable && !match.is_fixed ? 'draggable="true"' : ''}>
@@ -93,14 +94,16 @@ class MatchCardRenderer {
                             match.equipe1_nom, 
                             match.equipe1_num,
                             equipe1Data,
-                            match
+                            match,
+                            1
                         )}
                         <div class="match-vs" style="font-size: 0.625rem; font-weight: 900; margin: 0.3rem 0; opacity: 0.8; text-transform: uppercase; letter-spacing: 0.1em; color: rgba(255, 255, 255, 0.9); text-align: center; font-family: 'Roboto', sans-serif;">vs</div>
                         ${this.renderTeamCompact(
                             match.equipe2_nom, 
                             match.equipe2_num,
                             equipe2Data,
-                            match
+                            match,
+                            2
                         )}
                     </div>
                     
@@ -137,33 +140,87 @@ class MatchCardRenderer {
     /**
      * Rendu compact d'une équipe (sans institution, plus petit)
      */
-    renderTeamCompact(nom, num, equipeData, match) {
+    renderTeamCompact(nom, num, equipeData, match, teamIndex) {
         const displayName = this.shortenName(nom);
         const displayNum = num ? `#${num}` : '';
-        
-        // Horaires préférés - afficher SEULEMENT si l'horaire n'est PAS préféré
-        let prefTimeDisplay = '';
-        
-        if (equipeData && equipeData.horaires_preferes && equipeData.horaires_preferes.length > 0) {
-            const matchTime = match.horaire;
-            const preferredTime = equipeData.horaires_preferes[0]; // Premier horaire préféré
-            const hasPreferredTime = matchTime && matchTime.includes(preferredTime);
-            
-            if (!hasPreferredTime) {
-                // L'horaire n'est PAS préféré - afficher l'horaire préféré
-                prefTimeDisplay = `<span class="pref-time" style="font-size: 0.625rem; font-weight: 700; padding: 0.15rem 0.4rem; background: rgba(255, 223, 0, 0.25); border-radius: 4px; display: inline-flex; align-items: center; gap: 0.15rem; border: 1px solid rgba(255, 223, 0, 0.4); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2), 0 0 8px rgba(255, 223, 0, 0.3); font-family: 'Roboto Mono', monospace; letter-spacing: 0.03em;" title="Horaire préféré">⏰${preferredTime}</span>`;
-            }
-        }
+
+        const prefTimeDisplay = this.renderPreferredTimeBadge(equipeData, match);
+        const prefTimeSlot = prefTimeDisplay || '<span class="pref-time pref-time-placeholder" aria-hidden="true"></span>';
+        const {
+            scoreDisplay,
+            rowState,
+            scoreState
+        } = this.computeScoreState(match, teamIndex);
         
         return `
-            <div class="team-info-compact" style="display: flex; flex-direction: row; align-items: center; gap: 0.3rem; width: 100%;">
-                ${displayNum ? `<span class="team-num-compact" style="font-size: 0.65rem; font-weight: 800; background: rgba(255, 255, 255, 0.25); padding: 0.15rem 0.35rem; border-radius: 4px; letter-spacing: 0.03em; font-family: 'Roboto Mono', 'Courier New', monospace; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15); border: 1px solid rgba(255, 255, 255, 0.15);">${displayNum}</span>` : ''}
-                <div class="team-content" style="display: flex; flex-direction: column; gap: 0.15rem; flex: 1; min-width: 0;">
-                    <span class="team-name-compact" style="font-size: 0.75rem; font-weight: 700; line-height: 1.3; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3); letter-spacing: 0.02em; font-family: 'Inter', 'Segoe UI', -apple-system, sans-serif; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${displayName}</span>
-                    ${prefTimeDisplay}
+            <div class="team-info-compact">
+                <div class="team-row ${rowState}">
+                    ${displayNum ? `<span class="team-num-compact">${displayNum}</span>` : ''}
+                    <div class="team-info-body">
+                        <span class="team-name-compact" title="${nom}">${displayName}</span>
+                        <div class="pref-time-slot">${prefTimeSlot}</div>
+                    </div>
+                    <span class="team-score-chip ${scoreState}">${scoreDisplay}</span>
                 </div>
             </div>
         `;
+    }
+
+    renderPreferredTimeBadge(equipeData, match) {
+        if (!equipeData || !Array.isArray(equipeData.horaires_preferes) || equipeData.horaires_preferes.length === 0) {
+            return '';
+        }
+        const preferredTime = equipeData.horaires_preferes[0];
+        if (!preferredTime) {
+            return '';
+        }
+        const matchTime = match.horaire;
+        const matchesPreference = matchTime && matchTime.includes(preferredTime);
+        if (matchesPreference) {
+            return '';
+        }
+        return `<span class="pref-time" title="Horaire préféré">⏰ ${preferredTime}</span>`;
+    }
+
+    computeScoreState(match, teamIndex) {
+        const scoreData = match.score;
+        const scoreKey = teamIndex === 1 ? 'equipe1' : 'equipe2';
+        const otherKey = teamIndex === 1 ? 'equipe2' : 'equipe1';
+        const hasValue = (value) => value !== null && value !== undefined && value !== '' && !Number.isNaN(Number(value));
+        const hasScore = Boolean(
+            scoreData &&
+            scoreData.has_score &&
+            hasValue(scoreData[scoreKey]) &&
+            hasValue(scoreData[otherKey])
+        );
+        if (!hasScore) {
+            return {
+                scoreDisplay: '—',
+                rowState: '',
+                scoreState: 'pending'
+            };
+        }
+        const teamScore = Number(scoreData[scoreKey]);
+        const otherScore = Number(scoreData[otherKey]);
+        if (teamScore > otherScore) {
+            return {
+                scoreDisplay: teamScore,
+                rowState: 'team-row-win',
+                scoreState: 'win'
+            };
+        }
+        if (teamScore < otherScore) {
+            return {
+                scoreDisplay: teamScore,
+                rowState: 'team-row-loss',
+                scoreState: 'loss'
+            };
+        }
+        return {
+            scoreDisplay: teamScore,
+            rowState: 'team-row-tie',
+            scoreState: 'tie'
+        };
     }
     
     /**
@@ -239,13 +296,6 @@ class MatchCardRenderer {
             info.push(`<span class="info-poule" style="font-weight: 800; padding: 0.15rem 0.4rem; background: rgba(255, 255, 255, 0.3); border-radius: 4px; text-transform: uppercase; letter-spacing: 0.05em; font-family: 'Roboto', sans-serif; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15); border: 1px solid rgba(255, 255, 255, 0.2);">${match.poule}</span>`);
         }
         
-        // Score si disponible - vérifier tous les champs nécessaires
-        if (match.score && match.score.has_score && 
-            match.score.equipe1 !== null && match.score.equipe1 !== undefined &&
-            match.score.equipe2 !== null && match.score.equipe2 !== undefined) {
-            info.push(`<span class="info-score" style="font-weight: 900; padding: 0.2rem 0.5rem; background: rgba(255, 255, 255, 0.4); border-radius: 5px; letter-spacing: 0.08em; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25); font-family: 'Roboto Mono', monospace; font-size: 0.7rem; border: 1px solid rgba(255, 255, 255, 0.25);">${match.score.equipe1}-${match.score.equipe2}</span>`);
-        }
-        
         if (info.length === 0) return '';
         
         return `<div class="match-info-compact" style="display: flex; gap: 0.4rem; align-items: center; justify-content: center; margin-top: 0.4rem; padding-top: 0.4rem; border-top: 1px solid rgba(255, 255, 255, 0.3); font-size: 0.625rem;">${info.join(' ')}</div>`;
@@ -254,16 +304,67 @@ class MatchCardRenderer {
     /**
      * Affiche l'état d'une entente (planifiée ou non) avec l'état du score
      */
+    /**
+     * Vérifie si une entente est planifiée selon le nouveau système EntenteStatus
+     * @param {Object} match - Le match à vérifier
+     * @returns {boolean} true si scheduled ou played
+     */
+    _isEntentePlanned(match) {
+        if (!match.entente_status) return false;
+        const status = match.entente_status.toLowerCase();
+        return status === 'scheduled' || status === 'played';
+    }
+
+    /**
+     * Retourne le label français pour un état d'entente
+     * @param {string} status - L'état d'entente (valeur de l'enum)
+     * @returns {string} Label en français
+     */
+    _getEntenteStatusLabel(status) {
+        if (!status) return 'Statut inconnu';
+        const labels = {
+            'not_entente': 'Non entente',
+            'suggested': 'Entente suggérée',
+            'confirmed': 'Entente confirmée',
+            'scheduled': 'Entente planifiée',
+            'played': 'Entente jouée'
+        };
+        return labels[status.toLowerCase()] || status;
+    }
+
     renderEntenteStatus(match) {
         if (!match.is_entente) return '';
-        const planned = match.entente_status === 'planifiee';
+        const status = match.entente_status?.toLowerCase() || 'suggested';
+        const planned = this._isEntentePlanned(match);
         const hasScore = match.score && match.score.has_score &&
             match.score.equipe1 !== null && match.score.equipe1 !== undefined &&
             match.score.equipe2 !== null && match.score.equipe2 !== undefined;
-        const baseColor = planned ? 'rgba(46, 204, 113, 0.25)' : 'rgba(255, 159, 67, 0.25)';
-        const borderColor = planned ? 'rgba(46, 204, 113, 0.6)' : 'rgba(255, 159, 67, 0.6)';
-        const icon = planned ? '✅' : '🕒';
-        const label = planned ? 'Entente planifiée' : 'Entente à planifier';
+        
+        // Couleurs selon le statut
+        let baseColor, borderColor, icon;
+        switch (status) {
+            case 'played':
+                baseColor = 'rgba(39, 174, 96, 0.3)';
+                borderColor = 'rgba(39, 174, 96, 0.7)';
+                icon = '✅';
+                break;
+            case 'scheduled':
+                baseColor = 'rgba(46, 204, 113, 0.25)';
+                borderColor = 'rgba(46, 204, 113, 0.6)';
+                icon = '📅';
+                break;
+            case 'confirmed':
+                baseColor = 'rgba(52, 152, 219, 0.25)';
+                borderColor = 'rgba(52, 152, 219, 0.6)';
+                icon = '🤝';
+                break;
+            default: // suggested ou autre
+                baseColor = 'rgba(255, 159, 67, 0.25)';
+                borderColor = 'rgba(255, 159, 67, 0.6)';
+                icon = '🕒';
+                break;
+        }
+        const label = this._getEntenteStatusLabel(status);
         const scoreBlock = hasScore
             ? `<span style="font-weight: 800; font-family: 'Roboto Mono', monospace;">${match.score.equipe1} - ${match.score.equipe2}</span>`
             : '<span style="font-weight: 600; opacity: 0.8;">Score non renseigné</span>';
@@ -292,9 +393,14 @@ class MatchCardRenderer {
         }
         
         if (match.is_entente) {
-            const planned = match.entente_status === 'planifiee';
-            const title = planned ? 'Entente planifiée' : 'Entente à planifier';
-            const icon = planned ? '🤝✅' : '🤝⌛';
+            const status = match.entente_status?.toLowerCase() || 'suggested';
+            const statusLabels = {
+                'suggested': { title: 'Entente suggérée', icon: '🤝💡' },
+                'confirmed': { title: 'Entente confirmée', icon: '🤝✓' },
+                'scheduled': { title: 'Entente planifiée', icon: '🤝📅' },
+                'played': { title: 'Entente jouée', icon: '🤝✅' }
+            };
+            const { title, icon } = statusLabels[status] || { title: 'Entente', icon: '🤝⌛' };
             badges.push(`<span class="match-badge badge-entente" style="font-size: 0.7rem; padding: 0.15rem 0.3rem; border-radius: 4px; background: rgba(255, 255, 255, 0.25); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);" title="${title}">${icon}</span>`);
         }
         
@@ -356,10 +462,10 @@ class MatchCardRenderer {
             lines.push(`Championnat: ${match.championnat}`);
         }
         
-        // Genre
-        const genre = match.equipe1_genre || match.equipe2_genre;
+        // Genre - utiliser match.genre en priorité
+        const genre = match.genre || match.equipe1_genre || match.equipe2_genre;
         if (genre) {
-            lines.push(`Genre: ${genre === 'M' ? 'Masculin' : 'Féminin'}`);
+            lines.push(`Genre: ${genre === 'M' ? 'Masculin' : genre === 'F' ? 'Féminin' : 'Mixte'}`);
         }
         
         // Horaire et lieu
@@ -407,8 +513,8 @@ class MatchCardRenderer {
         if (match.is_fixed) lines.push('📌 Match fixé');
         if (match.is_external) lines.push('🔗 Match externe');
         if (match.is_entente) {
-            const planned = match.entente_status === 'planifiee';
-            lines.push(planned ? '🤝 Entente planifiée' : '🤝 Entente à planifier');
+            const label = this._getEntenteStatusLabel(match.entente_status);
+            lines.push(`🤝 ${label}`);
         }
         
         return lines.join('\n');
@@ -501,10 +607,13 @@ class MatchCardRenderer {
     }
     
     /**
-     * Construit le tooltip des pénalités
+     * Construit le tooltip des pénalités avec détail par équipe
      */
     buildPenaltyTooltip(penalties) {
         const parts = [];
+        
+        // Section globale
+        parts.push('=== PÉNALITÉS GLOBALES ===');
         
         if (penalties.horaire_prefere > 0) {
             parts.push(`⏰ Horaire préféré: ${penalties.horaire_prefere.toFixed(1)}`);
@@ -512,8 +621,12 @@ class MatchCardRenderer {
         if (penalties.gymnase_prefere > 0) {
             parts.push(`🏟️ Gymnase préféré: ${penalties.gymnase_prefere.toFixed(1)}`);
         }
-        if (penalties.niveau_gymnase > 0) {
-            parts.push(`📊 Niveau gymnase: ${penalties.niveau_gymnase.toFixed(1)}`);
+        if (penalties.niveau_gymnase !== 0 && penalties.niveau_gymnase !== undefined) {
+            const sign = penalties.niveau_gymnase > 0 ? '+' : '';
+            parts.push(`📊 Niveau gymnase: ${sign}${penalties.niveau_gymnase.toFixed(1)}`);
+        }
+        if (penalties.priorite_genre_gymnase > 0) {
+            parts.push(`⚥ Priorité genre gym: ${penalties.priorite_genre_gymnase.toFixed(1)}`);
         }
         if (penalties.espacement > 0) {
             parts.push(`📅 Espacement: ${penalties.espacement.toFixed(1)}`);
@@ -530,8 +643,32 @@ class MatchCardRenderer {
         if (penalties.contrainte_temporelle > 0) {
             parts.push(`⏱️ Contrainte temporelle: ${penalties.contrainte_temporelle.toFixed(1)}`);
         }
-        if (penalties.guidance_qualite > 0) {
-            parts.push(`⚠️ Guidance qualité: ${penalties.guidance_qualite.toFixed(1)}`);
+        
+        // Section détaillée par équipe si disponible
+        if (penalties.equipe1 && penalties.equipe2) {
+            parts.push('');
+            parts.push('=== DÉTAIL PAR ÉQUIPE ===');
+            
+            const eq1 = penalties.equipe1;
+            const eq2 = penalties.equipe2;
+            
+            // Horaire
+            if ((eq1.horaire || 0) > 0 || (eq2.horaire || 0) > 0) {
+                parts.push(`⏰ Horaire: Éq1=${(eq1.horaire || 0).toFixed(1)} | Éq2=${(eq2.horaire || 0).toFixed(1)}`);
+            }
+            
+            // Gymnase
+            if ((eq1.gymnase || 0) > 0 || (eq2.gymnase || 0) > 0) {
+                parts.push(`🏟️ Gymnase: Éq1=${(eq1.gymnase || 0).toFixed(1)} | Éq2=${(eq2.gymnase || 0).toFixed(1)}`);
+            }
+            
+            // Espacement
+            if ((eq1.espacement || 0) > 0 || (eq2.espacement || 0) > 0) {
+                parts.push(`📅 Espacement: Éq1=${(eq1.espacement || 0).toFixed(1)} | Éq2=${(eq2.espacement || 0).toFixed(1)}`);
+            }
+            
+            // Totaux par équipe
+            parts.push(`📊 Total: Éq1=${(eq1.total || 0).toFixed(1)} | Éq2=${(eq2.total || 0).toFixed(1)}`);
         }
         
         return parts.length > 0 ? parts.join('\n') : 'Aucune pénalité';

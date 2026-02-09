@@ -491,15 +491,7 @@ equilibrage_bonus_minimum: float               # Bonus plancher
 ENTENTES:
 ---------
 entente_actif: bool                            # Activer gestion ententes
-entente_penalite_non_planif: float            # Bonus réduit si non planifié
-entente_facteur_reduction: float              # Facteur réduction (ex: 0.1)
-
-QUALITÉ MATCHS (FILTRAGE):
---------------------------
-qualite_match_actif: bool                      # Activer filtrage qualité
-qualite_match_seuil: float                     # Pénalité max acceptable
-qualite_match_guidance_cpsat: bool             # Guider CP-SAT
-qualite_match_log_rejets: bool                 # Logs détaillés
+entente_facteur_reduction_bonus: float         # Facteur réduction multiplicatif (ex: 0.90)
 
 CONTRAINTES TEMPORELLES:
 ------------------------

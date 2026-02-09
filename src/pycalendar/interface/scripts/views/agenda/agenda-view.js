@@ -39,10 +39,11 @@ class AgendaView {
     }
 
     setFilters(filters) {
-        if (this._impl && typeof this._impl.updateFilters === 'function') {
-            this._impl.updateFilters(filters);
-        } else if (this._impl && typeof this._impl.setFilters === 'function') {
+        // Préférer setFilters (méthode standard) sur updateFilters
+        if (this._impl && typeof this._impl.setFilters === 'function') {
             this._impl.setFilters(filters);
+        } else if (this._impl && typeof this._impl.updateFilters === 'function') {
+            this._impl.updateFilters(filters);
         }
     }
 

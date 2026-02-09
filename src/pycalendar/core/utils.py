@@ -2,53 +2,100 @@
 # -*- coding: utf-8 -*-
 """
 Fonctions utilitaires pour PyCalendar.
+
+Ce module fournit des fonctions génériques pour parser les codes de poule,
+gérer les genres et manipuler les données d'équipe de manière compatible
+avec tous les sports supportés.
+
+Sports supportés (préfixes):
+- VB: Volleyball
+- HB: Handball
+- BB: Basketball
+- FB: Football
+- FS: Futsal
+- RG: Rugby
+- BD: Badminton
+- TT: Tennis de Table
 """
 
 import re
-from typing import Optional
+from typing import Optional, List, Tuple, Dict
+
+# Préfixes de sport connus (pour validation)
+SPORT_PREFIXES = ["VB", "HB", "BB", "FB", "FS", "RG", "BD", "TT"]
+
+# Pattern générique pour les codes de poule
+# Format: {SPORT}{GENRE}{NIVEAU}{POULE}
+# Exemples: VBFA1PA, HBMA2PB, BBMA3PC
+POOL_CODE_PATTERN = re.compile(
+    r'^([A-Z]{2})([FMX])([A-Z]?\d+)([P][A-Z])?$',
+    re.IGNORECASE
+)
 
 
 def extraire_genre_depuis_poule(nom_poule: str) -> str:
     """
     Extrait le genre depuis le code de la poule.
     
-    Format attendu: (sport)(genre)(niveau)(poule)
+    Fonctionne avec tous les sports supportés (VB, HB, BB, FB, FS, RG, BD, TT).
+    
+    Format attendu: {SPORT}{GENRE}{NIVEAU}{POULE}
     Exemples:
-    - HBFA1PA -> 'F' (Handball Féminin Accession niveau 1 Poule A)
-    - HBMA2PB -> 'M' (Handball Masculin Accession niveau 2 Poule B)
-    - VBA3PA  -> 'A' (Volley Ball  mixte/Accession niveau 3 Poule A)
+    - VBFA1PA -> 'F' (Volleyball Féminin A1 Poule A)
+    - HBMA2PB -> 'M' (Handball Masculin A2 Poule B)
+    - BBXA3PC -> 'X' (Basketball Mixte A3 Poule C)
     
     Args:
-        nom_poule: Le nom de la poule (ex: "HBFA1PA", "HBMA2PB")
+        nom_poule: Le nom de la poule (ex: "HBFA1PA", "VBMA2PB")
         
     Returns:
-        'M' pour masculin, 'F' pour féminin, ou '' si le genre ne peut pas être déterminé
+        'M' pour masculin, 'F' pour féminin, 'X' pour mixte,
+        ou '' si le genre ne peut pas être déterminé
     """
     if not nom_poule:
         return ''
     
     nom_poule = nom_poule.strip().upper()
     
-    # Pattern pour extraire le code: (2 lettres sport)(1 lettre genre)(1-2 caractères niveau/type)(1-2 caractères poule)
-    # Exemples: HB F A1PA, HB M A2PB, VB F 3PA
-    match = re.match(r'^[A-Z]{2}([FM]).*$', nom_poule)
+    # Pattern: 2 lettres sport + 1 lettre genre (F/M/X) + reste
+    match = re.match(r'^[A-Z]{2}([FMX]).*$', nom_poule)
     
     if match:
         genre_letter = match.group(1)
-        return genre_letter  # 'M' ou 'F'
+        return genre_letter  # 'M', 'F', ou 'X'
     
     # Si le pattern ne correspond pas, retourner une chaîne vide
     return ''
+
+
+def extraire_sport_depuis_poule(nom_poule: str) -> str:
+    """
+    Extrait le préfixe du sport depuis le code de la poule.
+    
+    Args:
+        nom_poule: Le nom de la poule (ex: "VBFA1PA", "HBMA2PB")
+        
+    Returns:
+        Préfixe du sport (ex: 'VB', 'HB') ou '' si non trouvé
+    """
+    if not nom_poule or len(nom_poule) < 2:
+        return ''
+    
+    prefix = nom_poule[:2].upper()
+    return prefix
 
 
 def parser_code_poule(nom_poule: str) -> dict:
     """
     Parse le code complet de la poule et retourne ses composants.
     
-    Format: (sport)(genre)(niveau/type)(poule)
+    Fonctionne avec tous les sports supportés.
+    
+    Format: {SPORT}{GENRE}{NIVEAU}{POULE}
     Exemples:
-    - HBFA1PA -> {'sport': 'HB', 'genre': 'F', 'niveau': 'A1', 'poule': 'PA'}
+    - VBFA1PA -> {'sport': 'VB', 'genre': 'F', 'niveau': 'A1', 'poule': 'PA'}
     - HBMA2PB -> {'sport': 'HB', 'genre': 'M', 'niveau': 'A2', 'poule': 'PB'}
+    - BBMA3   -> {'sport': 'BB', 'genre': 'M', 'niveau': 'A3', 'poule': ''}
     
     Args:
         nom_poule: Le nom de la poule
@@ -56,25 +103,36 @@ def parser_code_poule(nom_poule: str) -> dict:
     Returns:
         Dictionnaire avec les composants: sport, genre, niveau, poule
     """
+    default_result = {'sport': '', 'genre': '', 'niveau': '', 'poule': ''}
+    
     if not nom_poule:
-        return {'sport': '', 'genre': '', 'niveau': '', 'poule': ''}
+        return default_result
     
     nom_poule = nom_poule.strip().upper()
     
-    # Pattern général: 2 lettres sport + 1 lettre genre + reste
-    match = re.match(r'^([A-Z]{2})([FM])([A-Z0-9]+)$', nom_poule)
+    # Pattern complet avec groupe de poule optionnel
+    match = POOL_CODE_PATTERN.match(nom_poule)
     
+    if match:
+        return {
+            'sport': match.group(1).upper(),
+            'genre': match.group(2).upper(),
+            'niveau': match.group(3).upper(),
+            'poule': (match.group(4) or '').upper()
+        }
+    
+    # Pattern alternatif plus souple: 2 lettres + 1 lettre genre + reste
+    match = re.match(r'^([A-Z]{2})([FMX])(.+)$', nom_poule)
     if match:
         sport = match.group(1)
         genre = match.group(2)
         reste = match.group(3)
         
         # Extraire niveau et poule du reste
-        # Généralement: A1PA -> niveau=A1, poule=PA
-        match_reste = re.match(r'^([A-Z]?\d+)([P][A-Z])$', reste)
+        match_reste = re.match(r'^([A-Z]?\d+)([P][A-Z])?$', reste)
         if match_reste:
             niveau = match_reste.group(1)
-            poule = match_reste.group(2)
+            poule = match_reste.group(2) or ''
         else:
             niveau = reste
             poule = ''
@@ -86,8 +144,26 @@ def parser_code_poule(nom_poule: str) -> dict:
             'poule': poule
         }
     
-    # Si le pattern ne correspond pas, retourner des valeurs vides
-    return {'sport': '', 'genre': '', 'niveau': '', 'poule': ''}
+    return default_result
+
+
+def construire_code_poule(sport: str, genre: str, niveau: str, poule: str = "") -> str:
+    """
+    Construit un code de poule à partir de ses composants.
+    
+    Args:
+        sport: Préfixe du sport (ex: 'VB', 'HB')
+        genre: Genre ('M', 'F', 'X')
+        niveau: Niveau (ex: 'A1', 'A2')
+        poule: Identifiant de la poule (ex: 'PA', 'PB') - optionnel
+        
+    Returns:
+        Code de poule (ex: 'VBFA1PA')
+    """
+    code = f"{sport.upper()}{genre.upper()}{niveau.upper()}"
+    if poule:
+        code += poule.upper()
+    return code
 
 
 def parser_nom_avec_genre(nom_avec_genre: str) -> tuple[str, str]:
@@ -232,6 +308,37 @@ def get_nom_genre_complet(genre_code: str) -> str:
         'F': 'Féminin'
     }
     return mapping.get(genre_code.upper(), '')
+
+
+def extraire_niveau_depuis_poule(poule: str) -> str:
+    """
+    Extrait le niveau (ex: 'A1', 'A2') depuis le nom de la poule.
+    
+    Format attendu: (sport)(genre)(niveau)(poule)
+    Exemples:
+    - VBFA1PA -> 'A1'
+    - HBMA2PB -> 'A2'
+    - VBFA3PC -> 'A3'
+    - VBMA4PA -> 'A4'
+    
+    Args:
+        poule: Le nom de la poule (ex: "VBFA1PA", "HBMA2PB")
+        
+    Returns:
+        Niveau au format chaîne ('A1', 'A2', etc.) ou '' si non trouvé
+    """
+    if not poule:
+        return ''
+    
+    poule = poule.strip().upper()
+    
+    # Pattern pour extraire le niveau: cherche A suivi d'un chiffre
+    match = re.search(r'(A\d+)', poule)
+    
+    if match:
+        return match.group(1)
+    
+    return ''
 
 
 def extraire_niveau_match(poule: str) -> Optional[int]:

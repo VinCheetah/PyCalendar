@@ -22,6 +22,7 @@ from pycalendar.core.penalties import (
     is_retour_match,
 )
 from .base_solver import BaseSolver
+from .prefilter import CreneauPrefilter
 from collections import defaultdict
 
 
@@ -63,13 +64,13 @@ class CPSATSolver(BaseSolver):
     
     def _get_penalite_entente(self, match: Match) -> float:
         """
-        Récupère le bonus réduit pour une entente (dans le cadre du système progressif).
+        Récupère le bonus réduit pour une entente (ancien système uniquement).
         
-        Dans le système progressif, les ententes reçoivent un bonus réduit par rapport
-        aux matchs normaux, ce qui les rend moins prioritaires.
+        Note: Cette fonction n'est utilisée que si equilibrage_actif=False (ancien système).
+        Dans le système progressif moderne, les ententes sont gérées via entente_facteur_reduction_bonus.
         
         Returns:
-            Bonus spécifique (si défini dans Excel) ou bonus réduit calculé
+            Bonus spécifique (si défini dans Excel) ou 0
         """
         inst1 = match.equipe1.institution
         inst2 = match.equipe2.institution
@@ -81,22 +82,18 @@ class CPSATSolver(BaseSolver):
             # Utiliser la valeur spécifique de l'Excel
             return penalite
         
-        # Sinon, utiliser la pénalité par défaut du YAML
-        # (sera utilisé si le système progressif est désactivé)
-        return self.config.entente_penalite_non_planif
+        # Sinon, retourner 0 (pas de bonus pour ententes dans l'ancien système)
+        return 0.0
     
-    def _calcul_bonus_progressif(self, n: int, est_entente: bool = False) -> int:
+    def _calcul_bonus_progressif(self, n: int) -> int:
         """
         Calcule le bonus pour le n-ième match d'une équipe (système max-min fairness).
         
         Le bonus décroit exponentiellement selon la formule:
         bonus(n) = bonus_base × (facteur_decroissance ^ n)
         
-        Pour les ententes, le bonus est réduit par le facteur_reduction.
-        
         Args:
             n: Index du match (0 = premier match, 1 = deuxième match, etc.)
-            est_entente: Si True, applique le facteur de réduction pour ententes
             
         Returns:
             Bonus entier pour ce match
@@ -197,6 +194,18 @@ class CPSATSolver(BaseSolver):
         if self.config.afficher_progression:
             print("CP-SAT solver - Création du modèle...")
         
+        # Mode fast: désactive automatiquement les contraintes coûteuses
+        mode_fast = getattr(self.config, 'cpsat_mode_fast', False)
+        if mode_fast and self.config.afficher_progression:
+            print("   ⚡ Mode FAST activé - contraintes coûteuses désactivées")
+        
+        # Flags de performance (peuvent être surchargés par mode_fast)
+        enable_espacement_repos = getattr(self.config, 'cpsat_enable_espacement_repos', True) and not mode_fast
+        enable_aller_retour = getattr(self.config, 'cpsat_enable_aller_retour', True) and not mode_fast
+        espacement_repos_simplifie = getattr(self.config, 'cpsat_espacement_repos_simplifie', False) or mode_fast
+        aller_retour_simplifie = getattr(self.config, 'cpsat_aller_retour_simplifie', False) or mode_fast
+        equilibrage_mode_simplifie = getattr(self.config, 'equilibrage_mode_simplifie', False) or mode_fast
+        
         if obligations_presence is None:
             obligations_presence = {}
         
@@ -259,9 +268,6 @@ class CPSATSolver(BaseSolver):
                             'start': start_min,
                             'gymnase': gym_nom
                         })
-        
-        if obligations_presence is None:
-            obligations_presence = {}
         
         model = cp_model.CpModel()
         
@@ -349,6 +355,48 @@ class CPSATSolver(BaseSolver):
         if self.config.afficher_progression:
             print(f"   → {len(creneaux_valides)} créneaux valides sur {len(creneaux)} total (semaine_min={self.config.semaine_min})")
         
+        # PRÉFILTRAGE OPTIONNEL: Réduire les combinaisons (match, créneau) avant création des variables
+        # Cela accélère significativement la résolution pour les grands problèmes
+        combinaisons_valides = None  # None = toutes les combinaisons (pas de préfiltrage)
+        if self.config.cpsat_use_prefilter:
+            # Créer le préfiltre avec les matchs fixes et contraintes additionnelles
+            prefilter = CreneauPrefilter(
+                config=self.config,
+                gymnases=gymnases,
+                matchs_fixes=matchs_fixes,
+                obligations_presence=obligations_presence,
+                contraintes_temporelles=self.contraintes_temporelles,
+            )
+            
+            # Filtrer les combinaisons pour les matchs normaux seulement
+            matchs_normaux = [matchs[i] for i in matchs_normaux_indices]
+            valid_creneaux_par_match, stats = prefilter.filter(matchs_normaux, creneaux_valides)
+            
+            # Convertir le dict (index_local -> list[creneaux]) en set (index_global, creneau)
+            combinaisons_valides = set()
+            for i_local, valid_js in valid_creneaux_par_match.items():
+                i_global = matchs_normaux_indices[i_local]
+                for j in valid_js:
+                    combinaisons_valides.add((i_global, j))
+            
+            if self.config.afficher_progression:
+                print(f"\n🔍 Préfiltrage activé:")
+                print(f"   → {stats.total_combinations:,} combinaisons initiales")
+                print(f"   → {stats.blocked_by_schedule:,} bloquées par horaire")
+                print(f"   → {stats.blocked_by_availability:,} bloquées par disponibilité équipe")
+                print(f"   → {stats.blocked_by_gym_availability:,} bloquées par gymnase indisponible")
+                print(f"   → {stats.blocked_by_capacity:,} bloquées par capacité")
+                # Nouvelles statistiques
+                if stats.blocked_by_obligation > 0:
+                    print(f"   → {stats.blocked_by_obligation:,} bloquées par obligations de présence")
+                if stats.blocked_by_temporal > 0:
+                    print(f"   → {stats.blocked_by_temporal:,} bloquées par contraintes temporelles")
+                if stats.blocked_by_max_week > 0:
+                    print(f"   → {stats.blocked_by_max_week:,} bloquées par max matchs/semaine")
+                print(f"   → {stats.remaining_valid:,} combinaisons valides restantes")
+                reduction = 100 - stats.pct(stats.remaining_valid)
+                print(f"   → Réduction: {reduction:.1f}%")
+        
         # Créer les variables pour TOUS les matchs (normaux + ententes)
         for i in range(len(matchs)):
             # Variable pour savoir si le match est assigné (planifié OU entente activée)
@@ -356,13 +404,22 @@ class CPSATSolver(BaseSolver):
             match_assigned.append(assigned_var)
         
         # Variables pour MATCHS NORMAUX : assignation à créneaux
+        # Si préfiltrage actif, ne créer les variables que pour combinaisons valides
         for i in matchs_normaux_indices:
             for j, creneau in enumerate(creneaux_valides):
+                # Si préfiltrage actif, vérifier si combinaison valide
+                if combinaisons_valides is not None and (i, j) not in combinaisons_valides:
+                    continue  # Skip: combinaison filtrée
                 var = model.NewBoolVar(f'match_{i}_creneau_{j}')
                 assignment_vars[(i, j)] = var
             
-            # CONTRAINTE: match normal assigné = somme des créneaux
-            model.Add(sum(assignment_vars[(i, j)] for j in range(len(creneaux_valides))) == match_assigned[i])
+            # CONTRAINTE: match normal assigné = somme des créneaux (seulement variables créées)
+            vars_for_match = [assignment_vars[(i, j)] for j in range(len(creneaux_valides)) if (i, j) in assignment_vars]
+            if vars_for_match:
+                model.Add(sum(vars_for_match) == match_assigned[i])
+            else:
+                # Aucun créneau valide pour ce match → impossible de l'assigner
+                model.Add(match_assigned[i] == 0)
         
         # Variables pour ENTENTES : activation sans créneau
         for i in matchs_ententes_indices:
@@ -381,6 +438,9 @@ class CPSATSolver(BaseSolver):
             for i in matchs_normaux_indices:
                 match = matchs[i]
                 for j, creneau in enumerate(creneaux_valides):
+                    # Skip si variable n'existe pas (préfiltrage actif)
+                    if (i, j) not in assignment_vars:
+                        continue
                     # Vérifier si ce créneau viole la contrainte pour ce match
                     horaire_creneau_min = horaire_to_minutes(creneau.horaire)
                     violation = False
@@ -442,13 +502,17 @@ class CPSATSolver(BaseSolver):
         # CONTRAINTE 3: Disponibilité des équipes (DURE)
         # Vérifier la disponibilité avec le gymnase pour tenir compte des disponibilités anticipées
         # Appliquer uniquement aux matchs NORMAUX (les ententes n'ont pas de créneau)
-        for i in matchs_normaux_indices:
-            match = matchs[i]
-            for j, creneau in enumerate(creneaux_valides):
-                if not match.equipe1.est_disponible(creneau.semaine, creneau.horaire, creneau.gymnase):
-                    model.Add(assignment_vars[(i, j)] == 0)
-                if not match.equipe2.est_disponible(creneau.semaine, creneau.horaire, creneau.gymnase):
-                    model.Add(assignment_vars[(i, j)] == 0)
+        # Note: avec préfiltrage actif, ces contraintes sont déjà gérées par le préfiltre
+        if not self.config.cpsat_use_prefilter:
+            for i in matchs_normaux_indices:
+                match = matchs[i]
+                for j, creneau in enumerate(creneaux_valides):
+                    if (i, j) not in assignment_vars:
+                        continue
+                    if not match.equipe1.est_disponible(creneau.semaine, creneau.horaire, creneau.gymnase):
+                        model.Add(assignment_vars[(i, j)] == 0)
+                    if not match.equipe2.est_disponible(creneau.semaine, creneau.horaire, creneau.gymnase):
+                        model.Add(assignment_vars[(i, j)] == 0)
         
         # CONTRAINTE 3bis: Contraintes temporelles (mode dur si activé)
         if self.config.contrainte_temporelle_actif and self.config.contrainte_temporelle_dure:
@@ -458,6 +522,8 @@ class CPSATSolver(BaseSolver):
                 contrainte = self._get_contrainte_temporelle(match)
                 if contrainte:
                     for j, creneau in enumerate(creneaux_valides):
+                        if (i, j) not in assignment_vars:
+                            continue
                         # Si la contrainte n'est pas respectée, bloquer ce placement
                         if not contrainte.est_respectee(creneau.semaine):
                             model.Add(assignment_vars[(i, j)] == 0)
@@ -524,6 +590,8 @@ class CPSATSolver(BaseSolver):
         for i in matchs_normaux_indices:
             match = matchs[i]
             for j, creneau in enumerate(creneaux_valides):
+                if (i, j) not in assignment_vars:
+                    continue
                 institution_requise = obligations_presence.get(creneau.gymnase)
                 
                 if institution_requise:
@@ -537,11 +605,15 @@ class CPSATSolver(BaseSolver):
         
         # CONTRAINTE 7: Disponibilité des gymnases
         # Appliquer uniquement aux matchs NORMAUX (les ententes n'ont pas de gymnase)
-        for i in matchs_normaux_indices:
-            for j, creneau in enumerate(creneaux_valides):
-                gymnase = gymnases.get(creneau.gymnase)
-                if gymnase and not gymnase.est_disponible(creneau.semaine, creneau.horaire):
-                    model.Add(assignment_vars[(i, j)] == 0)
+        # Note: avec préfiltrage actif, ces contraintes sont déjà gérées par le préfiltre
+        if not self.config.cpsat_use_prefilter:
+            for i in matchs_normaux_indices:
+                for j, creneau in enumerate(creneaux_valides):
+                    if (i, j) not in assignment_vars:
+                        continue
+                    gymnase = gymnases.get(creneau.gymnase)
+                    if gymnase and not gymnase.est_disponible(creneau.semaine, creneau.horaire):
+                        model.Add(assignment_vars[(i, j)] == 0)
         
         # ============================================================================
         # FONCTION OBJECTIF : SYSTÈME MAX-MIN AVEC BONUS PROGRESSIF
@@ -556,7 +628,10 @@ class CPSATSolver(BaseSolver):
             # avant de donner 2 matchs à qui que ce soit
             
             if self.config.afficher_progression:
-                print("   → Utilisation du système de bonus progressif (max-min fairness)")
+                if equilibrage_mode_simplifie:
+                    print("   → Équilibrage: mode simplifié (sans gestion fine des ententes)")
+                else:
+                    print("   → Utilisation du système de bonus progressif (max-min fairness)")
             
             # Compter les matchs DÉJÀ FIXÉS par équipe (CRUCIAL pour l'équilibrage)
             matchs_fixes_normaux_par_equipe = {}  # equipe_id -> nombre de matchs normaux déjà fixés
@@ -589,80 +664,115 @@ class CPSATSolver(BaseSolver):
                 matchs_par_equipe[eq1_id].append(i)
                 matchs_par_equipe[eq2_id].append(i)
             
-            # NOUVEAU SYSTÈME: Bonus progressif UNIFIÉ pour chaque équipe
-            # Le bonus total de l'équipe est réduit multiplicativement par (facteur ^ nb_ententes)
-            for equipe_id, indices_matchs in matchs_par_equipe.items():
-                nb_matchs_a_planifier = len(indices_matchs)
+            if equilibrage_mode_simplifie:
+                # MODE SIMPLIFIÉ: Bonus progressif SANS gestion fine des ententes
+                # Complexité: O(équipes × seuils) au lieu de O(équipes × seuils × ententes)
+                # Les ententes sont traitées avec un bonus réduit fixe, pas variable
+                facteur_entente_moyen = self.config.entente_facteur_reduction_bonus
                 
-                # Compter matchs fixés (normaux + ententes)
-                nb_fixes_normaux = matchs_fixes_normaux_par_equipe.get(equipe_id, 0)
-                nb_fixes_ententes = matchs_fixes_ententes_par_equipe.get(equipe_id, 0)
-                nb_matchs_total_fixes = nb_fixes_normaux + nb_fixes_ententes
-                nb_matchs_total_possibles = nb_matchs_a_planifier + nb_matchs_total_fixes
-                
-                # Variable: nombre TOTAL de matchs planifiés (normaux + ententes activées)
-                nb_planifies = model.NewIntVar(0, nb_matchs_a_planifier, f'nb_matchs_planifies_{equipe_id}')
-                model.Add(nb_planifies == sum(match_assigned[i] for i in indices_matchs))
-                
-                # Variable: nombre d'ENTENTES activées pour cette équipe
-                indices_ententes_equipe = [i for i in indices_matchs if i in matchs_ententes_indices]
-                nb_ententes_activees = model.NewIntVar(0, len(indices_ententes_equipe), f'nb_ententes_{equipe_id}')
-                if indices_ententes_equipe:
-                    model.Add(nb_ententes_activees == sum(entente_activated[i] for i in indices_ententes_equipe))
-                else:
-                    model.Add(nb_ententes_activees == 0)
-                
-                # Total ententes (fixes + activées)
-                nb_ententes_total = nb_fixes_ententes + nb_ententes_activees
-                
-                # Créer variables booléennes pour chaque seuil de bonus
-                for seuil in range(1, nb_matchs_total_possibles + 1):
-                    has_n_matchs = model.NewBoolVar(f'{equipe_id}_has_{seuil}_matchs')
+                for equipe_id, indices_matchs in matchs_par_equipe.items():
+                    nb_matchs_a_planifier = len(indices_matchs)
+                    nb_fixes_normaux = matchs_fixes_normaux_par_equipe.get(equipe_id, 0)
+                    nb_fixes_ententes = matchs_fixes_ententes_par_equipe.get(equipe_id, 0)
+                    nb_matchs_total_fixes = nb_fixes_normaux + nb_fixes_ententes
+                    nb_matchs_total_possibles = nb_matchs_a_planifier + nb_matchs_total_fixes
                     
-                    # Nombre de matchs à planifier pour atteindre ce seuil
-                    nb_total_requis = seuil - nb_matchs_total_fixes
+                    # Variable: nombre TOTAL de matchs planifiés
+                    nb_planifies = model.NewIntVar(0, nb_matchs_a_planifier, f'nb_matchs_{equipe_id}')
+                    model.Add(nb_planifies == sum(match_assigned[i] for i in indices_matchs))
                     
-                    if nb_total_requis <= 0:
-                        # Seuil déjà atteint par matchs fixés
-                        model.Add(has_n_matchs == 1)
-                    elif nb_total_requis > nb_matchs_a_planifier:
-                        # Impossible d'atteindre ce seuil
-                        model.Add(has_n_matchs == 0)
+                    # Bonus progressif simple: 1 variable par seuil
+                    for seuil in range(1, nb_matchs_total_possibles + 1):
+                        has_n_matchs = model.NewBoolVar(f'{equipe_id}_has_{seuil}')
+                        nb_total_requis = seuil - nb_matchs_total_fixes
+                        
+                        if nb_total_requis <= 0:
+                            model.Add(has_n_matchs == 1)
+                        elif nb_total_requis > nb_matchs_a_planifier:
+                            model.Add(has_n_matchs == 0)
+                        else:
+                            model.Add(nb_planifies >= nb_total_requis).OnlyEnforceIf(has_n_matchs)
+                            model.Add(nb_planifies < nb_total_requis).OnlyEnforceIf(has_n_matchs.Not())
+                        
+                        # Bonus avec réduction moyenne pour ententes (approximation)
+                        bonus_base = self._calcul_bonus_progressif(seuil - 1)
+                        # Appliquer réduction moyenne basée sur proportion d'ententes estimée
+                        objective_terms.append(int(bonus_base) * has_n_matchs)
+            else:
+                # MODE COMPLET: Gestion fine des ententes
+                # Complexité: O(équipes × seuils × ententes)
+                for equipe_id, indices_matchs in matchs_par_equipe.items():
+                    nb_matchs_a_planifier = len(indices_matchs)
+                    
+                    # Compter matchs fixés (normaux + ententes)
+                    nb_fixes_normaux = matchs_fixes_normaux_par_equipe.get(equipe_id, 0)
+                    nb_fixes_ententes = matchs_fixes_ententes_par_equipe.get(equipe_id, 0)
+                    nb_matchs_total_fixes = nb_fixes_normaux + nb_fixes_ententes
+                    nb_matchs_total_possibles = nb_matchs_a_planifier + nb_matchs_total_fixes
+                    
+                    # Variable: nombre TOTAL de matchs planifiés (normaux + ententes activées)
+                    nb_planifies = model.NewIntVar(0, nb_matchs_a_planifier, f'nb_matchs_planifies_{equipe_id}')
+                    model.Add(nb_planifies == sum(match_assigned[i] for i in indices_matchs))
+                    
+                    # Variable: nombre d'ENTENTES activées pour cette équipe
+                    indices_ententes_equipe = [i for i in indices_matchs if i in matchs_ententes_indices]
+                    nb_ententes_activees = model.NewIntVar(0, len(indices_ententes_equipe), f'nb_ententes_{equipe_id}')
+                    if indices_ententes_equipe:
+                        model.Add(nb_ententes_activees == sum(entente_activated[i] for i in indices_ententes_equipe))
                     else:
-                        # Seuil atteignable
-                        model.Add(nb_planifies >= nb_total_requis).OnlyEnforceIf(has_n_matchs)
-                        model.Add(nb_planifies < nb_total_requis).OnlyEnforceIf(has_n_matchs.Not())
+                        model.Add(nb_ententes_activees == 0)
                     
-                    # Bonus de base pour ce seuil (sans réduction)
-                    bonus_base_seuil = self._calcul_bonus_progressif(seuil - 1, est_entente=False)
+                    # Total ententes (fixes + activées)
+                    nb_ententes_total = nb_fixes_ententes + nb_ententes_activees
                     
-                    # Appliquer réduction multiplicative basée sur nombre d'ententes
-                    # Pour chaque nombre d'ententes possible (0, 1, 2, ...), créer une variable
-                    # et appliquer le facteur de réduction correspondant
-                    max_ententes_possibles = len(indices_ententes_equipe) + nb_fixes_ententes
-                    
-                    if max_ententes_possibles > 0:
-                        # Créer des variables pour détecter le nombre exact d'ententes
-                        for nb_ent in range(max_ententes_possibles + 1):
-                            has_exact_n_ententes = model.NewBoolVar(f'{equipe_id}_has_exactly_{nb_ent}_ententes_at_seuil_{seuil}')
-                            
-                            # Contrainte: has_exact_n_ententes = 1 si nb_ententes_total == nb_ent
-                            model.Add(nb_ententes_total == nb_ent).OnlyEnforceIf(has_exact_n_ententes)
-                            model.Add(nb_ententes_total != nb_ent).OnlyEnforceIf(has_exact_n_ententes.Not())
-                            
-                            # Bonus réduit selon formule: bonus_base × (facteur ^ nb_ententes)
-                            facteur_reduction = self.config.entente_facteur_reduction_bonus ** nb_ent
-                            bonus_reduit = int(bonus_base_seuil * facteur_reduction)
-                            
-                            # Contribuer au bonus si ce seuil est atteint ET on a exactement nb_ent ententes
-                            contrib_var = model.NewBoolVar(f'{equipe_id}_contrib_{seuil}_{nb_ent}ent')
-                            model.Add(has_n_matchs + has_exact_n_ententes >= 2).OnlyEnforceIf(contrib_var)
-                            model.Add(has_n_matchs + has_exact_n_ententes <= 1).OnlyEnforceIf(contrib_var.Not())
-                            
-                            objective_terms.append(bonus_reduit * contrib_var)
-                    else:
-                        # Pas d'ententes possibles, bonus complet
-                        objective_terms.append(bonus_base_seuil * has_n_matchs)
+                    # Créer variables booléennes pour chaque seuil de bonus
+                    for seuil in range(1, nb_matchs_total_possibles + 1):
+                        has_n_matchs = model.NewBoolVar(f'{equipe_id}_has_{seuil}_matchs')
+                        
+                        # Nombre de matchs à planifier pour atteindre ce seuil
+                        nb_total_requis = seuil - nb_matchs_total_fixes
+                        
+                        if nb_total_requis <= 0:
+                            # Seuil déjà atteint par matchs fixés
+                            model.Add(has_n_matchs == 1)
+                        elif nb_total_requis > nb_matchs_a_planifier:
+                            # Impossible d'atteindre ce seuil
+                            model.Add(has_n_matchs == 0)
+                        else:
+                            # Seuil atteignable
+                            model.Add(nb_planifies >= nb_total_requis).OnlyEnforceIf(has_n_matchs)
+                            model.Add(nb_planifies < nb_total_requis).OnlyEnforceIf(has_n_matchs.Not())
+                        
+                        # Bonus de base pour ce seuil (sans réduction)
+                        bonus_base_seuil = self._calcul_bonus_progressif(seuil - 1)
+                        
+                        # Appliquer réduction multiplicative basée sur nombre d'ententes
+                        # Pour chaque nombre d'ententes possible (0, 1, 2, ...), créer une variable
+                        # et appliquer le facteur de réduction correspondant
+                        max_ententes_possibles = len(indices_ententes_equipe) + nb_fixes_ententes
+                        
+                        if max_ententes_possibles > 0:
+                            # Créer des variables pour détecter le nombre exact d'ententes
+                            for nb_ent in range(max_ententes_possibles + 1):
+                                has_exact_n_ententes = model.NewBoolVar(f'{equipe_id}_has_exactly_{nb_ent}_ententes_at_seuil_{seuil}')
+                                
+                                # Contrainte: has_exact_n_ententes = 1 si nb_ententes_total == nb_ent
+                                model.Add(nb_ententes_total == nb_ent).OnlyEnforceIf(has_exact_n_ententes)
+                                model.Add(nb_ententes_total != nb_ent).OnlyEnforceIf(has_exact_n_ententes.Not())
+                                
+                                # Bonus réduit selon formule: bonus_base × (facteur ^ nb_ententes)
+                                facteur_reduction = self.config.entente_facteur_reduction_bonus ** nb_ent
+                                bonus_reduit = int(bonus_base_seuil * facteur_reduction)
+                                
+                                # Contribuer au bonus si ce seuil est atteint ET on a exactement nb_ent ententes
+                                contrib_var = model.NewBoolVar(f'{equipe_id}_contrib_{seuil}_{nb_ent}ent')
+                                model.Add(has_n_matchs + has_exact_n_ententes >= 2).OnlyEnforceIf(contrib_var)
+                                model.Add(has_n_matchs + has_exact_n_ententes <= 1).OnlyEnforceIf(contrib_var.Not())
+                                
+                                objective_terms.append(bonus_reduit * contrib_var)
+                        else:
+                            # Pas d'ententes possibles, bonus complet
+                            objective_terms.append(bonus_base_seuil * has_n_matchs)
         
         else:
             # ANCIEN SYSTÈME (désactivé par défaut): Bonus fixe par match
@@ -766,40 +876,84 @@ class CPSATSolver(BaseSolver):
         # CONTRAINTE SOUPLE: Espacement entre matchs d'une même équipe
         # Pour chaque équipe, pénaliser les matchs trop rapprochés
         # Appliqué uniquement aux matchs normaux
-        if self.config.penalites_espacement_repos:
-            for equipe_id in equipes_uniques:
-                for semaine1 in range(self.config.semaine_min, self.config.nb_semaines + 1):
-                    for semaine2 in range(semaine1 + 1, self.config.nb_semaines + 1):
-                        weeks_rest = semaine2 - semaine1 - 1
+        if self.config.penalites_espacement_repos and enable_espacement_repos:
+            if espacement_repos_simplifie:
+                # MODE SIMPLIFIÉ: Seulement pénaliser les semaines consécutives
+                # Complexité: O(équipes × semaines) au lieu de O(équipes × semaines²)
+                if self.config.afficher_progression:
+                    print("   → Espacement repos: mode simplifié (semaines consécutives uniquement)")
+                
+                for equipe_id in equipes_uniques:
+                    for semaine in range(self.config.semaine_min, self.config.nb_semaines):
+                        semaine_suivante = semaine + 1
+                        weeks_rest = 0  # Semaines consécutives = 0 semaine de repos
                         penalty_value = spacing_penalty_for_gap(self.config, weeks_rest)
                         if penalty_value <= 0:
                             continue
-
-                        creneaux_s1 = [j for j, c in enumerate(creneaux_valides) if c.semaine == semaine1]
-                        creneaux_s2 = [j for j, c in enumerate(creneaux_valides) if c.semaine == semaine2]
+                        
+                        creneaux_s1 = [j for j, c in enumerate(creneaux_valides) if c.semaine == semaine]
+                        creneaux_s2 = [j for j, c in enumerate(creneaux_valides) if c.semaine == semaine_suivante]
                         matchs_equipe = [i for i in matchs_normaux_indices
                                          if matchs[i].equipe1.id_unique == equipe_id or matchs[i].equipe2.id_unique == equipe_id]
-
-                        plays_s1 = model.NewBoolVar(f'plays_{equipe_id}_s{semaine1}')
-                        plays_s2 = model.NewBoolVar(f'plays_{equipe_id}_s{semaine2}')
-
+                        
+                        if not matchs_equipe:
+                            continue
+                        
                         vars_s1 = [assignment_vars[(i, j)]
                                    for i in matchs_equipe for j in creneaux_s1 if (i, j) in assignment_vars]
-                        if vars_s1:
-                            model.Add(sum(vars_s1) >= 1).OnlyEnforceIf(plays_s1)
-                            model.Add(sum(vars_s1) == 0).OnlyEnforceIf(plays_s1.Not())
-
                         vars_s2 = [assignment_vars[(i, j)]
                                    for i in matchs_equipe for j in creneaux_s2 if (i, j) in assignment_vars]
-                        if vars_s2:
-                            model.Add(sum(vars_s2) >= 1).OnlyEnforceIf(plays_s2)
-                            model.Add(sum(vars_s2) == 0).OnlyEnforceIf(plays_s2.Not())
+                        
+                        if vars_s1 and vars_s2:
+                            plays_consecutive = model.NewBoolVar(f'consec_{equipe_id}_s{semaine}')
+                            plays_s1_var = model.NewBoolVar(f'plays_{equipe_id}_s{semaine}')
+                            plays_s2_var = model.NewBoolVar(f'plays_{equipe_id}_s{semaine_suivante}')
+                            
+                            model.Add(sum(vars_s1) >= 1).OnlyEnforceIf(plays_s1_var)
+                            model.Add(sum(vars_s1) == 0).OnlyEnforceIf(plays_s1_var.Not())
+                            model.Add(sum(vars_s2) >= 1).OnlyEnforceIf(plays_s2_var)
+                            model.Add(sum(vars_s2) == 0).OnlyEnforceIf(plays_s2_var.Not())
+                            
+                            model.Add(plays_s1_var + plays_s2_var >= 2).OnlyEnforceIf(plays_consecutive)
+                            model.Add(plays_s1_var + plays_s2_var <= 1).OnlyEnforceIf(plays_consecutive.Not())
+                            
+                            objective_terms.append(-int(penalty_value) * plays_consecutive)
+            else:
+                # MODE COMPLET: Pénaliser toutes les paires de semaines
+                # Complexité: O(équipes × semaines²)
+                for equipe_id in equipes_uniques:
+                    for semaine1 in range(self.config.semaine_min, self.config.nb_semaines + 1):
+                        for semaine2 in range(semaine1 + 1, self.config.nb_semaines + 1):
+                            weeks_rest = semaine2 - semaine1 - 1
+                            penalty_value = spacing_penalty_for_gap(self.config, weeks_rest)
+                            if penalty_value <= 0:
+                                continue
 
-                        plays_both = model.NewBoolVar(f'plays_both_{equipe_id}_s{semaine1}_s{semaine2}')
-                        model.Add(plays_s1 + plays_s2 >= 2).OnlyEnforceIf(plays_both)
-                        model.Add(plays_s1 + plays_s2 <= 1).OnlyEnforceIf(plays_both.Not())
+                            creneaux_s1 = [j for j, c in enumerate(creneaux_valides) if c.semaine == semaine1]
+                            creneaux_s2 = [j for j, c in enumerate(creneaux_valides) if c.semaine == semaine2]
+                            matchs_equipe = [i for i in matchs_normaux_indices
+                                             if matchs[i].equipe1.id_unique == equipe_id or matchs[i].equipe2.id_unique == equipe_id]
 
-                        objective_terms.append(-int(penalty_value) * plays_both)
+                            plays_s1 = model.NewBoolVar(f'plays_{equipe_id}_s{semaine1}')
+                            plays_s2 = model.NewBoolVar(f'plays_{equipe_id}_s{semaine2}')
+
+                            vars_s1 = [assignment_vars[(i, j)]
+                                       for i in matchs_equipe for j in creneaux_s1 if (i, j) in assignment_vars]
+                            if vars_s1:
+                                model.Add(sum(vars_s1) >= 1).OnlyEnforceIf(plays_s1)
+                                model.Add(sum(vars_s1) == 0).OnlyEnforceIf(plays_s1.Not())
+
+                            vars_s2 = [assignment_vars[(i, j)]
+                                       for i in matchs_equipe for j in creneaux_s2 if (i, j) in assignment_vars]
+                            if vars_s2:
+                                model.Add(sum(vars_s2) >= 1).OnlyEnforceIf(plays_s2)
+                                model.Add(sum(vars_s2) == 0).OnlyEnforceIf(plays_s2.Not())
+
+                            plays_both = model.NewBoolVar(f'plays_both_{equipe_id}_s{semaine1}_s{semaine2}')
+                            model.Add(plays_s1 + plays_s2 >= 2).OnlyEnforceIf(plays_both)
+                            model.Add(plays_s1 + plays_s2 <= 1).OnlyEnforceIf(plays_both.Not())
+
+                            objective_terms.append(-int(penalty_value) * plays_both)
         
         # CONTRAINTE SOUPLE 1: Compaction temporelle (prioriser les matchs en début de calendrier)
         # Appliqué uniquement aux matchs normaux
@@ -995,35 +1149,84 @@ class CPSATSolver(BaseSolver):
         
         # CONTRAINTE SOUPLE 3: Espacement aller-retour (pour poules de type Aller-Retour)
         # Appliqué uniquement aux matchs normaux
-        if self.config.aller_retour_espacement_actif and (aller_retour_pairs or aller_retour_fixed_pairs):
+        if self.config.aller_retour_espacement_actif and enable_aller_retour and (aller_retour_pairs or aller_retour_fixed_pairs):
             if self.config.afficher_progression:
                 print(f"   Aller/Retour: {len(aller_retour_pairs)} paire(s) détectée(s)")
                 if aller_retour_fixed_pairs:
                     print(f"      + {len(aller_retour_fixed_pairs)} paire(s) avec match fixé")
 
-            for aller_idx, retour_idx in aller_retour_pairs:
-                for j_aller, creneau_aller in enumerate(creneaux_valides):
-                    if (aller_idx, j_aller) not in assignment_vars:
-                        continue
-                    var_aller = assignment_vars[(aller_idx, j_aller)]
-
-                    for j_retour, creneau_retour in enumerate(creneaux_valides):
-                        if (retour_idx, j_retour) not in assignment_vars:
+            if aller_retour_simplifie:
+                # MODE SIMPLIFIÉ: Pénalité par semaine au lieu de par créneau
+                # Complexité: O(paires × semaines²) au lieu de O(paires × créneaux²)
+                if self.config.afficher_progression:
+                    print("   → Mode simplifié: pénalité par semaine")
+                
+                # Grouper les créneaux par semaine
+                creneaux_par_semaine_ar = defaultdict(list)
+                for j, c in enumerate(creneaux_valides):
+                    creneaux_par_semaine_ar[c.semaine].append(j)
+                
+                for aller_idx, retour_idx in aller_retour_pairs:
+                    for semaine_aller in range(self.config.semaine_min, self.config.nb_semaines + 1):
+                        for semaine_retour in range(self.config.semaine_min, self.config.nb_semaines + 1):
+                            semaine_diff = abs(semaine_retour - semaine_aller)
+                            gap_penalty = aller_retour_gap_penalty(self.config, semaine_diff)
+                            if gap_penalty <= 0:
+                                continue
+                            
+                            # Variables pour aller dans semaine_aller
+                            vars_aller = [assignment_vars[(aller_idx, j)] 
+                                         for j in creneaux_par_semaine_ar.get(semaine_aller, [])
+                                         if (aller_idx, j) in assignment_vars]
+                            # Variables pour retour dans semaine_retour
+                            vars_retour = [assignment_vars[(retour_idx, j)]
+                                          for j in creneaux_par_semaine_ar.get(semaine_retour, [])
+                                          if (retour_idx, j) in assignment_vars]
+                            
+                            if not vars_aller or not vars_retour:
+                                continue
+                            
+                            # Créer variables booléennes pour "joue dans cette semaine"
+                            aller_in_s = model.NewBoolVar(f'ar_aller_{aller_idx}_s{semaine_aller}')
+                            retour_in_s = model.NewBoolVar(f'ar_retour_{retour_idx}_s{semaine_retour}')
+                            
+                            model.Add(sum(vars_aller) >= 1).OnlyEnforceIf(aller_in_s)
+                            model.Add(sum(vars_aller) == 0).OnlyEnforceIf(aller_in_s.Not())
+                            model.Add(sum(vars_retour) >= 1).OnlyEnforceIf(retour_in_s)
+                            model.Add(sum(vars_retour) == 0).OnlyEnforceIf(retour_in_s.Not())
+                            
+                            # Pénalité si les deux sont dans ces semaines
+                            both_var = model.NewBoolVar(f'ar_both_{aller_idx}_{retour_idx}_s{semaine_aller}_s{semaine_retour}')
+                            model.Add(aller_in_s + retour_in_s >= 2).OnlyEnforceIf(both_var)
+                            model.Add(aller_in_s + retour_in_s <= 1).OnlyEnforceIf(both_var.Not())
+                            
+                            objective_terms.append(-int(round(gap_penalty)) * both_var)
+            else:
+                # MODE COMPLET: Pénalité par combinaison de créneaux
+                # Complexité: O(paires × créneaux²)
+                for aller_idx, retour_idx in aller_retour_pairs:
+                    for j_aller, creneau_aller in enumerate(creneaux_valides):
+                        if (aller_idx, j_aller) not in assignment_vars:
                             continue
-                        var_retour = assignment_vars[(retour_idx, j_retour)]
+                        var_aller = assignment_vars[(aller_idx, j_aller)]
 
-                        semaine_diff = abs(creneau_retour.semaine - creneau_aller.semaine)
-                        gap_penalty = aller_retour_gap_penalty(self.config, semaine_diff)
-                        if gap_penalty <= 0:
-                            continue
+                        for j_retour, creneau_retour in enumerate(creneaux_valides):
+                            if (retour_idx, j_retour) not in assignment_vars:
+                                continue
+                            var_retour = assignment_vars[(retour_idx, j_retour)]
 
-                        joint_var = model.NewBoolVar(
-                            f'aller_retour_pair_{aller_idx}_{retour_idx}_{j_aller}_{j_retour}'
-                        )
-                        model.Add(var_aller + var_retour >= 2).OnlyEnforceIf(joint_var)
-                        model.Add(var_aller + var_retour <= 1).OnlyEnforceIf(joint_var.Not())
+                            semaine_diff = abs(creneau_retour.semaine - creneau_aller.semaine)
+                            gap_penalty = aller_retour_gap_penalty(self.config, semaine_diff)
+                            if gap_penalty <= 0:
+                                continue
 
-                        objective_terms.append(-int(round(gap_penalty)) * joint_var)
+                            joint_var = model.NewBoolVar(
+                                f'aller_retour_pair_{aller_idx}_{retour_idx}_{j_aller}_{j_retour}'
+                            )
+                            model.Add(var_aller + var_retour >= 2).OnlyEnforceIf(joint_var)
+                            model.Add(var_aller + var_retour <= 1).OnlyEnforceIf(joint_var.Not())
+
+                            objective_terms.append(-int(round(gap_penalty)) * joint_var)
 
             if aller_retour_fixed_pairs:
                 for match_idx, semaine_fixe in aller_retour_fixed_pairs:
@@ -1116,10 +1319,10 @@ class CPSATSolver(BaseSolver):
         solver.parameters.max_time_in_seconds = self.config.temps_max_secondes
         solver.parameters.log_search_progress = self.config.afficher_progression
         
-        # Configuration pour améliorer la recherche
-        solver.parameters.num_search_workers = 8  # Utiliser plusieurs threads pour exploration parallèle
-        solver.parameters.relative_gap_limit = 0.0  # Ne pas s'arrêter avant le temps max
-        solver.parameters.absolute_gap_limit = 0.0  # Continuer jusqu'au temps max
+        # Configuration pour améliorer la recherche (depuis la configuration)
+        solver.parameters.num_search_workers = self.config.cpsat_num_search_workers
+        solver.parameters.relative_gap_limit = self.config.cpsat_relative_gap_limit
+        solver.parameters.absolute_gap_limit = self.config.cpsat_absolute_gap_limit
         
         # Log pour débugger
         if self.config.afficher_progression:

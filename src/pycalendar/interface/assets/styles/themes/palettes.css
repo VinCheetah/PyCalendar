@@ -1,0 +1,67 @@
+/**
+ * PyCalendar Interface - Accent Palettes
+ * Overrides shared tokens when a palette is selected via data-palette on <html>.
+ */
+
+:root[data-palette="ocean"] {
+    --primary: #4facfe;
+    --primary-hover: #3a9bf2;
+    --primary-dark: #2589e6;
+    --primary-light: rgba(79, 172, 254, 0.12);
+    --primary-lighter: #e0f2fe;
+    --primary-gradient: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+    --primary-glow: 0 0 25px rgba(79, 172, 254, 0.4);
+
+    --accent: #00f2fe;
+    --accent-dark: #00d9ed;
+    --accent-hover: #33f4fe;
+    --accent-light: rgba(0, 242, 254, 0.12);
+    --accent-lighter: #cffafe;
+    --accent-glow: 0 0 20px rgba(0, 242, 254, 0.4);
+
+    --shadow-primary: 0 4px 14px 0 rgba(79, 172, 254, 0.30);
+    --shadow-primary-lg: 0 10px 25px -5px rgba(79, 172, 254, 0.35);
+    --glass-primary: rgba(79, 172, 254, 0.15);
+}
+
+:root[data-palette="sunset"] {
+    --primary: #fa709a;
+    --primary-hover: #f85a88;
+    --primary-dark: #f64376;
+    --primary-light: rgba(250, 112, 154, 0.12);
+    --primary-lighter: #ffe4ec;
+    --primary-gradient: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+    --primary-glow: 0 0 25px rgba(250, 112, 154, 0.4);
+
+    --accent: #fee140;
+    --accent-dark: #fdd81a;
+    --accent-hover: #fee766;
+    --accent-light: rgba(254, 225, 64, 0.12);
+    --accent-lighter: #fef9c3;
+    --accent-glow: 0 0 20px rgba(254, 225, 64, 0.4);
+
+    --shadow-primary: 0 4px 14px 0 rgba(250, 112, 154, 0.30);
+    --shadow-primary-lg: 0 10px 25px -5px rgba(250, 112, 154, 0.35);
+    --glass-primary: rgba(250, 112, 154, 0.15);
+}
+
+:root[data-palette="forest"] {
+    --primary: #43e97b;
+    --primary-hover: #2fe066;
+    --primary-dark: #1bd751;
+    --primary-light: rgba(67, 233, 123, 0.12);
+    --primary-lighter: #d1fae5;
+    --primary-gradient: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+    --primary-glow: 0 0 25px rgba(67, 233, 123, 0.4);
+
+    --accent: #38f9d7;
+    --accent-dark: #1ff0cd;
+    --accent-hover: #5ffadd;
+    --accent-light: rgba(56, 249, 215, 0.12);
+    --accent-lighter: #ccfbf1;
+    --accent-glow: 0 0 20px rgba(56, 249, 215, 0.4);
+
+    --shadow-primary: 0 4px 14px 0 rgba(67, 233, 123, 0.30);
+    --shadow-primary-lg: 0 10px 25px -5px rgba(67, 233, 123, 0.35);
+    --glass-primary: rgba(67, 233, 123, 0.15);
+}

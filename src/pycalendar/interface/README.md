@@ -16,7 +16,7 @@ Ce dossier contient la nouvelle interface HTML modulaire pour PyCalendar, conçu
 
 ## 📂 Structure des dossiers
 
-```
+```text
 interface/
 ├── core/                           # Backend Python
 │   ├── data_formatter.py           # Transformation Solution → JSON v2.0
@@ -24,30 +24,54 @@ interface/
 │
 ├── assets/                         # Ressources statiques
 │   └── styles/                     # CSS modulaire
-│       ├── 00-variables.css        # Variables CSS (couleurs, espacements)
-│       ├── 01-reset.css            # Reset navigateur
-│       ├── 02-base.css             # Typographie et utilitaires
-│       ├── 03-layout.css           # Grilles et mise en page
+│       ├── manifest.json           # Ordre déclaratif des feuilles
+│       ├── core/                   # Fondations (chargées en premier)
+│       │   ├── 00-tokens.css       # Design tokens
+│       │   ├── 01-reset.css        # Reset navigateur
+│       │   ├── 02-base.css         # Typographie et utilitaires
+│       │   ├── 03-layout.css       # Grilles et conteneurs
+│       │   ├── 04-effects.css      # Animations et effets
+│       │   └── 05-decorations.css  # Décorations/ornements
 │       ├── components/             # Styles des composants
-│       │   ├── match-card.css      # Cartes de match
 │       │   ├── filters.css         # Panneaux de filtres
-│       │   └── modals.css          # Fenêtres modales
-│       └── themes/                 # Thèmes visuels
-│           └── default-light.css   # Thème par défaut
+│       │   ├── loading.css         # États de chargement
+│       │   ├── match-card.css      # Cartes de match
+│       │   ├── modals.css          # Fenêtres modales
+│       │   ├── tabs.css            # Navigation tabulaire
+│       │   ├── view-options.css    # Options contextuelles
+│       │   └── views.css           # Primitives partagées
+│       ├── views/                  # Styles spécifiques aux vues
+│       │   ├── agenda-view.css     # Vue Agenda
+│       │   ├── pools-view.css      # Vue Poules
+│       │   └── penalties-view.css  # Vue Pénalités
+│       ├── themes/                 # Thèmes visuels
+│       │   ├── palettes.css        # Variantes de palettes
+│       │   ├── default.css         # Thème clair par défaut
+│       │   ├── dark.css            # Thème sombre
+│       │   └── tricolore.css       # Thème FFSU
 │
+⚠️ `manifest.json` est désormais obligatoire : `generator.py` arrête la génération si ce fichier
+ou ses sections ne produisent aucun fichier CSS.
+
 ├── scripts/                        # JavaScript modulaire
 │   ├── core/                       # Gestion de données
 │   │   └── data-manager.js         # Gestionnaire central de données
 │   ├── data/                       # Stockage et modifications
 │   │   └── modification-manager.js # Export/Import JSON, undo/redo
+│   ├── app/                        # Bootstrap & contrôles UI
+│   │   ├── ui-controls.js          # Événements globaux, sidebars, thèmes
+│   │   └── modals.js               # Modales export/aide et états d'erreur
 │   ├── views/                      # Vues de l'interface
 │   │   ├── agenda-view.js          # Vue Agenda (priorité 1)
 │   │   ├── pools-view.js           # Vue Poules (priorité 2)
-│   │   └── cards-view.js           # Vue Cartes (priorité 3)
+│   │   ├── teams-view.js           # Vue Équipes
+│   │   ├── matches-view.js         # Vue Matchs
+│   │   └── penalties-view.js       # Vue Pénalités
 │   ├── components/                 # Composants réutilisables
-│   │   ├── match-card.js           # Composant carte de match
-│   │   ├── filter-panel.js         # Panneau de filtres
-│   │   └── edit-modal.js           # Fenêtre d'édition
+│   │   ├── ui/                     # Widgets d'affichage
+│   │   │   └── match-card.js       # Composant carte de match
+│   │   └── edit/                   # Surcouches d'édition
+│   │       └── edit-modal.js       # Fenêtre d'édition
 │   └── utils/                      # Utilitaires
 │       ├── formatters.js           # Formatage de dates, heures, etc.
 │       └── validators.js           # Validation de données
@@ -56,9 +80,9 @@ interface/
 │   └── index.html                  # Template principal
 │
 └── data/                           # Schémas et documentation
-    └── schemas/                    # Schémas JSON
-        ├── solution_schema.json    # Format de données v2.0
-        └── modification_schema.json # Format d'export
+  └── schemas/                    # Schémas JSON
+    ├── solution_schema.json    # Format de données v2.0
+    └── modification_schema.json # Format d'export
 ```
 
 ---
@@ -79,6 +103,7 @@ python regenerate_interface.py --output mon_calendrier.html
 ```
 
 **Processus interne :**
+
 1. `data_formatter.py` transforme la Solution Python en JSON v2.0 enrichi
 2. `generator.py` charge le template HTML
 3. Combine tous les CSS dans l'ordre (variables → reset → base → layout → composants → thème)
@@ -108,6 +133,7 @@ python interface/scripts/apply_modifications_interface.py mods.json --output sol
 ```
 
 **Processus interne :**
+
 1. Charge le fichier de modifications JSON
 2. Charge la solution source
 3. Applique chaque modification (semaine, horaire, gymnase)
@@ -164,14 +190,19 @@ L'interface utilise un format JSON enrichi qui contient :
 
 ## 🎨 Architecture CSS
 
-### Ordre de chargement (important !)
+### Manifest & ordre de chargement
 
-1. **00-variables.css** : Définition des variables CSS
-2. **01-reset.css** : Normalisation navigateur
-3. **02-base.css** : Typographie de base
-4. **03-layout.css** : Système de grille et mise en page
-5. **components/*.css** : Styles des composants
-6. **themes/*.css** : Thème visuel
+L'ordre est défini dans `assets/styles/manifest.json`. Chaque section y liste des fichiers ou des
+glob patterns (support du wildcard `*`). Le générateur lit ce manifest pour charger automatiquement
+les nouvelles feuilles sans modifier le code Python.
+
+1. `core/00-tokens.css` → Design tokens (couleurs, typos, espacements)
+2. `core/01-reset.css` → Normalisation navigateur
+3. `core/02-base.css` → Fondations typographiques & utilitaires
+4. `core/03-layout.css`, `04-effects.css`, `05-decorations.css` → Grilles, effets, ornements
+5. `components/*.css` → Composants réutilisables (cartes, filtres, modals, etc.)
+6. `views/*.css` → Ajustements propres à chaque vue (agenda, poules, pénalités)
+7. `themes/palettes.css` + `themes/*.css` → Palettes et skins (default, dark, tricolore)
 
 ### Variables clés
 
@@ -207,6 +238,7 @@ L'interface utilise un format JSON enrichi qui contient :
 ### DataManager (core/data-manager.js)
 
 Gestionnaire central de données avec :
+
 - **Indexes Map** : Accès O(1) aux matchs par ID, semaine, poule, gymnase
 - **Observer Pattern** : Notification des changements aux vues
 - **CRUD Operations** : Create, Read, Update, Delete des matchs
@@ -225,6 +257,7 @@ window.dataManager.updateMatch('match_123', { semaine: 2, horaire: '18:00' });
 ### ModificationManager (data/modification-manager.js)
 
 Gestion des modifications avec :
+
 - **Tracking** : Enregistrement de toutes les modifications
 - **Undo/Redo** : Historique des actions
 - **Export JSON** : Export conforme au schéma
@@ -290,11 +323,12 @@ window.modificationManager.redo();
 - [x] Styles CSS pour les 3 vues prioritaires
 
 ### Priorité 1 - Composants essentiels
+
 - [ ] match-card.js - Composant carte réutilisable
-- [ ] filter-panel.js - Gestionnaire de filtres avancés
 - [ ] edit-modal.js - Fenêtre d'édition de match avec validation
 
 ### Priorité 2 - Fonctionnalités
+
 - [ ] Drag & Drop pour déplacer les matchs entre créneaux
 - [ ] Vue Pénalités détaillée avec graphiques
 - [ ] Vue Statistiques complète avec tableaux de bord
@@ -302,6 +336,7 @@ window.modificationManager.redo();
 - [ ] Validation en temps réel des contraintes
 
 ### Priorité 3 - Optimisations
+
 - [ ] Virtualisation pour grandes listes (>500 matchs)
 - [ ] Cache des vues rendues
 - [ ] Lazy loading des composants
@@ -309,6 +344,7 @@ window.modificationManager.redo();
 - [ ] Compression des données
 
 ### Priorité 4 - Accessibilité & UX
+
 - [ ] Support clavier complet (navigation, édition)
 - [ ] ARIA labels pour accessibilité
 - [ ] Mode sombre / thème personnalisable

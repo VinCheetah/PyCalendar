@@ -105,7 +105,10 @@ window.MatchCard = class MatchCard {
         
         // Score de pénalités
         if (match.penalties) {
-            const totalPenalties = Object.values(match.penalties).reduce((sum, p) => sum + p, 0);
+            // Use total field directly, or sum only numeric values (ignore nested objects)
+            const totalPenalties = typeof match.penalties.total === 'number' 
+                ? match.penalties.total 
+                : Object.values(match.penalties).reduce((sum, p) => typeof p === 'number' ? sum + p : sum, 0);
             if (totalPenalties > 10) {
                 classes.push('high-penalties');
             } else if (totalPenalties > 5) {
@@ -215,7 +218,10 @@ window.MatchCard = class MatchCard {
         
         // Pénalités
         if (showPenalties && match.penalties) {
-            const totalPenalties = Object.values(match.penalties).reduce((sum, p) => sum + p, 0);
+            // Use total field directly, or sum only numeric values (ignore nested objects)
+            const totalPenalties = typeof match.penalties.total === 'number' 
+                ? match.penalties.total 
+                : Object.values(match.penalties).reduce((sum, p) => typeof p === 'number' ? sum + p : sum, 0);
             const penaltyClass = totalPenalties > 10 ? 'high' : totalPenalties > 5 ? 'medium' : 'low';
             
             parts.push(`

@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from ..core.models import Match, Solution
 from ..core.penalty_calculator import annotate_solution_with_penalties
-from ..core.penalties import aller_retour_gap_penalty, is_retour_match
+from ..core.penalties import aller_retour_gap_penalty, horaire_to_minutes, is_retour_match
 from ..validation.solution_validator import SolutionValidator
 
 
@@ -127,7 +127,7 @@ def _build_empty_breakdown(score: float) -> Dict[str, Any]:
         "compaction_temporelle": {"penalty_total": 0.0, "par_semaine": {}},
         "contraintes_institutionnelles": {
             "overlaps": {"count": 0, "penalty": 0.0},
-            "ententes": {"planifiees": 0, "non_planifiees": 0, "penalty": 0.0},
+            "ententes": {"scheduled": 0, "pending": 0, "penalty": 0.0},
         },
         "contraintes_temporelles": {"violations": 0, "penalty": 0.0},
         "aller_retour": {
@@ -316,10 +316,31 @@ def _analyze_priorite_genre(
 
 
 def _extract_match_level(match: Match) -> Optional[int]:
-    poule = getattr(match, "poule", "") or ""
-    if len(poule) >= 2 and poule[0].upper() == "A" and poule[1].isdigit():
-        return int(poule[1]) - 1
-    return None
+    """
+    Extrait le niveau de compétition du match depuis sa poule.
+    
+    IMPORTANT: Cette fonction doit être identique à _extract_match_level()
+    dans penalties/helpers.py pour garantir la cohérence.
+    
+    Exemples:
+    - "A1" → niveau 0
+    - "A2" → niveau 1
+    - "A10" → niveau 9
+    - "B3-Féminin" → niveau 2
+    
+    Returns:
+        Index de niveau (0-based) ou None si non déterminable
+    """
+    import re
+    poule = (getattr(match, "poule", "") or "").strip()
+    if not poule:
+        return None
+    # Chercher le premier groupe de chiffres dans la poule
+    digits = re.search(r"(\d+)", poule)
+    if not digits:
+        return None
+    level_idx = int(digits.group(1)) - 1
+    return level_idx if level_idx >= 0 else None
 
 
 
@@ -343,8 +364,8 @@ def _analyze_time_preferences(matchs: List[Match], config: Any) -> Dict[str, Any
     for match in matchs:
         if not match.creneau:
             continue
-        horaire_match = _parse_horaire_minutes(match.creneau.horaire)
-        if horaire_match is None:
+        horaire_match = horaire_to_minutes(match.creneau.horaire)
+        if not horaire_match:
             continue
 
         distances_avant = []
@@ -356,8 +377,8 @@ def _analyze_time_preferences(matchs: List[Match], config: Any) -> Dict[str, Any
             if not prefs:
                 continue
             equipes_consideres += 1
-            pref_minutes = _parse_horaire_minutes(prefs[0])
-            if pref_minutes is None:
+            pref_minutes = horaire_to_minutes(prefs[0])
+            if not pref_minutes:
                 continue
             distance = abs(horaire_match - pref_minutes)
             if distance <= tolerance:
@@ -372,6 +393,9 @@ def _analyze_time_preferences(matchs: List[Match], config: Any) -> Dict[str, Any
                 stats["matchs_ok"] += 1
             continue
 
+        # NOTE: Un match peut avoir à la fois des équipes "avant" et "après"
+        # On catégorise le match selon le cas le plus pénalisant (avant prioritaire)
+        
         if distances_avant:
             if len(distances_avant) >= 2:
                 multiplicateur = penalite_avant_deux
@@ -383,28 +407,18 @@ def _analyze_time_preferences(matchs: List[Match], config: Any) -> Dict[str, Any
                 penalty = multiplicateur * ((distance / diviseur) ** 2)
                 key = "matchs_avant_2_equipes" if len(distances_avant) >= 2 else "matchs_avant_1_equipe"
                 stats[key]["penalty"] += penalty
-
+        
         if distances_apres:
-            stats["matchs_apres"]["count"] += len(distances_apres)
+            # CORRECTION: Compter 1 match (pas le nombre d'équipes) si au moins une équipe est "après"
+            # Note: Le match peut déjà être compté dans "avant" - c'est OK car on veut
+            # montrer toutes les pénalités accumulées par ce match
+            if not distances_avant:  # Seulement si pas déjà compté dans "avant"
+                stats["matchs_apres"]["count"] += 1
             for distance in distances_apres:
                 penalty = penalite_apres * ((distance / diviseur) ** 2)
                 stats["matchs_apres"]["penalty"] += penalty
 
     return stats
-
-
-def _parse_horaire_minutes(value: str) -> Optional[int]:
-    if not value:
-        return None
-    cleaned = value.lower().replace("h", ":")
-    try:
-        heures, minutes = cleaned.split(":")
-        return int(heures) * 60 + int(minutes or 0)
-    except ValueError:
-        try:
-            return int(cleaned) * 60
-        except ValueError:
-            return None
 
 
 def _analyze_spacing(matchs: List[Match]) -> Dict[str, float]:
@@ -419,6 +433,17 @@ def _analyze_spacing(matchs: List[Match]) -> Dict[str, float]:
 
 
 def _analyze_compaction(matchs: List[Match], config: Any) -> Dict[str, Any]:
+    """
+    Analyse les pénalités de compaction temporelle.
+    
+    La compaction encourage les matchs en début de calendrier via des pénalités
+    croissantes pour les semaines tardives.
+    
+    IMPORTANT: Le comportement doit correspondre exactement à compaction_penalty_for_week()
+    dans helpers.py :
+    - Index = semaine - 1 (semaine 1 → index 0)
+    - Si l'index dépasse la liste, pénalité = 0 (pas de prolongation de la dernière valeur)
+    """
     stats = {"penalty_total": 0.0, "par_semaine": {}}
     if not (config and getattr(config, "compaction_temporelle_actif", False)):
         return stats
@@ -426,23 +451,28 @@ def _analyze_compaction(matchs: List[Match], config: Any) -> Dict[str, Any]:
     if not penalties:
         return stats
 
-    max_index = len(penalties) - 1
     for match in matchs:
         if not match.creneau:
             continue
         semaine = match.creneau.semaine
         if semaine <= 0:
             continue
-        idx = min(semaine - 1, max_index)
-        penalty = _safe_float(penalties[idx])
-        if penalty <= 0:
-            entry = stats["par_semaine"].setdefault(str(semaine), {"nb_matchs": 0, "penalty": 0.0})
-            entry["nb_matchs"] += 1
-            continue
-        stats["penalty_total"] += penalty
+        
+        # CORRECTION: Utiliser le même comportement que compaction_penalty_for_week()
+        # Si l'index dépasse la liste, pénalité = 0 (pas de répétition de la dernière valeur)
+        idx = semaine - 1
+        if idx >= len(penalties):
+            # Au-delà de la liste : pénalité = 0
+            penalty = 0.0
+        else:
+            penalty = _safe_float(penalties[idx])
+        
         entry = stats["par_semaine"].setdefault(str(semaine), {"nb_matchs": 0, "penalty": 0.0})
         entry["nb_matchs"] += 1
-        entry["penalty"] += penalty
+        
+        if penalty > 0:
+            stats["penalty_total"] += penalty
+            entry["penalty"] += penalty
     return stats
 
 
@@ -452,20 +482,33 @@ def _analyze_ententes(
     ententes: Dict[Tuple[str, str], float],
     config: Any,
 ) -> Dict[str, float]:
-    stats = {"planifiees": 0, "non_planifiees": 0, "penalty": 0.0}
-    fallback_penalty = _safe_float(getattr(config, "entente_penalite_non_planif", 0.0) if config else 0.0)
+    """
+    Analyse les ententes planifiées et non planifiées.
+    
+    NOTE: Depuis le passage au système de bonus progressif avec entente_facteur_reduction_bonus,
+    les ententes non planifiées n'ont plus de pénalité explicite. Leur non-planification
+    résulte simplement d'un bonus réduit par rapport aux matchs normaux.
+    
+    La "penalty" affichée ici représente :
+    - Si ententes[cle] a une valeur spécifique (définie dans Excel) : cette valeur
+    - Sinon : 0.0 (pas de pénalité explicite, seule la réduction de bonus s'applique)
+    """
+    stats = {"scheduled": 0, "pending": 0, "penalty": 0.0}
 
     for match in matchs_planifies:
         if (match.metadata or {}).get("is_entente"):
-            stats["planifiees"] += 1
+            stats["scheduled"] += 1
 
     for match in matchs_non_planifies:
         if not (match.metadata or {}).get("is_entente"):
             continue
-        stats["non_planifiees"] += 1
+        stats["pending"] += 1
+        # Récupérer la pénalité spécifique si définie dans le fichier Excel
+        # Note: Depuis la suppression de entente_penalite_non_planif, cette valeur
+        # provient uniquement des définitions spécifiques par paire d'institutions
         cle = tuple(sorted([match.equipe1.institution, match.equipe2.institution]))
         valeur = ententes.get(cle, None)
-        stats["penalty"] += _safe_float(valeur, default=fallback_penalty)
+        stats["penalty"] += _safe_float(valeur, default=0.0)
     return stats
 
 
@@ -483,14 +526,12 @@ def _analyze_temporal_constraints(matchs: List[Match]) -> Dict[str, float]:
 def _analyze_aller_retour(matchs: List[Match], config: Any) -> Dict[str, Any]:
     stats = {
         "par_ecart": {},
-        "ordre": {"count": 0, "penalty": 0.0},
         "meme_semaine": {"count": 0, "penalty": 0.0},
         "consecutives": {"count": 0, "penalty": 0.0},
     }
     if not config:
         return stats
 
-    ordre_penalite = _safe_float(getattr(config, "aller_retour_penalite_ordre_retour", 0.0))
     paires = defaultdict(list)
 
     for match in matchs:
@@ -532,10 +573,6 @@ def _analyze_aller_retour(matchs: List[Match], config: Any) -> Dict[str, Any]:
                 bucket = stats["par_ecart"].setdefault(str(weeks_gap), {"count": 0, "penalty": 0.0})
                 bucket["count"] += 1
                 bucket["penalty"] += gap_penalty
-
-            if ordre_penalite > 0 and retour_match.creneau.semaine <= aller_match.creneau.semaine:
-                stats["ordre"]["count"] += 1
-                stats["ordre"]["penalty"] += ordre_penalite
 
     stats["meme_semaine"] = dict(stats["par_ecart"].get("0", {"count": 0, "penalty": 0.0}))
     stats["consecutives"] = dict(stats["par_ecart"].get("1", {"count": 0, "penalty": 0.0}))

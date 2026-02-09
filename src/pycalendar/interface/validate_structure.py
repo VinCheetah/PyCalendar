@@ -4,6 +4,7 @@ Validation de la structure de l'interface PyCalendar
 Vérifie que tous les fichiers essentiels sont présents
 """
 
+import json
 from pathlib import Path
 from typing import List, Tuple
 
@@ -15,21 +16,35 @@ EXPECTED_STRUCTURE = {
         'generator.py',
     ],
     'assets/styles': [
-        '00-variables.css',
+        'manifest.json',
+    ],
+    'assets/styles/core': [
+        '00-tokens.css',
         '01-reset.css',
         '02-base.css',
         '03-layout.css',
+        '04-effects.css',
+        '05-decorations.css',
     ],
     'assets/styles/components': [
-        'match-card.css',
         'filters.css',
-        'modals.css',
         'loading.css',
+        'match-card.css',
+        'modals.css',
         'tabs.css',
+        'view-options.css',
         'views.css',
     ],
+    'assets/styles/views': [
+        'agenda-view.css',
+        'pools-view.css',
+        'penalties-view.css',
+    ],
     'assets/styles/themes': [
-        'default-light.css',
+        'palettes.css',
+        'default.css',
+        'dark.css',
+        'tricolore.css',
     ],
     'scripts/core': [
         '__init__.py',
@@ -39,6 +54,10 @@ EXPECTED_STRUCTURE = {
         '__init__.py',
         'modification-manager.js',
     ],
+    'scripts/app': [
+        'modals.js',
+        'ui-controls.js',
+    ],
     'scripts/utils': [
         '__init__.py',
         'formatters.js',
@@ -46,10 +65,12 @@ EXPECTED_STRUCTURE = {
     ],
     'scripts/views': [
         '__init__.py',
-        'agenda-view.js',
+        'agenda/agenda-view.js',
+        'agenda-grid.js',
         'pools-view.js',
         'teams-view.js',
-        'cards-view.js',
+        'matches-view.js',
+        'penalties-view.js',
     ],
     'templates': [
         'index.html',
@@ -82,7 +103,51 @@ def validate_structure() -> Tuple[List[str], List[str]]:
             else:
                 missing.append(f"{directory}/{file}")
     
+    missing.extend(_validate_css_manifest(interface_dir))
+    
     return present, missing
+
+
+def _validate_css_manifest(interface_dir: Path) -> List[str]:
+    """Ensure manifest.json exists and references valid CSS files."""
+    missing: List[str] = []
+    manifest_path = interface_dir / 'assets' / 'styles' / 'manifest.json'
+
+    if not manifest_path.exists():
+        missing.append('assets/styles/manifest.json')
+        return missing
+
+    try:
+        with open(manifest_path, 'r', encoding='utf-8') as manifest_file:
+            manifest = json.load(manifest_file)
+    except json.JSONDecodeError:
+        missing.append('assets/styles/manifest.json (invalid JSON)')
+        return missing
+
+    if not isinstance(manifest, list):
+        missing.append('assets/styles/manifest.json (expected list of sections)')
+        return missing
+
+    styles_root = manifest_path.parent
+
+    for section in manifest:
+        files = section.get('files', []) if isinstance(section, dict) else []
+        for entry in files:
+            if not isinstance(entry, str) or not entry.strip():
+                continue
+            entry = entry.strip()
+            has_glob = any(char in entry for char in ['*', '?', '['])
+
+            if has_glob:
+                matches = list(styles_root.glob(entry))
+                if not matches:
+                    missing.append(f'styles/{entry} (no match)')
+            else:
+                css_path = styles_root / entry
+                if not css_path.exists():
+                    missing.append(str(css_path.relative_to(interface_dir)))
+
+    return missing
 
 def main():
     print("🔍 Validation de la structure de l'interface PyCalendar\n")

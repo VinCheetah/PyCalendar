@@ -35,6 +35,7 @@ class TeamsView {
         this.showPlanning = true;
         this.showPenalties = true;
         this.showPreferences = false;
+        this.showGlobalSummary = true;
         this.compactMode = false;
         
         // Subscribe to data changes
@@ -224,6 +225,18 @@ class TeamsView {
                         this.compactMode = checked;
                         this.render();
                     }
+                },
+                
+                // Afficher résumé global
+                {
+                    type: 'checkbox',
+                    id: 'teams-show-summary',
+                    label: '📋 Afficher résumé global',
+                    default: this.showGlobalSummary,
+                    action: (checked) => {
+                        this.showGlobalSummary = checked;
+                        this.render();
+                    }
                 }
             ]
         };
@@ -266,10 +279,10 @@ class TeamsView {
      */
     renderEmpty() {
         this.container.innerHTML = `
-            <div class="empty-state" style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 4rem 2rem; text-align: center;">
-                <div class="empty-state-icon" style="font-size: 5rem; margin-bottom: 1.5rem; opacity: 0.5;">👥</div>
-                <h3 class="empty-state-title" style="font-size: 1.5rem; font-weight: 700; color: #333; margin: 0 0 0.75rem 0; font-family: 'Inter', 'Roboto', sans-serif;">Aucune équipe</h3>
-                <p class="empty-state-message" style="font-size: 1rem; color: #666; margin: 0; font-family: 'Roboto', sans-serif;">Les équipes apparaîtront ici une fois configurées.</p>
+            <div class="empty-state">
+                <div class="empty-state__icon">👥</div>
+                <h3 class="empty-state__title">Aucune équipe</h3>
+                <p class="empty-state__message">Les équipes apparaîtront ici une fois configurées.</p>
             </div>
         `;
     }
@@ -279,10 +292,10 @@ class TeamsView {
      */
     renderNoResults() {
         this.container.innerHTML = `
-            <div class="empty-state" style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 4rem 2rem; text-align: center;">
-                <div class="empty-state-icon" style="font-size: 5rem; margin-bottom: 1.5rem; opacity: 0.5;">🔍</div>
-                <h3 class="empty-state-title" style="font-size: 1.5rem; font-weight: 700; color: #333; margin: 0 0 0.75rem 0; font-family: 'Inter', 'Roboto', sans-serif;">Aucune équipe correspondante</h3>
-                <p class="empty-state-message" style="font-size: 1rem; color: #666; margin: 0; font-family: 'Roboto', sans-serif;">Aucune équipe ne correspond aux filtres sélectionnés.</p>
+            <div class="empty-state">
+                <div class="empty-state__icon">🔍</div>
+                <h3 class="empty-state__title">Aucune équipe correspondante</h3>
+                <p class="empty-state__message">Aucune équipe ne correspond aux filtres sélectionnés.</p>
             </div>
         `;
     }
@@ -386,7 +399,13 @@ class TeamsView {
         // Pénalités
         const totalPenalties = teamMatches.reduce((sum, m) => {
             if (!m.penalties) return sum;
-            return sum + Object.values(m.penalties).reduce((s, p) => s + p, 0);
+            // Use the total field directly if available, otherwise sum numeric values only
+            if (typeof m.penalties.total === 'number') {
+                return sum + m.penalties.total;
+            }
+            // Fallback: sum only numeric values (ignore nested objects like equipe1/equipe2)
+            return sum + Object.values(m.penalties).reduce((s, p) => 
+                typeof p === 'number' ? s + p : s, 0);
         }, 0);
         
         const avgPenalties = teamMatches.length > 0 ? totalPenalties / teamMatches.length : 0;
@@ -523,12 +542,10 @@ class TeamsView {
                         if (match.horaire) {
                             const [hours, minutes] = match.horaire.split(':').map(Number);
                             const matchStartMinutes = hours * 60 + minutes;
-                            const matchDuration = 90; // Durée standard d'un match
-                            const matchEndMinutes = matchStartMinutes + matchDuration;
                             
-                            // Vérifier le chevauchement
-                            const overlaps = matchStartMinutes < rangeEnd && matchEndMinutes > rangeStart;
-                            if (!overlaps) {
+                            // Un match passe si son heure de DÉBUT est >= rangeStart ET <= rangeEnd
+                            const inRange = matchStartMinutes >= rangeStart && matchStartMinutes <= rangeEnd;
+                            if (!inRange) {
                                 return false;
                             }
                         }
@@ -602,10 +619,13 @@ class TeamsView {
      * Génère le HTML de la vue
      */
     _generateHTML(teams, data) {
-        let html = '<div class="teams-view" style="padding: 1.5rem;">';
+        const compactClass = this.compactMode ? 'teams-view--compact' : '';
+        let html = `<div class="teams-view ${compactClass}">`;
         
-        // En-tête avec résumé global
-        html += this._generateGlobalSummary(teams);
+        // En-tête avec résumé global (optionnel)
+        if (this.showGlobalSummary) {
+            html += this._generateGlobalSummary(teams);
+        }
         
         // Contenu selon le groupement
         if (this.groupBy === 'none') {
@@ -627,33 +647,44 @@ class TeamsView {
         const totalMatches = teams.reduce((sum, t) => sum + t.stats.totalMatches, 0);
         const totalPlayed = teams.reduce((sum, t) => sum + t.stats.played, 0);
         const totalUnscheduled = teams.reduce((sum, t) => sum + t.stats.unscheduled, 0);
+        const totalEntentes = teams.reduce((sum, t) => sum + t.stats.entente, 0);
         const avgCompletion = totalTeams > 0 
             ? teams.reduce((sum, t) => sum + t.stats.completionRate, 0) / totalTeams 
             : 0;
         
+        // Utiliser SportUtils pour l'emoji du sport
+        const sportEmoji = window.sportUtils?.getEmoji() || '🏐';
+        const sportName = window.sportUtils?.getName() || 'Sport';
+        
         return `
-            <div class="teams-summary" style="background: white; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08); border: 1px solid rgba(0, 85, 164, 0.15);">
-                <h2 style="margin: 0 0 1rem 0; font-size: 1.5rem; font-weight: 800; color: #0055A4; font-family: 'Inter', 'Roboto', sans-serif; display: flex; align-items: center; gap: 0.5rem;">
-                    <span style="font-size: 1.8rem;">👥</span>
-                    Vue Équipes
-                    <span style="font-size: 0.9rem; font-weight: 600; color: #666; margin-left: auto;">${totalTeams} équipe${totalTeams > 1 ? 's' : ''}</span>
+            <div class="teams-summary">
+                <h2 class="teams-summary__title">
+                    <span class="teams-summary__icon">${sportEmoji}</span>
+                    Vue Équipes - ${sportName}
+                    <span class="teams-summary__count">${totalTeams} équipe${totalTeams > 1 ? 's' : ''}</span>
                 </h2>
-                <div class="summary-stats" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-top: 1rem;">
-                    <div class="summary-stat" style="text-align: center; padding: 0.75rem; background: rgba(0, 85, 164, 0.05); border-radius: 8px; border: 1px solid rgba(0, 85, 164, 0.1);">
-                        <div style="font-size: 1.5rem; font-weight: 900; color: #0055A4; font-family: 'Roboto Mono', monospace;">${totalMatches}</div>
-                        <div style="font-size: 0.7rem; font-weight: 700; color: #666; text-transform: uppercase; margin-top: 0.25rem;">Matchs Total</div>
+                <div class="teams-summary__stats">
+                    <div class="summary-stat summary-stat--primary">
+                        <div class="summary-stat__value">${totalMatches}</div>
+                        <div class="summary-stat__label">Matchs Total</div>
                     </div>
-                    <div class="summary-stat" style="text-align: center; padding: 0.75rem; background: rgba(39, 174, 96, 0.05); border-radius: 8px; border: 1px solid rgba(39, 174, 96, 0.1);">
-                        <div style="font-size: 1.5rem; font-weight: 900; color: #27AE60; font-family: 'Roboto Mono', monospace;">${totalPlayed}</div>
-                        <div style="font-size: 0.7rem; font-weight: 700; color: #666; text-transform: uppercase; margin-top: 0.25rem;">Matchs Joués</div>
+                    <div class="summary-stat summary-stat--success">
+                        <div class="summary-stat__value">${totalPlayed}</div>
+                        <div class="summary-stat__label">Joués</div>
                     </div>
-                    <div class="summary-stat" style="text-align: center; padding: 0.75rem; background: rgba(239, 65, 53, 0.05); border-radius: 8px; border: 1px solid rgba(239, 65, 53, 0.1);">
-                        <div style="font-size: 1.5rem; font-weight: 900; color: #EF4135; font-family: 'Roboto Mono', monospace;">${totalUnscheduled}</div>
-                        <div style="font-size: 0.7rem; font-weight: 700; color: #666; text-transform: uppercase; margin-top: 0.25rem;">Non Planifiés</div>
+                    <div class="summary-stat summary-stat--danger">
+                        <div class="summary-stat__value">${totalUnscheduled}</div>
+                        <div class="summary-stat__label">Non Planifiés</div>
                     </div>
-                    <div class="summary-stat" style="text-align: center; padding: 0.75rem; background: rgba(0, 123, 255, 0.05); border-radius: 8px; border: 1px solid rgba(0, 123, 255, 0.1);">
-                        <div style="font-size: 1.5rem; font-weight: 900; color: #007BFF; font-family: 'Roboto Mono', monospace;">${avgCompletion.toFixed(0)}%</div>
-                        <div style="font-size: 0.7rem; font-weight: 700; color: #666; text-transform: uppercase; margin-top: 0.25rem;">Complétion Moy.</div>
+                    ${totalEntentes > 0 ? `
+                    <div class="summary-stat summary-stat--entente">
+                        <div class="summary-stat__value">${totalEntentes}</div>
+                        <div class="summary-stat__label">Ententes</div>
+                    </div>
+                    ` : ''}
+                    <div class="summary-stat summary-stat--info">
+                        <div class="summary-stat__value">${avgCompletion.toFixed(0)}%</div>
+                        <div class="summary-stat__label">Complétion</div>
                     </div>
                 </div>
             </div>
@@ -664,10 +695,12 @@ class TeamsView {
      * Génère le tableau des équipes (sans groupement)
      */
     _generateTeamsTable(teams, data) {
+        const compactClass = this.compactMode ? 'teams-table--compact' : '';
+        
         let html = `
-            <div class="teams-table-container" style="background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08); border: 1px solid rgba(0, 85, 164, 0.15);">
-                <div style="overflow-x: auto;">
-                    <table class="teams-table" style="width: 100%; border-collapse: collapse; font-size: ${this.compactMode ? '0.8rem' : '0.85rem'}; font-family: 'Roboto', sans-serif;">
+            <div class="teams-table-container">
+                <div class="teams-table-scroll">
+                    <table class="teams-table ${compactClass}">
                         ${this._generateTableHeader()}
                         <tbody>
         `;
@@ -690,86 +723,80 @@ class TeamsView {
      * Génère l'en-tête du tableau
      */
     _generateTableHeader() {
-        const compact = this.compactMode;
-        
         return `
             <thead>
-                <tr style="background: linear-gradient(135deg, #0055A4 0%, rgba(0, 85, 164, 0.9) 100%); color: white; border-bottom: 2px solid rgba(0, 85, 164, 0.3);">
-                    <th style="padding: ${compact ? '0.6rem 0.75rem' : '0.8rem 1rem'}; text-align: left; font-weight: 800; font-size: ${compact ? '0.7rem' : '0.75rem'}; text-transform: uppercase; letter-spacing: 0.05em; position: sticky; left: 0; background: linear-gradient(135deg, #0055A4 0%, rgba(0, 85, 164, 0.9) 100%); z-index: 10;">Équipe</th>
-                    <th style="padding: ${compact ? '0.6rem 0.5rem' : '0.8rem 0.75rem'}; text-align: center; font-weight: 800; font-size: ${compact ? '0.7rem' : '0.75rem'}; text-transform: uppercase; letter-spacing: 0.05em;" title="Poule">Poule</th>
+                <tr class="teams-table__header">
+                    <th class="teams-table__th teams-table__th--sticky teams-table__th--team">Équipe</th>
+                    <th class="teams-table__th teams-table__th--pool" title="Poule">Poule</th>
                     ${this.showPerformance ? `
-                    <th style="padding: ${compact ? '0.6rem 0.5rem' : '0.8rem 0.75rem'}; text-align: center; font-weight: 800; font-size: ${compact ? '0.7rem' : '0.75rem'}; text-transform: uppercase; letter-spacing: 0.05em;" title="Matchs Joués">J</th>
-                    <th style="padding: ${compact ? '0.6rem 0.5rem' : '0.8rem 0.75rem'}; text-align: center; font-weight: 800; font-size: ${compact ? '0.7rem' : '0.75rem'}; text-transform: uppercase; letter-spacing: 0.05em;" title="Victoires">G</th>
-                    <th style="padding: ${compact ? '0.6rem 0.5rem' : '0.8rem 0.75rem'}; text-align: center; font-weight: 800; font-size: ${compact ? '0.7rem' : '0.75rem'}; text-transform: uppercase; letter-spacing: 0.05em;" title="Nuls">N</th>
-                    <th style="padding: ${compact ? '0.6rem 0.5rem' : '0.8rem 0.75rem'}; text-align: center; font-weight: 800; font-size: ${compact ? '0.7rem' : '0.75rem'}; text-transform: uppercase; letter-spacing: 0.05em;" title="Défaites">P</th>
-                    <th style="padding: ${compact ? '0.6rem 0.5rem' : '0.8rem 0.75rem'}; text-align: center; font-weight: 800; font-size: ${compact ? '0.7rem' : '0.75rem'}; text-transform: uppercase; letter-spacing: 0.05em;" title="Points">Pts</th>
-                    <th style="padding: ${compact ? '0.6rem 0.5rem' : '0.8rem 0.75rem'}; text-align: center; font-weight: 800; font-size: ${compact ? '0.7rem' : '0.75rem'}; text-transform: uppercase; letter-spacing: 0.05em;" title="Différence de points marqués">+/-</th>
+                    <th class="teams-table__th teams-table__th--stat" title="Matchs Joués">J</th>
+                    <th class="teams-table__th teams-table__th--stat" title="Victoires">G</th>
+                    <th class="teams-table__th teams-table__th--stat" title="Nuls">N</th>
+                    <th class="teams-table__th teams-table__th--stat" title="Défaites">P</th>
+                    <th class="teams-table__th teams-table__th--stat" title="Points">Pts</th>
+                    <th class="teams-table__th teams-table__th--stat" title="Différence de points marqués">+/-</th>
                     ` : ''}
                     ${this.showPlanning ? `
-                    <th style="padding: ${compact ? '0.6rem 0.5rem' : '0.8rem 0.75rem'}; text-align: center; font-weight: 800; font-size: ${compact ? '0.7rem' : '0.75rem'}; text-transform: uppercase; letter-spacing: 0.05em;" title="Planifiés (normaux + entente) / Non planifiés">Planning</th>
-                    <th style="padding: ${compact ? '0.6rem 0.5rem' : '0.8rem 0.75rem'}; text-align: center; font-weight: 800; font-size: ${compact ? '0.7rem' : '0.75rem'}; text-transform: uppercase; letter-spacing: 0.05em;" title="Taux de complétion">%</th>
+                    <th class="teams-table__th teams-table__th--planning" title="Planifiés (normaux + entente) / Non planifiés">Planning</th>
+                    <th class="teams-table__th teams-table__th--stat" title="Taux de complétion">%</th>
                     ` : ''}
                     ${this.showPenalties ? `
-                    <th style="padding: ${compact ? '0.6rem 0.5rem' : '0.8rem 0.75rem'}; text-align: center; font-weight: 800; font-size: ${compact ? '0.7rem' : '0.75rem'}; text-transform: uppercase; letter-spacing: 0.05em;" title="Pénalités totales">Pén.</th>
+                    <th class="teams-table__th teams-table__th--stat" title="Pénalités totales">Pén.</th>
                     ` : ''}
-                    <th style="padding: ${compact ? '0.6rem 0.5rem' : '0.8rem 0.75rem'}; text-align: center; font-weight: 800; font-size: ${compact ? '0.7rem' : '0.75rem'}; text-transform: uppercase; letter-spacing: 0.05em;"></th>
+                    <th class="teams-table__th teams-table__th--action"></th>
                 </tr>
             </thead>
         `;
     }
     
     /**
-     * Calcule la couleur de fond d'une équipe selon le critère de coloration
+     * Calcule la classe CSS pour le coloring d'une équipe
      */
-    _getTeamRowColor(stats, index, allTeams) {
+    _getTeamRowColorClass(stats, index, allTeams) {
         if (this.colorBy === 'none') {
-            return index % 2 === 0 ? 'rgba(0, 85, 164, 0.02)' : 'white';
+            return index % 2 === 0 ? 'team-row--even' : 'team-row--odd';
         }
         
         let value, maxValue, minValue;
         
         switch (this.colorBy) {
             case 'completion':
-                // Vert pour taux élevé, rouge pour taux faible
                 value = stats.completionRate;
-                if (value >= 80) return 'rgba(39, 174, 96, 0.15)'; // Vert clair
-                if (value >= 60) return 'rgba(255, 193, 7, 0.15)'; // Jaune clair
-                if (value >= 40) return 'rgba(255, 149, 0, 0.15)'; // Orange clair
-                return 'rgba(239, 65, 53, 0.15)'; // Rouge clair
+                if (value >= 80) return 'team-row--success';
+                if (value >= 60) return 'team-row--warning';
+                if (value >= 40) return 'team-row--orange';
+                return 'team-row--danger';
                 
             case 'performance':
-                // Vert pour beaucoup de points, rouge pour peu
                 maxValue = Math.max(...allTeams.map(t => t.stats.points));
                 minValue = Math.min(...allTeams.map(t => t.stats.points));
                 value = stats.points;
                 
-                if (maxValue === minValue) return index % 2 === 0 ? 'rgba(0, 85, 164, 0.02)' : 'white';
+                if (maxValue === minValue) return index % 2 === 0 ? 'team-row--even' : 'team-row--odd';
                 
                 const pointsRatio = (value - minValue) / (maxValue - minValue);
-                if (pointsRatio >= 0.75) return 'rgba(39, 174, 96, 0.15)';
-                if (pointsRatio >= 0.5) return 'rgba(255, 193, 7, 0.15)';
-                if (pointsRatio >= 0.25) return 'rgba(255, 149, 0, 0.15)';
-                return 'rgba(239, 65, 53, 0.15)';
+                if (pointsRatio >= 0.75) return 'team-row--success';
+                if (pointsRatio >= 0.5) return 'team-row--warning';
+                if (pointsRatio >= 0.25) return 'team-row--orange';
+                return 'team-row--danger';
                 
             case 'pointsDiff':
-                // Vert pour diff positive, rouge pour négative
                 value = stats.pointsDiff;
-                if (value > 20) return 'rgba(39, 174, 96, 0.15)';
-                if (value > 5) return 'rgba(39, 174, 96, 0.08)';
-                if (value >= -5) return index % 2 === 0 ? 'rgba(0, 85, 164, 0.02)' : 'white';
-                if (value >= -20) return 'rgba(239, 65, 53, 0.08)';
-                return 'rgba(239, 65, 53, 0.15)';
+                if (value > 20) return 'team-row--success';
+                if (value > 5) return 'team-row--success-light';
+                if (value >= -5) return index % 2 === 0 ? 'team-row--even' : 'team-row--odd';
+                if (value >= -20) return 'team-row--danger-light';
+                return 'team-row--danger';
                 
             case 'penalties':
-                // Rouge pour beaucoup de pénalités, vert pour peu
                 value = stats.totalPenalties;
-                if (value <= 10) return 'rgba(39, 174, 96, 0.15)';
-                if (value <= 30) return 'rgba(255, 193, 7, 0.15)';
-                if (value <= 50) return 'rgba(255, 149, 0, 0.15)';
-                return 'rgba(239, 65, 53, 0.15)';
+                if (value <= 10) return 'team-row--success';
+                if (value <= 30) return 'team-row--warning';
+                if (value <= 50) return 'team-row--orange';
+                return 'team-row--danger';
                 
             default:
-                return index % 2 === 0 ? 'rgba(0, 85, 164, 0.02)' : 'white';
+                return index % 2 === 0 ? 'team-row--even' : 'team-row--odd';
         }
     }
     
@@ -778,67 +805,58 @@ class TeamsView {
      */
     _generateTeamRow(team, index, data, allTeams) {
         const isExpanded = this.expandedTeams.has(team.id);
-        const rowBg = this._getTeamRowColor(team.stats, index, allTeams);
-        const compact = this.compactMode;
+        const rowColorClass = this._getTeamRowColorClass(team.stats, index, allTeams);
         const stats = team.stats;
         
         // Badges
+        const genderClass = team.genre === 'F' ? 'team-gender--female' : 'team-gender--male';
         const genderIcon = team.genre === 'F' ? '♀️' : '♂️';
-        const genderColor = team.genre === 'F' ? '#FF1493' : '#007BFF';
-        const ententeBadge = stats.entente > 0 ? `<span style="font-size: 0.8rem; margin-left: 0.3rem;" title="${stats.entente} match(s) entente">🤝</span>` : '';
+        const ententeBadge = stats.entente > 0 ? `<span class="team-entente-badge" title="${stats.entente} match(s) entente">🤝</span>` : '';
         
-        // Couleur pour la différence de points
-        const pointsDiffColor = stats.pointsDiff > 0 ? '#27AE60' : stats.pointsDiff < 0 ? '#EF4135' : '#666';
+        // Classes pour les valeurs
+        const pointsDiffClass = stats.pointsDiff > 0 ? 'stat--positive' : stats.pointsDiff < 0 ? 'stat--negative' : '';
         const pointsDiffSign = stats.pointsDiff > 0 ? '+' : '';
-        
-        // Couleur pour le taux de complétion
-        const completionColor = stats.completionRate >= 80 ? '#27AE60' : stats.completionRate >= 50 ? '#FF9500' : '#EF4135';
-        
-        // Couleur pour les pénalités
-        const penaltyColor = stats.totalPenalties > 50 ? '#EF4135' : stats.totalPenalties > 20 ? '#FF9500' : '#27AE60';
+        const completionClass = stats.completionRate >= 80 ? 'stat--success' : stats.completionRate >= 50 ? 'stat--warning' : 'stat--danger';
+        const penaltyClass = stats.totalPenalties > 50 ? 'stat--danger' : stats.totalPenalties > 20 ? 'stat--warning' : 'stat--success';
         
         let html = `
-            <tr class="team-row" data-team-id="${team.id}" style="background: ${rowBg}; border-bottom: 1px solid rgba(0, 85, 164, 0.08); cursor: pointer; transition: background 0.2s ease;">
-                <td style="padding: ${compact ? '0.6rem 0.75rem' : '0.8rem 1rem'}; font-weight: 700; position: sticky; left: 0; background: ${rowBg}; z-index: 5; border-right: 1px solid rgba(0, 85, 164, 0.1);">
-                    <div style="display: flex; align-items: center; gap: 0.5rem;">
-                        <span style="color: ${genderColor}; font-size: 1rem;">${genderIcon}</span>
-                        <div style="display: flex; flex-direction: column;">
-                            <span style="font-size: ${compact ? '0.85rem' : '0.9rem'}; color: #0055A4;">${team.nom_complet || team.nom}</span>
-                            <span style="font-size: 0.7rem; color: #999; font-weight: 600;">${team.institution}${ententeBadge}</span>
+            <tr class="team-row ${rowColorClass}" data-team-id="${team.id}">
+                <td class="teams-table__td teams-table__td--team teams-table__td--sticky">
+                    <div class="team-cell">
+                        <span class="team-gender ${genderClass}">${genderIcon}</span>
+                        <div class="team-info">
+                            <span class="team-name">${team.nom_complet || team.nom}</span>
+                            <span class="team-institution">${team.institution}${ententeBadge}</span>
                         </div>
                     </div>
                 </td>
-                <td style="padding: ${compact ? '0.6rem 0.5rem' : '0.8rem 0.75rem'}; text-align: center;">
-                    <span style="font-size: 0.7rem; font-weight: 700; padding: 0.2rem 0.5rem; background: rgba(0, 85, 164, 0.1); border-radius: 4px; color: #0055A4;">${team.poule}</span>
+                <td class="teams-table__td teams-table__td--center">
+                    <span class="team-pool-badge">${team.poule}</span>
                 </td>
                 ${this.showPerformance ? `
-                <td style="padding: ${compact ? '0.6rem 0.5rem' : '0.8rem 0.75rem'}; text-align: center; font-weight: 700; font-family: 'Roboto Mono', monospace;">${stats.played}</td>
-                <td style="padding: ${compact ? '0.6rem 0.5rem' : '0.8rem 0.75rem'}; text-align: center; font-weight: 700; color: #27AE60; font-family: 'Roboto Mono', monospace;">${stats.won}</td>
-                <td style="padding: ${compact ? '0.6rem 0.5rem' : '0.8rem 0.75rem'}; text-align: center; font-weight: 700; color: #FF9500; font-family: 'Roboto Mono', monospace;">${stats.drawn}</td>
-                <td style="padding: ${compact ? '0.6rem 0.5rem' : '0.8rem 0.75rem'}; text-align: center; font-weight: 700; color: #EF4135; font-family: 'Roboto Mono', monospace;">${stats.lost}</td>
-                <td style="padding: ${compact ? '0.6rem 0.5rem' : '0.8rem 0.75rem'}; text-align: center; font-weight: 900; color: #0055A4; font-size: ${compact ? '0.9rem' : '1rem'}; font-family: 'Roboto Mono', monospace;">${stats.points}</td>
-                <td style="padding: ${compact ? '0.6rem 0.5rem' : '0.8rem 0.75rem'}; text-align: center; font-weight: 700; color: ${pointsDiffColor}; font-family: 'Roboto Mono', monospace;">${pointsDiffSign}${stats.pointsDiff}</td>
+                <td class="teams-table__td teams-table__td--stat">${stats.played}</td>
+                <td class="teams-table__td teams-table__td--stat stat--won">${stats.won}</td>
+                <td class="teams-table__td teams-table__td--stat stat--drawn">${stats.drawn}</td>
+                <td class="teams-table__td teams-table__td--stat stat--lost">${stats.lost}</td>
+                <td class="teams-table__td teams-table__td--stat teams-table__td--points">${stats.points}</td>
+                <td class="teams-table__td teams-table__td--stat ${pointsDiffClass}">${pointsDiffSign}${stats.pointsDiff}</td>
                 ` : ''}
                 ${this.showPlanning ? `
-                <td style="padding: ${compact ? '0.6rem 0.5rem' : '0.8rem 0.75rem'}; text-align: center;">
-                    <span style="font-size: 0.75rem; font-weight: 700;">
-                        <span style="color: #27AE60;" title="Planifiés normaux">${stats.scheduledNonEntente}</span>
-                        ${stats.scheduledEntente > 0 ? `<span style="color: #999;"> + </span><span style="color: #27AE60;" title="Planifiés entente">🤝${stats.scheduledEntente}</span>` : ''}
-                        <span style="color: #999;"> / </span>
-                        <span style="color: #EF4135;" title="Non planifiés">${stats.unscheduled}</span>
+                <td class="teams-table__td teams-table__td--planning">
+                    <span class="planning-info">
+                        <span class="planning-scheduled" title="Planifiés normaux">${stats.scheduledNonEntente}</span>
+                        ${stats.scheduledEntente > 0 ? `<span class="planning-separator"> + </span><span class="planning-entente" title="Planifiés entente">🤝${stats.scheduledEntente}</span>` : ''}
+                        <span class="planning-separator"> / </span>
+                        <span class="planning-unscheduled" title="Non planifiés">${stats.unscheduled}</span>
                     </span>
                 </td>
-                <td style="padding: ${compact ? '0.6rem 0.5rem' : '0.8rem 0.75rem'}; text-align: center;">
-                    <span style="font-size: 0.85rem; font-weight: 900; color: ${completionColor}; font-family: 'Roboto Mono', monospace;">${stats.completionRate.toFixed(0)}%</span>
-                </td>
+                <td class="teams-table__td teams-table__td--stat ${completionClass}">${stats.completionRate.toFixed(0)}%</td>
                 ` : ''}
                 ${this.showPenalties ? `
-                <td style="padding: ${compact ? '0.6rem 0.5rem' : '0.8rem 0.75rem'}; text-align: center;">
-                    <span style="font-size: 0.8rem; font-weight: 800; color: ${penaltyColor}; font-family: 'Roboto Mono', monospace;">${stats.totalPenalties.toFixed(1)}</span>
-                </td>
+                <td class="teams-table__td teams-table__td--stat ${penaltyClass}">${stats.totalPenalties.toFixed(1)}</td>
                 ` : ''}
-                <td style="padding: ${compact ? '0.6rem 0.5rem' : '0.8rem 0.75rem'}; text-align: center;">
-                    <button class="expand-btn ${isExpanded ? 'expanded' : ''}" style="background: rgba(0, 85, 164, 0.1); border: 1px solid rgba(0, 85, 164, 0.2); color: #0055A4; padding: 0.3rem 0.6rem; border-radius: 4px; font-weight: 700; cursor: pointer; transition: all 0.2s ease;">
+                <td class="teams-table__td teams-table__td--action">
+                    <button class="expand-btn ${isExpanded ? 'expand-btn--expanded' : ''}">
                         ${isExpanded ? '▼' : '▶'}
                     </button>
                 </td>
@@ -859,61 +877,66 @@ class TeamsView {
     _generateExpandedContent(team, data) {
         const stats = team.stats;
         
+        // Utiliser l'emoji du sport
+        const sportEmoji = window.sportUtils?.getEmoji() || '🏐';
+        
+        const preferenceRateClass = stats.preferenceRate >= 70 ? 'stat--success' : stats.preferenceRate >= 40 ? 'stat--warning' : 'stat--danger';
+        
         return `
             <tr class="team-expanded-row" data-team-id="${team.id}">
-                <td colspan="100%" style="padding: 0; background: rgba(0, 85, 164, 0.02); border-bottom: 2px solid rgba(0, 85, 164, 0.15);">
-                    <div style="padding: 1.5rem; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem;">
+                <td colspan="100%" class="team-expanded-cell">
+                    <div class="team-expanded-content">
                         
                         <!-- Statistiques détaillées -->
-                        <div style="background: white; border-radius: 8px; padding: 1rem; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06); border: 1px solid rgba(0, 85, 164, 0.1);">
-                            <h4 style="margin: 0 0 0.75rem 0; font-size: 0.9rem; font-weight: 800; color: #0055A4; font-family: 'Roboto', sans-serif; border-bottom: 2px solid rgba(0, 85, 164, 0.1); padding-bottom: 0.5rem;">📊 Statistiques Détaillées</h4>
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; font-size: 0.8rem;">
-                                <div><span style="color: #666;">Total matchs:</span> <strong>${stats.totalMatches}</strong></div>
-                                <div><span style="color: #666;">Joués:</span> <strong style="color: #27AE60;">${stats.played}</strong></div>
-                                <div><span style="color: #666;">À venir:</span> <strong style="color: #007BFF;">${stats.upcoming}</strong></div>
-                                <div><span style="color: #666;">Non planifiés:</span> <strong style="color: #EF4135;">${stats.unscheduled}</strong></div>
-                                <div><span style="color: #666;">Points pour:</span> <strong style="color: #27AE60;">${stats.pointsFor}</strong></div>
-                                <div><span style="color: #666;">Points contre:</span> <strong style="color: #EF4135;">${stats.pointsAgainst}</strong></div>
-                                <div><span style="color: #666;">Semaines jouées:</span> <strong>${stats.weeksPlayed}</strong></div>
-                                <div><span style="color: #666;">Gymnases utilisés:</span> <strong>${stats.venuesUsed}</strong></div>
+                        <div class="expanded-section">
+                            <h4 class="expanded-section__title">📊 Statistiques Détaillées</h4>
+                            <div class="expanded-stats-grid">
+                                <div class="expanded-stat"><span class="expanded-stat__label">Total matchs:</span> <strong>${stats.totalMatches}</strong></div>
+                                <div class="expanded-stat"><span class="expanded-stat__label">Joués:</span> <strong class="stat--success">${stats.played}</strong></div>
+                                <div class="expanded-stat"><span class="expanded-stat__label">À venir:</span> <strong class="stat--info">${stats.upcoming}</strong></div>
+                                <div class="expanded-stat"><span class="expanded-stat__label">Non planifiés:</span> <strong class="stat--danger">${stats.unscheduled}</strong></div>
+                                <div class="expanded-stat"><span class="expanded-stat__label">Points pour:</span> <strong class="stat--success">${stats.pointsFor}</strong></div>
+                                <div class="expanded-stat"><span class="expanded-stat__label">Points contre:</span> <strong class="stat--danger">${stats.pointsAgainst}</strong></div>
+                                <div class="expanded-stat"><span class="expanded-stat__label">Semaines jouées:</span> <strong>${stats.weeksPlayed}</strong></div>
+                                <div class="expanded-stat"><span class="expanded-stat__label">Gymnases utilisés:</span> <strong>${stats.venuesUsed}</strong></div>
                             </div>
                         </div>
                         
                         ${this.showPreferences ? `
                         <!-- Préférences -->
-                        <div style="background: white; border-radius: 8px; padding: 1rem; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06); border: 1px solid rgba(0, 85, 164, 0.1);">
-                            <h4 style="margin: 0 0 0.75rem 0; font-size: 0.9rem; font-weight: 800; color: #0055A4; font-family: 'Roboto', sans-serif; border-bottom: 2px solid rgba(0, 85, 164, 0.1); padding-bottom: 0.5rem;">⭐ Préférences</h4>
-                            <div style="font-size: 0.8rem; line-height: 1.6;">
+                        <div class="expanded-section">
+                            <h4 class="expanded-section__title">⭐ Préférences</h4>
+                            <div class="expanded-preferences">
                                 ${team.horaires_preferes && team.horaires_preferes.length > 0 ? `
-                                <div style="margin-bottom: 0.5rem;">
-                                    <span style="color: #666; font-weight: 600;">🕐 Horaires préférés:</span><br>
-                                    <span style="color: #0055A4; font-weight: 700;">${team.horaires_preferes.join(', ')}</span>
+                                <div class="preference-item">
+                                    <span class="preference-item__label">🕐 Horaires préférés:</span>
+                                    <span class="preference-item__value">${team.horaires_preferes.join(', ')}</span>
                                 </div>
                                 ` : ''}
                                 ${team.lieux_preferes && team.lieux_preferes.length > 0 ? `
-                                <div style="margin-bottom: 0.5rem;">
-                                    <span style="color: #666; font-weight: 600;">📍 Lieux préférés:</span><br>
-                                    <span style="color: #0055A4; font-weight: 700;">${team.lieux_preferes.join(', ')}</span>
+                                <div class="preference-item">
+                                    <span class="preference-item__label">📍 Lieux préférés:</span>
+                                    <span class="preference-item__value">${team.lieux_preferes.join(', ')}</span>
                                 </div>
                                 ` : ''}
                                 ${team.semaines_indisponibles && Object.keys(team.semaines_indisponibles).length > 0 ? `
-                                <div>
-                                    <span style="color: #666; font-weight: 600;">❌ Indisponibilités:</span><br>
-                                    <span style="color: #EF4135; font-weight: 700;">Semaines ${Object.keys(team.semaines_indisponibles).join(', ')}</span>
+                                <div class="preference-item">
+                                    <span class="preference-item__label">❌ Indisponibilités:</span>
+                                    <span class="preference-item__value preference-item__value--danger">Semaines ${Object.keys(team.semaines_indisponibles).join(', ')}</span>
                                 </div>
                                 ` : ''}
-                                <div style="margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid rgba(0, 85, 164, 0.1);">
-                                    <span style="color: #666;">Taux de respect:</span>
-                                    <strong style="color: ${stats.preferenceRate >= 70 ? '#27AE60' : stats.preferenceRate >= 40 ? '#FF9500' : '#EF4135'}; font-size: 0.9rem;">${stats.preferenceRate.toFixed(0)}%</strong>
+                                <div class="preference-rate">
+                                    <span class="preference-rate__label">Taux de respect:</span>
+                                    <strong class="${preferenceRateClass}">${stats.preferenceRate.toFixed(0)}%</strong>
                                 </div>
                             </div>
                         </div>
                         ` : ''}
                         
                         <!-- Récapitulatif des matchs -->
-                        <div style="background: white; border-radius: 8px; padding: 1rem; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06); border: 1px solid rgba(0, 85, 164, 0.1); ${this.showPreferences ? '' : 'grid-column: 1 / -1;'}">
-                            <h4 style="margin: 0 0 0.75rem 0; font-size: 0.9rem; font-weight: 800; color: #0055A4; font-family: 'Roboto', sans-serif; border-bottom: 2px solid rgba(0, 85, 164, 0.1); padding-bottom: 0.5rem;">⚽ Matchs (${stats.matches.length})</h4>
-                            <div style="max-height: 300px; overflow-y: auto; font-size: 0.75rem;">
+                        <div class="expanded-section ${this.showPreferences ? '' : 'expanded-section--full'}">
+                            <h4 class="expanded-section__title">${sportEmoji} Matchs (${stats.matches.length})</h4>
+                            <div class="expanded-matches-scroll">
                                 ${this._generateTeamMatchesList(stats.matches, team)}
                             </div>
                         </div>
@@ -922,16 +945,18 @@ class TeamsView {
             </tr>
         `;
     }
-    
+
     /**
      * Génère la liste des matchs d'une équipe
      */
     _generateTeamMatchesList(matches, team) {
         if (matches.length === 0) {
-            return '<div style="text-align: center; padding: 2rem; color: #999;">Aucun match</div>';
+            return '<div class="team-matches-empty">Aucun match</div>';
         }
         
-        let html = '<div style="display: grid; gap: 0.5rem;">';
+        // Utiliser l'emoji du sport
+        const sportEmoji = window.sportUtils?.getEmoji() || '🏐';
+        let html = '<div class="team-matches-list">';
         
         matches.forEach(match => {
             const isTeam1 = match.equipe1_id === team.id;
@@ -939,51 +964,83 @@ class TeamsView {
             const isScheduled = match.semaine && match.horaire && match.gymnase;
             const hasScore = match.score && match.score.has_score;
             const isEntente = match.is_entente;
+            const ententeStatus = (match.entente_status || 'suggested').toLowerCase();
             
-            let statusBg = 'rgba(0, 85, 164, 0.05)';
-            let statusColor = '#0055A4';
+            // Déterminer les classes CSS pour le match
+            let itemClass = 'team-match-item';
+            let statusClass = 'team-match-item__status';
             let statusText = 'À planifier';
+            let statusIcon = '';
             
-            if (isEntente && !isScheduled) {
-                // Match entente sans créneau = à jouer hors calendrier
-                statusBg = 'rgba(156, 39, 176, 0.1)'; // Violet
-                statusColor = '#9C27B0';
-                statusText = 'Entente';
+            if (isEntente) {
+                // Classes pour les matchs entente
+                itemClass += ` team-match-item--entente-${ententeStatus}`;
+                statusClass += ` team-match-item__status--entente-${ententeStatus}`;
+                const ententeConfig = {
+                    'played': { text: 'Jouée', icon: '✅' },
+                    'scheduled': { text: 'Planifiée', icon: '📅' },
+                    'confirmed': { text: 'Confirmée', icon: '🤝' },
+                    'suggested': { text: 'Suggérée', icon: '💡' }
+                };
+                const config = ententeConfig[ententeStatus] || ententeConfig['suggested'];
+                statusText = config.text;
+                statusIcon = config.icon;
             } else if (hasScore) {
-                statusBg = 'rgba(39, 174, 96, 0.1)';
-                statusColor = '#27AE60';
+                itemClass += ' team-match-item--played';
+                statusClass += ' team-match-item__status--played';
                 statusText = 'Terminé';
             } else if (isScheduled) {
-                statusBg = 'rgba(0, 123, 255, 0.1)';
-                statusColor = '#007BFF';
+                itemClass += ' team-match-item--upcoming';
+                statusClass += ' team-match-item__status--upcoming';
                 statusText = 'À venir';
             } else {
-                statusBg = 'rgba(239, 65, 53, 0.1)';
-                statusColor = '#EF4135';
+                itemClass += ' team-match-item--unscheduled';
+                statusClass += ' team-match-item__status--unscheduled';
             }
             
+            // Score display
             let scoreDisplay = '';
             if (hasScore) {
                 const teamScore = isTeam1 ? match.score.equipe1 : match.score.equipe2;
                 const oppScore = isTeam1 ? match.score.equipe2 : match.score.equipe1;
                 const isWin = teamScore > oppScore;
                 const isDraw = teamScore === oppScore;
-                scoreDisplay = `<span style="font-weight: 900; color: ${isWin ? '#27AE60' : isDraw ? '#FF9500' : '#EF4135'}; font-family: 'Roboto Mono', monospace;">${teamScore} - ${oppScore}</span>`;
+                const scoreClass = isWin ? 'team-match-item__score--win' : isDraw ? 'team-match-item__score--draw' : 'team-match-item__score--loss';
+                scoreDisplay = `<span class="team-match-item__score ${scoreClass}">${teamScore} - ${oppScore}</span>`;
+            }
+            
+            // Description pour les ententes selon le statut
+            let matchInfo = '';
+            if (isEntente) {
+                const descriptions = {
+                    'played': 'Match d\'entente terminé',
+                    'scheduled': `J${match.semaine} • ${match.horaire} • ${match.gymnase}`,
+                    'confirmed': 'En attente de créneau',
+                    'suggested': 'À confirmer avec les équipes'
+                };
+                const infoColorClass = {
+                    'played': 'team-match-item__info--success',
+                    'scheduled': 'team-match-item__info--info',
+                    'confirmed': 'team-match-item__info--purple',
+                    'suggested': 'team-match-item__info--warning'
+                };
+                matchInfo = `<div class="team-match-item__info team-match-item__info--entente ${infoColorClass[ententeStatus] || ''}">${descriptions[ententeStatus] || 'Match en entente'}</div>`;
+            } else if (isScheduled) {
+                matchInfo = `<div class="team-match-item__info">J${match.semaine} • ${match.horaire} • ${match.gymnase}</div>`;
             }
             
             html += `
-                <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.5rem; background: ${statusBg}; border-radius: 6px; border: 1px solid ${statusColor}33;">
-                    <div style="flex: 1;">
-                        <div style="font-weight: 700; color: #333; margin-bottom: 0.2rem;">
+                <div class="${itemClass}">
+                    <div>
+                        <div class="team-match-item__opponent">
                             vs ${opponent}
-                            ${isEntente ? '<span style="font-size: 0.9rem; margin-left: 0.3rem;" title="Match en entente">🤝</span>' : ''}
+                            ${isEntente ? `<span class="team-match-item__badge" title="Match entente - ${statusText}">${statusIcon || '🤝'}</span>` : ''}
                         </div>
-                        ${isScheduled ? `<div style="color: #666; font-size: 0.7rem;">S${match.semaine} • ${match.horaire} • ${match.gymnase}</div>` : ''}
-                        ${isEntente && !isScheduled ? `<div style="color: ${statusColor}; font-size: 0.7rem; font-style: italic;">À jouer hors calendrier officiel</div>` : ''}
+                        ${matchInfo}
                     </div>
-                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <div class="team-match-item__right">
                         ${scoreDisplay}
-                        <span style="font-size: 0.65rem; font-weight: 700; padding: 0.2rem 0.4rem; background: white; border-radius: 4px; color: ${statusColor}; text-transform: uppercase;">${statusText}</span>
+                        <span class="${statusClass}">${statusText}</span>
                     </div>
                 </div>
             `;
@@ -1005,10 +1062,11 @@ class TeamsView {
             const groupTeams = groups[groupName];
             
             html += `
-                <div class="teams-group" style="margin-bottom: 2rem;">
-                    <h3 style="margin: 0 0 1rem 0; font-size: 1.2rem; font-weight: 800; color: #0055A4; font-family: 'Inter', 'Roboto', sans-serif; padding-bottom: 0.75rem; border-bottom: 3px solid rgba(0, 85, 164, 0.2);">
-                        ${this._getGroupIcon()} ${groupName}
-                        <span style="font-size: 0.85rem; font-weight: 600; color: #666; margin-left: 0.5rem;">(${groupTeams.length})</span>
+                <div class="teams-group">
+                    <h3 class="teams-group__header">
+                        <span class="teams-group__icon">${this._getGroupIcon()}</span>
+                        ${groupName}
+                        <span class="teams-group__count">(${groupTeams.length})</span>
                     </h3>
                     ${this._generateTeamsTable(groupTeams, data)}
                 </div>

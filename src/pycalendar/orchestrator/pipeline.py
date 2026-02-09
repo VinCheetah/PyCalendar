@@ -13,6 +13,12 @@ from pycalendar.core.statistics import Statistics
 from pycalendar.interface.core.generator import InterfaceGenerator
 from pycalendar.validation.solution_validator import SolutionValidator, afficher_rapport_validation
 from pycalendar.analysis import calculate_penalty_breakdown
+from pycalendar.core.console import (
+    print_banner, print_header, print_section, print_subsection,
+    print_success, print_error, print_warning, print_info, print_detail,
+    print_key_value, print_separator, print_blank, format_solution_summary,
+    LoadingReport, LoadingResult
+)
 
 try:
     from pycalendar.solvers.cpsat_solver import CPSATSolver
@@ -39,29 +45,51 @@ class SchedulingPipeline:
     
     def run(self):
         """Execute the complete scheduling pipeline."""
-        print("\n" + "="*60)
-        print("PYCALENDAR - Planification de calendrier sportif")
-        print("="*60 + "\n")
+        # Déterminer l'emoji du sport depuis la config
+        sport_emoji = "🏐"  # Par défaut volleyball
+        sport_name = getattr(self.config, 'sport', 'Sports')
+        if hasattr(self.config, 'sport'):
+            sport = self.config.sport.lower()
+            if 'basket' in sport:
+                sport_emoji = "🏀"
+            elif 'hand' in sport:
+                sport_emoji = "🤾"
+            elif 'foot' in sport:
+                sport_emoji = "⚽"
         
-        equipes = self._load_equipes()
-        gymnases = self._load_gymnases()
-        self.obligations_presence = self._load_obligations()
-        self.groupes_non_simultaneite = self._load_groupes_non_simultaneite()
-        self.coach_groups = self._load_coach_groups(equipes)
-        self.ententes = self._load_ententes()
-        self.contraintes_temporelles = self._load_contraintes_temporelles()
-        self.niveaux_gymnases = self._load_niveaux_gymnases()
-        self.priorites_genre_gymnases = self._load_priorites_genres()
+        print_banner(sport_name, sport_emoji)
+        
+        # ══════════════════════════════════════════════════════════════
+        # PHASE 1: CHARGEMENT DES DONNÉES
+        # ══════════════════════════════════════════════════════════════
+        print_header("PHASE 1: CHARGEMENT DES DONNÉES")
+        loading_report = LoadingReport()
+        
+        equipes = self._load_equipes(loading_report)
+        gymnases = self._load_gymnases(loading_report)
+        self.obligations_presence = self._load_obligations(loading_report)
+        self.groupes_non_simultaneite = self._load_groupes_non_simultaneite(loading_report)
+        self.coach_groups = self._load_coach_groups(equipes, loading_report)
+        self.ententes = self._load_ententes(loading_report)
+        self.contraintes_temporelles = self._load_contraintes_temporelles(loading_report)
+        self.niveaux_gymnases = self._load_niveaux_gymnases(loading_report)
+        self.priorites_genre_gymnases = self._load_priorites_genres(loading_report)
+        matchs_fixes = self._load_matchs_fixes(equipes, loading_report)
+        
+        loading_report.display_summary()
+        
+        # ══════════════════════════════════════════════════════════════
+        # PHASE 2: VALIDATION ET PRÉPARATION
+        # ══════════════════════════════════════════════════════════════
+        print_header("PHASE 2: VALIDATION ET PRÉPARATION")
         
         if not self._validate_data(equipes, gymnases):
-            print("❌ Erreurs de validation. Arrêt du pipeline.")
+            print_error("Erreurs de validation. Arrêt du pipeline.")
             return None
+        print_success("Données validées")
         
         poules = self.source.get_poules_dict(equipes)
         self._afficher_info_donnees(equipes, poules, gymnases)
-        
-        # Charger les matchs fixes
-        matchs_fixes = self._load_matchs_fixes(equipes)
         
         matchs = self._generer_matchs(poules)
         
@@ -75,10 +103,15 @@ class SchedulingPipeline:
         if matchs_fixes:
             creneaux = self._exclure_creneaux_fixes(creneaux, matchs_fixes, gymnases)
         
-        print(f"✓ {len(matchs)} matchs à planifier sur {len(creneaux)} créneaux disponibles")
+        print_blank()
+        print_info(f"{len(matchs)} matchs à planifier sur {len(creneaux)} créneaux disponibles")
         if matchs_fixes:
-            print(f"  ({len(matchs_fixes)} matchs fixes déjà planifiés)")
-        print()
+            print_detail(f"{len(matchs_fixes)} matchs fixes déjà planifiés")
+        
+        # ══════════════════════════════════════════════════════════════
+        # PHASE 3: RÉSOLUTION
+        # ══════════════════════════════════════════════════════════════
+        print_header("PHASE 3: RÉSOLUTION")
         
         solution = self._resoudre(matchs, creneaux.copy(), gymnases, matchs_fixes)
         
@@ -93,6 +126,11 @@ class SchedulingPipeline:
             creneaux_restants = [c for c in creneaux 
                                 if (c.gymnase, c.semaine, c.horaire) not in creneaux_utilises]
             
+            # ══════════════════════════════════════════════════════════════
+            # PHASE 4: RÉSULTATS ET VALIDATION
+            # ══════════════════════════════════════════════════════════════
+            print_header("PHASE 4: RÉSULTATS ET VALIDATION")
+            
             Statistics.afficher_stats(solution, creneaux_restants)
             self._ensure_penalty_breakdown(solution, gymnases)
             
@@ -102,190 +140,202 @@ class SchedulingPipeline:
             # Validation post-solution
             self._valider_solution(solution, gymnases)
             
+            # ══════════════════════════════════════════════════════════════
+            # PHASE 5: EXPORT
+            # ══════════════════════════════════════════════════════════════
+            print_header("PHASE 5: EXPORT")
+            
             self._exporter_solution(solution)
             return solution
         
+        print_error("Aucune solution trouvée")
         return None
     
-    def _load_equipes(self) -> List[Equipe]:
+    def _load_equipes(self, report: LoadingReport = None) -> List[Equipe]:
         """Load teams from file."""
-        print("📂 Chargement des équipes...")
         equipes = self.source.charger_equipes()
-        print(f"✓ {len(equipes)} équipes chargées avec contraintes institutionnelles\n")
+        if report:
+            report.add(LoadingResult(
+                name="Équipes",
+                count=len(equipes),
+                details=[f"{len(set(e.institution for e in equipes))} institutions"]
+            ))
         return equipes
     
-    def _load_gymnases(self) -> List[Gymnase]:
+    def _load_gymnases(self, report: LoadingReport = None) -> List[Gymnase]:
         """Load venues from file."""
-        print("\n📂 Chargement des gymnases...")
         gymnases = self.source.charger_gymnases()
-        print(f"✓ {len(gymnases)} gymnases chargés\n")
+        if report:
+            capacite_totale = sum(len(g.horaires_disponibles) * g.capacite for g in gymnases)
+            report.add(LoadingResult(
+                name="Gymnases",
+                count=len(gymnases),
+                details=[f"~{capacite_totale} créneaux/sem"]
+            ))
         return gymnases
     
-    def _load_obligations(self) -> Dict[str, str]:
+    def _load_obligations(self, report: LoadingReport = None) -> Dict[str, str]:
         """Load presence obligations."""
-        print("📋 Chargement des obligations de présence...")
         obligations = self.source.charger_obligations_presence()
-        
-        if obligations:
-            print(f"✓ {len(obligations)} gymnases avec obligation de présence:")
-            for gymnase, institution in obligations.items():
-                print(f"  • {gymnase} → {institution} obligatoire")
-        else:
-            print("  ℹ️  Aucune obligation de présence définie")
-        print()
+        if report and obligations:
+            report.add(LoadingResult(
+                name="Obligations de présence",
+                count=len(obligations)
+            ))
         return obligations
     
-    def _load_groupes_non_simultaneite(self) -> Dict:
+    def _load_groupes_non_simultaneite(self, report: LoadingReport = None) -> Dict:
         """Load non-simultaneity groups."""
-        print("🚫 Chargement des groupes de non-simultanéité...")
         try:
             groupes = self.source.charger_groupes_non_simultaneite()
-            
-            if groupes:
-                print(f"✓ {len(groupes)} groupes de non-simultanéité chargés:")
-                for nom_groupe, entites in groupes.items():
-                    print(f"  • {nom_groupe}: {', '.join(sorted(entites))}")
-            else:
-                print("  ℹ️  Aucun groupe de non-simultanéité défini (mode legacy)")
-                print("  ℹ️  La contrainte s'appliquera à toutes les institutions")
-            print()
+            if report and groupes:
+                report.add(LoadingResult(
+                    name="Groupes non-simultanéité",
+                    count=len(groupes)
+                ))
             return groupes
         except Exception as e:
-            print(f"  ⚠️  Erreur lors du chargement des groupes: {e}")
-            print("  ℹ️  Utilisation du mode legacy (toutes institutions)")
-            print()
+            if report:
+                report.add(LoadingResult(
+                    name="Groupes non-simultanéité",
+                    count=0,
+                    success=False,
+                    errors=[str(e)]
+                ))
             return {}
 
-    def _load_coach_groups(self, equipes: List[Equipe]) -> Dict[str, CoachGroup]:
+    def _load_coach_groups(self, equipes: List[Equipe], report: LoadingReport = None) -> Dict[str, CoachGroup]:
         """Load coach groups for overlap handling."""
         if not self.config.coach_overlap_actif:
             return {}
 
-        print("👥 Chargement des groupes coachs...")
         try:
             groups = self.source.charger_groupes_coachs(equipes)
-            if groups:
-                print(f"✓ {len(groups)} coach(s) avec équipes suivies")
-                for coach_name, group in list(groups.items())[:5]:
-                    print(f"  • {coach_name}: {len(group.team_ids)} équipe(s)")
-                if len(groups) > 5:
-                    print("  ...")
-            else:
-                print("  ℹ️  Aucun coach utilisable configuré")
-            print()
+            if report and groups:
+                report.add(LoadingResult(
+                    name="Groupes coachs",
+                    count=len(groups)
+                ))
             return groups
         except Exception as e:
-            print(f"  ⚠️  Erreur lors du chargement des coachs: {e}")
-            print()
+            if report:
+                report.add(LoadingResult(
+                    name="Groupes coachs",
+                    count=0,
+                    success=False,
+                    errors=[str(e)]
+                ))
             return {}
     
-    def _load_ententes(self) -> Dict:
+    def _load_ententes(self, report: LoadingReport = None) -> Dict:
         """Load ententes (special match pairs with reduced unscheduled penalty)."""
         if not self.config.entente_actif:
             return {}
         
-        print("🤝 Chargement des ententes...")
         try:
             ententes = self.source.charger_ententes()
-            
-            if ententes:
-                print(f"✓ {len(ententes)} ententes chargées:")
-                for (inst1, inst2), penalite in sorted(ententes.items()):
-                    print(f"  • {inst1} ↔ {inst2}: pénalité non-planif {penalite}")
-            else:
-                print("  ℹ️  Aucune entente définie")
-            print()
+            if report and ententes:
+                report.add(LoadingResult(
+                    name="Ententes",
+                    count=len(ententes)
+                ))
             return ententes
         except Exception as e:
-            print(f"  ⚠️  Erreur lors du chargement des ententes: {e}")
-            print()
+            if report:
+                report.add(LoadingResult(
+                    name="Ententes",
+                    count=0,
+                    success=False,
+                    errors=[str(e)]
+                ))
             return {}
     
-    def _load_contraintes_temporelles(self) -> Dict:
+    def _load_contraintes_temporelles(self, report: LoadingReport = None) -> Dict:
         """Load temporal constraints (before/after specific week)."""
         if not self.config.contrainte_temporelle_actif:
             return {}
         
-        print("⏰ Chargement des contraintes temporelles...")
         try:
             contraintes = self.source.charger_contraintes_temporelles()
-            
-            if contraintes:
-                mode = "dure (blocage)" if self.config.contrainte_temporelle_dure else f"souple (pénalité {self.config.contrainte_temporelle_penalite})"
-                print(f"✓ {len(contraintes)} contraintes temporelles chargées (mode {mode}):")
-                for (eq1, eq2), contrainte in sorted(contraintes.items()):
-                    horaires_info = f", horaires: {', '.join(contrainte.horaires_possibles)}" if contrainte.horaires_possibles else ""
-                    print(f"  • {eq1} ↔ {eq2}: {contrainte.type_contrainte} semaine {contrainte.semaine_limite}{horaires_info}")
-            else:
-                print("  ℹ️  Aucune contrainte temporelle définie")
-            print()
+            if report and contraintes:
+                mode = "dure" if self.config.contrainte_temporelle_dure else "souple"
+                report.add(LoadingResult(
+                    name="Contraintes temporelles",
+                    count=len(contraintes),
+                    details=[f"mode {mode}"]
+                ))
             return contraintes
         except Exception as e:
-            print(f"  ⚠️  Erreur lors du chargement des contraintes temporelles: {e}")
-            print()
+            if report:
+                report.add(LoadingResult(
+                    name="Contraintes temporelles",
+                    count=0,
+                    success=False,
+                    errors=[str(e)]
+                ))
             return {}
     
-    def _load_niveaux_gymnases(self) -> Dict[str, str]:
+    def _load_niveaux_gymnases(self, report: LoadingReport = None) -> Dict[str, str]:
         """Load gymnasium level classifications (high/low level)."""
-        print("🏆 Chargement des niveaux de gymnases...")
         try:
             niveaux = self.source.charger_niveaux_gymnases()
-            
-            if niveaux:
-                haut_niveau = [g for g, n in niveaux.items() if n == 'haut']
-                bas_niveau = [g for g, n in niveaux.items() if n == 'bas']
-                
-                print(f"✓ {len(niveaux)} gymnases classés:")
-                if haut_niveau:
-                    print(f"  • Haut niveau ({len(haut_niveau)}): {', '.join(sorted(haut_niveau))}")
-                if bas_niveau:
-                    print(f"  • Bas niveau ({len(bas_niveau)}): {', '.join(sorted(bas_niveau))}")
-            else:
-                print("  ℹ️  Aucun gymnase classé par niveau")
-            print()
+            if report and niveaux:
+                haut = sum(1 for n in niveaux.values() if n == 'haut')
+                bas = len(niveaux) - haut
+                report.add(LoadingResult(
+                    name="Niveaux gymnases",
+                    count=len(niveaux),
+                    details=[f"{haut} haut, {bas} bas"]
+                ))
             return niveaux
         except Exception as e:
-            print(f"  ⚠️  Erreur lors du chargement des niveaux de gymnases: {e}")
-            print()
+            if report:
+                report.add(LoadingResult(
+                    name="Niveaux gymnases",
+                    count=0,
+                    success=False,
+                    errors=[str(e)]
+                ))
             return {}
 
-    def _load_priorites_genres(self) -> Dict[str, str]:
+    def _load_priorites_genres(self, report: LoadingReport = None) -> Dict[str, str]:
         """Load optional gender priority per venue."""
-        print("🚻 Chargement des genres prioritaires des gymnases...")
         try:
             priorites = self.source.charger_priorites_genre_gymnases()
-            if priorites:
-                resume = ', '.join(f"{gym}: {genre}" for gym, genre in sorted(priorites.items()))
-                print(f"✓ {len(priorites)} gymnases avec genre prioritaire ({resume})")
-            else:
-                print("  ℹ️  Aucun genre prioritaire renseigné")
-            print()
+            if report and priorites:
+                report.add(LoadingResult(
+                    name="Genres prioritaires",
+                    count=len(priorites)
+                ))
             return priorites
         except Exception as e:
-            print(f"  ⚠️  Erreur lors du chargement des genres prioritaires: {e}")
-            print()
+            if report:
+                report.add(LoadingResult(
+                    name="Genres prioritaires",
+                    count=0,
+                    success=False,
+                    errors=[str(e)]
+                ))
             return {}
 
-    def _load_matchs_fixes(self, equipes: List[Equipe]):
+    def _load_matchs_fixes(self, equipes: List[Equipe], report: LoadingReport = None):
         """Load fixed/already played matches."""
-        print("📌 Chargement des matchs fixes...")
         try:
             matchs_fixes = self.source.charger_matchs_fixes(equipes)
-            
-            if matchs_fixes:
-                print(f"✓ {len(matchs_fixes)} matchs fixes chargés:")
-                for match in matchs_fixes[:5]:  # Afficher les 5 premiers
-                    meta = match.metadata
-                    print(f"  • {match.equipe1.nom} vs {match.equipe2.nom} - S{meta['semaine']} {meta['horaire']} @ {meta['gymnase']}")
-                if len(matchs_fixes) > 5:
-                    print(f"  ... et {len(matchs_fixes) - 5} autres")
-            else:
-                print("  ℹ️  Aucun match fixe défini")
-            print()
+            if report and matchs_fixes:
+                report.add(LoadingResult(
+                    name="Matchs fixes",
+                    count=len(matchs_fixes)
+                ))
             return matchs_fixes
         except Exception as e:
-            print(f"  ⚠️  Erreur lors du chargement des matchs fixes: {e}")
-            print()
+            if report:
+                report.add(LoadingResult(
+                    name="Matchs fixes",
+                    count=0,
+                    success=False,
+                    errors=[str(e)]
+                ))
             return []
     
     def _exclure_matchs_fixes(self, matchs, matchs_fixes):
@@ -340,7 +390,7 @@ class SchedulingPipeline:
         
         nb_exclus = len(matchs) - len(matchs_a_planifier)
         if nb_exclus > 0:
-            print(f"  ℹ️  {nb_exclus} matchs exclus de la planification (déjà fixés)")
+            print_info(f"{nb_exclus} matchs exclus (déjà fixés)")
         
         return matchs_a_planifier
     
@@ -362,14 +412,12 @@ class SchedulingPipeline:
         
         # Afficher un message informatif
         if matchs_fixes:
-            print(f"  ℹ️  {len(matchs_fixes)} matchs fixes seront comptés dans la capacité des gymnases")
-            
             # Compter combien de créneaux ont des matchs fixés (pour info)
             creneaux_avec_fixes = set()
             for match_fixe in matchs_fixes:
                 meta = match_fixe.metadata
                 creneaux_avec_fixes.add((meta['gymnase'], meta['semaine'], meta['horaire']))
-            print(f"  ℹ️  {len(creneaux_avec_fixes)} créneaux affectés par des matchs fixes")
+            print_detail(f"{len(creneaux_avec_fixes)} créneaux partiellement occupés par matchs fixes")
         
         # Retourner TOUS les créneaux sans exclusion
         return creneaux
@@ -411,24 +459,23 @@ class SchedulingPipeline:
     
     def _validate_data(self, equipes: List[Equipe], gymnases: List[Gymnase]) -> bool:
         """Validate loaded data."""
-        print("\n🔍 Validation des données...")
         return DataValidator.validate_all(equipes, gymnases)
     
     def _afficher_info_donnees(self, equipes: List[Equipe], poules: Dict, gymnases: List[Gymnase]):
         """Display data information."""
-        print(f"\n📊 Informations:")
-        print(f"  - {len(equipes)} équipes réparties en {len(poules)} poules")
+        print_section("Résumé des données", "📊")
         
         tailles_poules = [len(eq) for eq in poules.values()]
-        print(f"  - Tailles de poules: min={min(tailles_poules)}, max={max(tailles_poules)}, moy={sum(tailles_poules)/len(tailles_poules):.1f}")
-        
         total_creneaux = sum(len(g.horaires_disponibles) * g.capacite for g in gymnases)
-        print(f"  - {len(gymnases)} gymnases, ~{total_creneaux} créneaux/semaine")
-        print(f"  - Planification sur {self.config.nb_semaines} semaines\n")
+        
+        print_key_value("Équipes", f"{len(equipes)} réparties en {len(poules)} poules")
+        print_key_value("Tailles poules", f"min={min(tailles_poules)}, max={max(tailles_poules)}, moy={sum(tailles_poules)/len(tailles_poules):.1f}")
+        print_key_value("Gymnases", f"{len(gymnases)}, ~{total_creneaux} créneaux/semaine")
+        print_key_value("Semaines", self.config.nb_semaines)
     
     def _generer_matchs(self, poules: Dict):
         """Generate matches for all pools according to their types."""
-        print("⚙️  Génération des matchs...")
+        print_section("Génération des matchs", "⚙️")
         
         # Load pool types
         self.types_poules = self.source.charger_types_poules()
@@ -438,7 +485,7 @@ class SchedulingPipeline:
             nb_aller_retour = sum(1 for t in self.types_poules.values() if t == 'Aller-Retour')
             nb_classique = len(self.types_poules) - nb_aller_retour
             if nb_aller_retour > 0:
-                print(f"   Types: {nb_classique} poule(s) Classique, {nb_aller_retour} poule(s) Aller-Retour")
+                print_detail(f"{nb_classique} poule(s) Classique, {nb_aller_retour} poule(s) Aller-Retour")
         
         # Generate matches with per-pool types
         generator = MultiPoolGenerator(self.types_poules if self.types_poules else False)
@@ -456,9 +503,9 @@ class SchedulingPipeline:
                     match.metadata['is_entente'] = True
                     nb_ententes += 1
             if nb_ententes > 0:
-                print(f"   {nb_ententes} match(s) d'entente identifié(s)")
+                print_detail(f"{nb_ententes} match(s) d'entente identifié(s)")
         
-        print(f"✓ {len(matchs)} matchs générés")
+        print_success(f"{len(matchs)} matchs générés")
         return matchs
     
     def _resoudre(self, matchs, creneaux, gymnases, matchs_fixes=None):
@@ -470,12 +517,15 @@ class SchedulingPipeline:
             gymnases: Dictionnaire des gymnases
             matchs_fixes: Matchs déjà planifiés/fixés (pour calcul des pénalités)
         """
-        print(f"🧮 Résolution avec CP-SAT\n")
+        print_section("Résolution CP-SAT", "🧮")
         
         gymnases_dict = {g.nom: g for g in gymnases}
         
         if not CPSAT_AVAILABLE:
             raise ImportError("OR-Tools n'est pas installé. Installez-le avec: pip install ortools")
+        
+        # ──── RAPPORT DES OPTIONS DU SOLVER ────
+        self._afficher_options_solver()
         
         solver = CPSATSolver(
             self.config,
@@ -495,6 +545,115 @@ class SchedulingPipeline:
                                matchs_fixes=matchs_fixes)
         
         return solution
+    
+    def _afficher_options_solver(self):
+        """Affiche les options et modes du solver activés."""
+        # Mode rapide
+        mode_fast = getattr(self.config, 'cpsat_mode_fast', False)
+        
+        # Options de performance
+        use_prefilter = getattr(self.config, 'cpsat_use_prefilter', True)
+        enable_espacement_repos = getattr(self.config, 'cpsat_enable_espacement_repos', True)
+        enable_aller_retour = getattr(self.config, 'cpsat_enable_aller_retour', True)
+        espacement_repos_simplifie = getattr(self.config, 'cpsat_espacement_repos_simplifie', False)
+        aller_retour_simplifie = getattr(self.config, 'cpsat_aller_retour_simplifie', False)
+        equilibrage_mode_simplifie = getattr(self.config, 'equilibrage_mode_simplifie', False)
+        
+        # Contraintes _actif
+        equilibrage_actif = getattr(self.config, 'equilibrage_actif', True)
+        compaction_actif = getattr(self.config, 'compaction_temporelle_actif', False)
+        overlap_institution_actif = getattr(self.config, 'overlap_institution_actif', False)
+        coach_overlap_actif = getattr(self.config, 'coach_overlap_actif', False)
+        entente_actif = getattr(self.config, 'entente_actif', False)
+        contrainte_temporelle_actif = getattr(self.config, 'contrainte_temporelle_actif', False)
+        aller_retour_espacement_actif = getattr(self.config, 'aller_retour_espacement_actif', False)
+        
+        # Appliquer mode_fast
+        if mode_fast:
+            enable_espacement_repos = False
+            enable_aller_retour = False
+            espacement_repos_simplifie = True
+            aller_retour_simplifie = True
+            equilibrage_mode_simplifie = True
+        
+        # Construire le rapport
+        print_subsection("Options du Solver")
+        
+        if mode_fast:
+            print_info("⚡ Mode FAST activé - contraintes coûteuses désactivées")
+        
+        # Contraintes principales (activables/désactivables)
+        contraintes_on = []
+        contraintes_off = []
+        
+        # Équilibrage
+        if equilibrage_actif:
+            mode = " (simplifié)" if equilibrage_mode_simplifie else ""
+            contraintes_on.append(f"Équilibrage{mode}")
+        else:
+            contraintes_off.append("Équilibrage")
+        
+        # Compaction temporelle
+        if compaction_actif:
+            contraintes_on.append("Compaction temporelle")
+        else:
+            contraintes_off.append("Compaction temporelle")
+        
+        # Overlap institution
+        if overlap_institution_actif:
+            contraintes_on.append("Overlap institution")
+        else:
+            contraintes_off.append("Overlap institution")
+        
+        # Coach overlap
+        if coach_overlap_actif:
+            contraintes_on.append("Coach overlap")
+        else:
+            contraintes_off.append("Coach overlap")
+        
+        # Ententes
+        if entente_actif:
+            contraintes_on.append("Ententes")
+        else:
+            contraintes_off.append("Ententes")
+        
+        # Contraintes temporelles (CFE)
+        if contrainte_temporelle_actif:
+            contraintes_on.append("Contraintes temporelles")
+        else:
+            contraintes_off.append("Contraintes temporelles")
+        
+        # Aller-retour espacement
+        if aller_retour_espacement_actif and enable_aller_retour:
+            mode = " (simplifié)" if aller_retour_simplifie else ""
+            contraintes_on.append(f"Espacement aller-retour{mode}")
+        elif aller_retour_espacement_actif and not enable_aller_retour:
+            contraintes_off.append("Espacement aller-retour (désactivé pour performance)")
+        else:
+            contraintes_off.append("Espacement aller-retour")
+        
+        # Espacement repos
+        if enable_espacement_repos:
+            mode = " (simplifié)" if espacement_repos_simplifie else ""
+            contraintes_on.append(f"Espacement repos{mode}")
+        else:
+            contraintes_off.append("Espacement repos")
+        
+        # Préfiltrage (option technique)
+        if use_prefilter:
+            contraintes_on.append("Préfiltrage (réduction modèle)")
+        else:
+            contraintes_off.append("Préfiltrage")
+        
+        # Affichage
+        if contraintes_on:
+            print_info("Contraintes activées:")
+            for opt in contraintes_on:
+                print_detail(f"  ✓ {opt}")
+        if contraintes_off:
+            print_info("Contraintes désactivées:")
+            for opt in contraintes_off:
+                print_detail(f"  ✗ {opt}")
     
     def _ensure_penalty_breakdown(self, solution: Solution, gymnases: List[Gymnase]):
         """Garantit que la solution contient la décomposition des pénalités."""
@@ -519,7 +678,7 @@ class SchedulingPipeline:
             )
             solution.metadata['penalty_breakdown'] = penalty_breakdown
         except Exception as e:
-            print(f"  ⚠️  Impossible de calculer la décomposition des pénalités: {e}")
+            print_warning(f"Impossible de calculer la décomposition des pénalités: {e}")
 
     def _save_solution(self, solution: Solution, matchs, creneaux, gymnases, matchs_fixes=None):
         """Sauvegarde la solution avec sa signature pour réutilisation future."""
@@ -543,7 +702,7 @@ class SchedulingPipeline:
                         config_yaml_path = possible_path
                         break
             if not config_yaml_path.exists():
-                print(f"  ⚠️  Fichier YAML introuvable pour la signature ({config_yaml_path}), fallback sur configs/default.yaml")
+                print_warning(f"Fichier YAML introuvable pour la signature ({config_yaml_path}), fallback sur configs/default.yaml")
                 config_yaml_path = Path("configs/default.yaml")
             
             signature = store.create_signature(
@@ -556,7 +715,6 @@ class SchedulingPipeline:
             )
             
             # Sauvegarder la solution
-            print(f"  💾 Sauvegarde de la solution...")
             saved_path = store.save_solution(
                 solution=solution,
                 signature=signature,
@@ -574,7 +732,7 @@ class SchedulingPipeline:
                 self._validate_solution_json(saved_path)
             
         except Exception as e:
-            print(f"  ⚠️  Erreur lors de la sauvegarde de la solution: {e}")
+            print_warning(f"Erreur lors de la sauvegarde de la solution: {e}")
             import traceback
             traceback.print_exc()
             # Continue sans sauvegarder (non-bloquant)
@@ -596,9 +754,10 @@ class SchedulingPipeline:
         """
         try:
             import json
-            from interface.core.validator import SolutionValidator as SolutionValidatorV2
+            from pycalendar.interface.core.validator import SolutionValidator as SolutionValidatorV2
+            from pycalendar.interface.core.validator import Severity
             
-            print(f"\n🔍 Validation de la solution...")
+            print_section("Validation JSON", "🔍")
             
             # Charger le JSON
             with open(solution_path, 'r', encoding='utf-8') as f:
@@ -609,39 +768,39 @@ class SchedulingPipeline:
             try:
                 is_valid, issues = validator.validate_full(data)
             except Exception as e:
-                print(f"  ⚠️  Erreur lors de la validation: {e}")
+                print_warning(f"Erreur lors de la validation: {e}")
                 import traceback
                 traceback.print_exc()
                 return
             
             # Afficher résumé
-            from interface.core.validator import Severity
             errors = sum(1 for i in issues if i.severity == Severity.ERROR)
             warnings = sum(1 for i in issues if i.severity == Severity.WARNING)
             infos = sum(1 for i in issues if i.severity == Severity.INFO)
             
             if errors == 0 and warnings == 0 and infos == 0:
-                print(f"  ✅ Solution valide - aucun problème détecté")
+                print_success("Fichier JSON valide")
             else:
-                print(f"  📊 Résumé validation: {errors} erreur(s), {warnings} avertissement(s), {infos} info(s)")
+                if errors > 0:
+                    print_error(f"{errors} erreur(s) dans le JSON")
+                elif warnings > 0:
+                    print_warning(f"{warnings} avertissement(s)")
                 
                 if errors > 0 or warnings > 0:
                     # Afficher rapport détaillé si erreurs ou warnings
                     report = validator.generate_report(issues)
                     print(report)
-                else:
-                    # Juste les infos en mode condensé
-                    print(f"     💡 Utilisez: python validate_solution.py {solution_path} --verbose pour plus de détails")
             
         except Exception as e:
-            print(f"  ⚠️  Erreur lors de la validation: {e}")
+            print_warning(f"Erreur lors de la validation: {e}")
             import traceback
             traceback.print_exc()
     
     def _exporter_solution(self, solution: Solution):
         """Export solution to files."""
-        print("💾 Export de la solution...")
+        print_section("Export des fichiers", "💾")
         ExcelExporter.export(solution, self.config.fichier_sortie)
+        print_success(f"Excel: {self.config.fichier_sortie}")
         
         # Générer TOUS les créneaux possibles (occupés et libres)
         gymnases = self.source.charger_gymnases()
@@ -656,6 +815,8 @@ class SchedulingPipeline:
         html_path = self.config.fichier_sortie.replace('.xlsx', '.html')
         generator = InterfaceGenerator()
         html_file = generator.generate(solution, html_path, self.config, types_poules=self.types_poules)
+        print_success(f"HTML: {html_file}")
         
-        print(f"\n🌐 Ouvrez le calendrier dans votre navigateur:")
-        print(f"   file://{html_file}")
+        print_blank()
+        print_info("Ouvrez le calendrier dans votre navigateur:")
+        print(f"     file://{html_file}")

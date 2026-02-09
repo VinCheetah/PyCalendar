@@ -1,0 +1,1732 @@
+/**
+ * PyCalendar Interface - Pools View (Refactored)
+ * 
+ * Architecture CSS modulaire pour la vue Poules.
+ * Élimine les styles inline du JavaScript pour une meilleure maintenabilité.
+ * 
+ * Sections:
+ * 1. Variables & Tokens
+ * 2. Container & Layout
+ * 3. Summary Cards
+ * 4. Gender Separators
+ * 5. Level Separators
+ * 6. Pool Cards
+ * 7. Statistics Grid
+ * 8. Standings Table
+ * 9. Match Tabs
+ * 10. Match Cards
+ * 11. Empty States
+ * 12. Animations
+ * 13. Responsive
+ */
+
+/* ============================================================
+   1. VARIABLES & TOKENS
+   ============================================================ */
+
+.pools-view {
+    /* Couleurs principales */
+    --pv-primary: #0055A4;
+    --pv-primary-light: rgba(0, 85, 164, 0.1);
+    --pv-primary-dark: #003d7a;
+    
+    /* Genre colors */
+    --pv-female: #E91E63;
+    --pv-female-light: rgba(233, 30, 99, 0.1);
+    --pv-male: #2196F3;
+    --pv-male-light: rgba(33, 150, 243, 0.1);
+    
+    /* Status colors */
+    --pv-success: #27AE60;
+    --pv-success-light: rgba(39, 174, 96, 0.1);
+    --pv-warning: #FF9500;
+    --pv-warning-light: rgba(255, 149, 0, 0.1);
+    --pv-danger: #EF4135;
+    --pv-danger-light: rgba(239, 65, 53, 0.1);
+    --pv-info: #007BFF;
+    --pv-info-light: rgba(0, 123, 255, 0.1);
+    
+    /* Entente */
+    --pv-entente: #FFC107;
+    --pv-entente-light: rgba(255, 193, 7, 0.15);
+    
+    /* Medal colors */
+    --pv-gold: #FFD700;
+    --pv-gold-light: rgba(255, 215, 0, 0.15);
+    --pv-silver: #C0C0C0;
+    --pv-silver-light: rgba(192, 192, 192, 0.15);
+    --pv-bronze: #CD7F32;
+    --pv-bronze-light: rgba(205, 127, 50, 0.15);
+    
+    /* CFU/CFE badges */
+    --pv-cfu-bg: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+    --pv-cfu-border: #FFB700;
+    --pv-cfu-shadow: rgba(255, 215, 0, 0.5);
+    --pv-cfe-bg: linear-gradient(135deg, #4A90E2 0%, #357ABD 100%);
+    --pv-cfe-border: #2E5F8D;
+    --pv-cfe-shadow: rgba(74, 144, 226, 0.5);
+    
+    /* Typography */
+    --pv-font-main: 'Inter', 'Roboto', -apple-system, BlinkMacSystemFont, sans-serif;
+    --pv-font-mono: 'Roboto Mono', 'SF Mono', 'Monaco', monospace;
+    
+    /* Spacing */
+    --pv-spacing-xs: 0.25rem;
+    --pv-spacing-sm: 0.5rem;
+    --pv-spacing-md: 0.75rem;
+    --pv-spacing-lg: 1rem;
+    --pv-spacing-xl: 1.5rem;
+    --pv-spacing-2xl: 2rem;
+    
+    /* Border radius */
+    --pv-radius-sm: 6px;
+    --pv-radius-md: 8px;
+    --pv-radius-lg: 12px;
+    --pv-radius-xl: 16px;
+    --pv-radius-full: 9999px;
+    
+    /* Shadows */
+    --pv-shadow-sm: 0 2px 6px rgba(0, 0, 0, 0.08);
+    --pv-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.12);
+    --pv-shadow-lg: 0 6px 20px rgba(0, 0, 0, 0.15);
+    
+    /* Transitions */
+    --pv-transition-fast: 0.15s ease;
+    --pv-transition-normal: 0.25s ease;
+    --pv-transition-slow: 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ============================================================
+   2. CONTAINER & LAYOUT
+   ============================================================ */
+
+.pools-view {
+    padding: var(--pv-spacing-lg);
+    font-family: var(--pv-font-main);
+}
+
+.pools-by-gender {
+    display: flex;
+    flex-direction: column;
+    gap: var(--pv-spacing-xl);
+}
+
+.pools-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--pv-spacing-lg);
+}
+
+/* ============================================================
+   3. SUMMARY CARDS
+   ============================================================ */
+
+.pools-summary {
+    margin-bottom: var(--pv-spacing-xl);
+}
+
+.pools-summary__header {
+    display: flex;
+    align-items: center;
+    gap: var(--pv-spacing-md);
+    margin-bottom: var(--pv-spacing-lg);
+}
+
+.pools-summary__icon {
+    font-size: 2rem;
+}
+
+.pools-summary__title {
+    margin: 0;
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: var(--pv-primary);
+}
+
+.pools-summary__subtitle {
+    margin: 0.25rem 0 0 0;
+    font-size: 0.9rem;
+    color: #666;
+}
+
+.pools-summary__cards {
+    display: flex;
+    gap: var(--pv-spacing-lg);
+    flex-wrap: wrap;
+    padding: var(--pv-spacing-lg);
+    background: linear-gradient(135deg, var(--pv-primary-light) 0%, rgba(0, 85, 164, 0.02) 100%);
+    border-radius: var(--pv-radius-lg);
+}
+
+.summary-card {
+    flex: 1;
+    min-width: 120px;
+    padding: var(--pv-spacing-lg);
+    background: white;
+    border-radius: var(--pv-radius-md);
+    box-shadow: var(--pv-shadow-sm);
+    border: 1px solid rgba(0, 85, 164, 0.1);
+    text-align: center;
+    transition: transform var(--pv-transition-fast), box-shadow var(--pv-transition-fast);
+}
+
+.summary-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--pv-shadow-md);
+}
+
+.summary-card__value {
+    font-size: 1.75rem;
+    font-weight: 900;
+    font-family: var(--pv-font-mono);
+    margin-bottom: 0.25rem;
+}
+
+.summary-card__value--primary { color: var(--pv-primary); }
+.summary-card__value--success { color: var(--pv-success); }
+.summary-card__value--danger { color: var(--pv-danger); }
+.summary-card__value--info { color: var(--pv-info); }
+
+.summary-card__label {
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+/* ============================================================
+   4. GENDER SEPARATORS
+   ============================================================ */
+
+.gender-separator {
+    margin: var(--pv-spacing-2xl) 0 var(--pv-spacing-xl);
+    padding: 0;
+}
+
+.gender-separator__content {
+    display: flex;
+    align-items: center;
+    gap: var(--pv-spacing-xl);
+}
+
+.gender-separator__line {
+    flex: 1;
+    height: 3px;
+}
+
+.gender-separator__line--left {
+    background: linear-gradient(to right, transparent, var(--gender-color-40));
+}
+
+.gender-separator__line--right {
+    background: linear-gradient(to left, transparent, var(--gender-color-40));
+}
+
+.gender-separator__badge {
+    display: flex;
+    align-items: center;
+    gap: var(--pv-spacing-lg);
+    padding: var(--pv-spacing-md) var(--pv-spacing-xl);
+    background: linear-gradient(135deg, var(--gender-light) 0%, white 100%);
+    border-radius: var(--pv-radius-lg);
+    border: 2px solid var(--gender-color);
+    box-shadow: 0 4px 12px var(--gender-color-20);
+}
+
+.gender-separator__icon {
+    font-size: 2rem;
+}
+
+.gender-separator__info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.gender-separator__title {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: var(--gender-color);
+}
+
+.gender-separator__stats {
+    font-size: 0.85rem;
+    color: #666;
+    font-weight: 500;
+}
+
+/* Female variant */
+.gender-separator--female {
+    --gender-color: var(--pv-female);
+    --gender-color-40: rgba(233, 30, 99, 0.4);
+    --gender-color-20: rgba(233, 30, 99, 0.2);
+    --gender-light: var(--pv-female-light);
+}
+
+/* Male variant */
+.gender-separator--male {
+    --gender-color: var(--pv-male);
+    --gender-color-40: rgba(33, 150, 243, 0.4);
+    --gender-color-20: rgba(33, 150, 243, 0.2);
+    --gender-light: var(--pv-male-light);
+}
+
+/* ============================================================
+   5. LEVEL SEPARATORS
+   ============================================================ */
+
+.level-separator {
+    display: flex;
+    align-items: center;
+    gap: var(--pv-spacing-lg);
+    margin: var(--pv-spacing-xl) 0 var(--pv-spacing-lg);
+    padding: 0 var(--pv-spacing-lg);
+}
+
+.level-separator__line {
+    flex: 1;
+    height: 2px;
+    background: linear-gradient(to right, transparent, #ddd, transparent);
+}
+
+.level-separator__badge {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+    padding: var(--pv-spacing-sm) var(--pv-spacing-xl);
+    background: #f8f9fa;
+    border-radius: var(--pv-radius-md);
+    border: 1px solid #e0e0e0;
+}
+
+.level-separator__title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #2c3e50;
+}
+
+.level-separator__stats {
+    font-size: 0.85rem;
+    color: #7f8c8d;
+}
+
+/* ============================================================
+   6. POOL CARDS
+   ============================================================ */
+
+.pool-card {
+    background: white;
+    border: 2px solid rgba(0, 85, 164, 0.3);
+    border-radius: var(--pv-radius-xl);
+    overflow: hidden;
+    box-shadow: var(--pv-shadow-md);
+    margin-bottom: var(--pv-spacing-lg);
+    transition: all var(--pv-transition-slow);
+    position: relative;
+}
+
+.pool-card:hover {
+    box-shadow: var(--pv-shadow-lg);
+    transform: translateY(-2px);
+}
+
+.pool-card--female {
+    border-color: rgba(233, 30, 99, 0.3);
+}
+
+.pool-card--male {
+    border-color: rgba(33, 150, 243, 0.3);
+}
+
+/* Pool Header */
+.pool-header {
+    padding: var(--pv-spacing-xl);
+    color: white;
+    cursor: pointer;
+    position: relative;
+    border-bottom: 3px solid rgba(255, 255, 255, 0.2);
+    transition: filter var(--pv-transition-fast);
+}
+
+.pool-header:hover {
+    filter: brightness(1.05);
+}
+
+.pool-header--female {
+    background: linear-gradient(135deg, var(--pv-female) 0%, #C2185B 100%);
+}
+
+.pool-header--male {
+    background: linear-gradient(135deg, var(--pv-male) 0%, #1565C0 100%);
+}
+
+.pool-header__watermark {
+    position: absolute;
+    top: 0;
+    right: 0;
+    font-size: 6rem;
+    opacity: 0.08;
+    line-height: 1;
+    pointer-events: none;
+}
+
+.pool-header__top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--pv-spacing-md);
+    position: relative;
+    z-index: 1;
+}
+
+.pool-header__title {
+    margin: 0;
+    font-size: 1.35rem;
+    font-weight: 800;
+    color: white;
+    letter-spacing: 0.02em;
+    text-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+}
+
+.pool-header__expand-btn {
+    background: rgba(255, 255, 255, 0.25);
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    color: white;
+    font-size: 1rem;
+    font-weight: 700;
+    padding: var(--pv-spacing-sm) var(--pv-spacing-lg);
+    border-radius: var(--pv-radius-md);
+    cursor: pointer;
+    transition: all var(--pv-transition-fast);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+    backdrop-filter: blur(8px);
+}
+
+.pool-header__expand-btn:hover {
+    background: rgba(255, 255, 255, 0.35);
+    transform: scale(1.05);
+}
+
+.pool-header__info {
+    display: flex;
+    gap: var(--pv-spacing-xl);
+    flex-wrap: wrap;
+    align-items: center;
+    position: relative;
+    z-index: 1;
+}
+
+.pool-header__chip {
+    font-size: 0.8rem;
+    font-weight: 800;
+    padding: 0.4rem 0.8rem;
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: var(--pv-radius-md);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    backdrop-filter: blur(4px);
+}
+
+.pool-header__stat {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.95);
+    display: inline-flex;
+    align-items: center;
+    gap: var(--pv-spacing-sm);
+}
+
+.pool-header__stat strong {
+    font-weight: 800;
+}
+
+/* Pool Content */
+.pool-content {
+    padding: var(--pv-spacing-xl);
+    background: rgba(0, 85, 164, 0.02);
+}
+
+.pool-details-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: var(--pv-spacing-xl);
+    margin-bottom: var(--pv-spacing-xl);
+}
+
+.pool-content-section {
+    background: white;
+    border-radius: var(--pv-radius-lg);
+    padding: var(--pv-spacing-lg);
+    box-shadow: var(--pv-shadow-sm);
+    border: 1px solid rgba(0, 85, 164, 0.1);
+}
+
+.pool-content-section__title {
+    margin: 0 0 var(--pv-spacing-lg) 0;
+    font-size: 1rem;
+    font-weight: 800;
+    color: var(--pv-primary);
+    display: flex;
+    align-items: center;
+    gap: var(--pv-spacing-sm);
+    border-bottom: 2px solid rgba(0, 85, 164, 0.1);
+    padding-bottom: var(--pv-spacing-md);
+}
+
+/* ============================================================
+   7. STATISTICS GRID
+   ============================================================ */
+
+.pool-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+    gap: var(--pv-spacing-lg);
+}
+
+.stat-item {
+    text-align: center;
+    padding: var(--pv-spacing-md);
+    border-radius: var(--pv-radius-md);
+    transition: transform var(--pv-transition-fast);
+}
+
+.stat-item:hover {
+    transform: scale(1.02);
+}
+
+.stat-item--success {
+    background: var(--pv-success-light);
+    border: 1px solid rgba(39, 174, 96, 0.2);
+}
+
+.stat-item--info {
+    background: var(--pv-info-light);
+    border: 1px solid rgba(0, 123, 255, 0.2);
+}
+
+.stat-item--danger {
+    background: var(--pv-danger-light);
+    border: 1px solid rgba(239, 65, 53, 0.2);
+}
+
+.stat-item--warning {
+    background: var(--pv-warning-light);
+    border: 1px solid rgba(255, 193, 7, 0.2);
+}
+
+.stat-item--primary {
+    background: var(--pv-primary-light);
+    border: 1px solid rgba(0, 85, 164, 0.2);
+}
+
+.stat-item__value {
+    font-size: 1.5rem;
+    font-weight: 900;
+    font-family: var(--pv-font-mono);
+    margin-bottom: 0.25rem;
+}
+
+.stat-item__value--success { color: var(--pv-success); }
+.stat-item__value--info { color: var(--pv-info); }
+.stat-item__value--danger { color: var(--pv-danger); }
+.stat-item__value--warning { color: var(--pv-entente); }
+.stat-item__value--primary { color: var(--pv-primary); }
+
+.stat-item__label {
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.stat-item__detail {
+    font-size: 0.65rem;
+    color: #999;
+    margin-top: 0.25rem;
+}
+
+/* ============================================================
+   8. STANDINGS TABLE
+   ============================================================ */
+
+.standings-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+    font-family: var(--pv-font-main);
+}
+
+.standings-table thead tr {
+    background: rgba(0, 85, 164, 0.08);
+    border-bottom: 2px solid rgba(0, 85, 164, 0.2);
+}
+
+.standings-table th {
+    padding: 0.6rem 0.5rem;
+    text-align: center;
+    font-size: 0.7rem;
+    font-weight: 800;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.standings-table th:nth-child(2) {
+    text-align: left;
+}
+
+.standings-table th--points {
+    color: var(--pv-primary);
+}
+
+.standings-table tbody tr {
+    border-bottom: 1px solid rgba(0, 85, 164, 0.1);
+    transition: background var(--pv-transition-fast);
+}
+
+.standings-table tbody tr:hover {
+    background: rgba(0, 85, 164, 0.03);
+}
+
+.standings-table tbody tr--gold {
+    background: var(--pv-gold-light);
+}
+
+.standings-table tbody tr--silver {
+    background: var(--pv-silver-light);
+}
+
+.standings-table tbody tr--bronze {
+    background: var(--pv-bronze-light);
+}
+
+.standings-table td {
+    padding: 0.6rem 0.5rem;
+    text-align: center;
+}
+
+.standings-table td:nth-child(2) {
+    text-align: left;
+    font-weight: 600;
+    color: #333;
+}
+
+.standings-table__rank {
+    font-weight: 700;
+    font-family: var(--pv-font-mono);
+}
+
+.standings-table__rank--top {
+    color: var(--pv-primary);
+}
+
+.standings-table__stat {
+    font-weight: 600;
+    font-family: var(--pv-font-mono);
+}
+
+.standings-table__stat--wins { color: var(--pv-success); }
+.standings-table__stat--draws { color: var(--pv-warning); }
+.standings-table__stat--losses { color: var(--pv-danger); }
+.standings-table__stat--points {
+    font-weight: 900;
+    font-size: 1rem;
+    color: var(--pv-primary);
+}
+
+/* Nouvelles colonnes de classement */
+.standings-table__td--positive {
+    color: var(--pv-success);
+    font-weight: 700;
+}
+
+.standings-table__td--negative {
+    color: var(--pv-danger);
+    font-weight: 700;
+}
+
+.standings-table__td--warning {
+    color: var(--pv-warning);
+    font-weight: 600;
+}
+
+.standings-table__td--diff {
+    font-family: var(--pv-font-mono);
+    font-weight: 600;
+}
+
+.standings-table__td--noscore {
+    font-family: var(--pv-font-mono);
+    opacity: 0.7;
+}
+
+/* Légende du classement */
+.standings-legend {
+    margin-top: 0.5rem;
+    padding: 0.4rem 0.6rem;
+    background: rgba(0, 85, 164, 0.03);
+    border-radius: var(--pv-radius-sm);
+    text-align: center;
+}
+
+.standings-legend__text {
+    font-size: 0.7rem;
+    color: var(--pv-text-muted);
+    font-weight: 500;
+}
+
+.standings-legend__text span {
+    cursor: help;
+}
+
+/* ============================================================
+   9. MATCH TABS
+   ============================================================ */
+
+.matches-tabs {
+    display: flex;
+    gap: var(--pv-spacing-sm);
+    margin-bottom: var(--pv-spacing-lg);
+    border-bottom: 2px solid rgba(0, 85, 164, 0.1);
+    padding-bottom: var(--pv-spacing-sm);
+}
+
+.match-tab {
+    flex: 1;
+    padding: 0.6rem var(--pv-spacing-lg);
+    border: 1px solid rgba(0, 85, 164, 0.2);
+    border-radius: var(--pv-radius-md);
+    font-weight: 700;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all var(--pv-transition-fast);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--pv-spacing-sm);
+    background: rgba(0, 85, 164, 0.05);
+    color: var(--pv-primary);
+}
+
+.match-tab:hover {
+    background: rgba(0, 85, 164, 0.1);
+    border-color: rgba(0, 85, 164, 0.4);
+}
+
+.match-tab--active {
+    background: linear-gradient(135deg, var(--pv-primary) 0%, var(--pv-primary-dark) 100%);
+    color: white;
+    border-color: var(--pv-primary);
+    box-shadow: 0 2px 6px rgba(0, 85, 164, 0.3);
+}
+
+.match-tab--danger {
+    background: var(--pv-danger-light);
+    color: var(--pv-danger);
+    border-color: rgba(239, 65, 53, 0.2);
+}
+
+.match-tab--danger.match-tab--active {
+    background: linear-gradient(135deg, var(--pv-danger) 0%, #C0392B 100%);
+    color: white;
+    border-color: var(--pv-danger);
+    box-shadow: 0 2px 6px rgba(239, 65, 53, 0.3);
+}
+
+.match-tab__count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    font-size: 0.75rem;
+    font-weight: 900;
+    font-family: var(--pv-font-mono);
+    padding: 0 0.3rem;
+}
+
+.match-tab__count--default {
+    background: rgba(0, 85, 164, 0.15);
+}
+
+.match-tab__count--active {
+    background: rgba(255, 255, 255, 0.25);
+}
+
+/* ============================================================
+   10. MATCH CARDS
+   ============================================================ */
+
+.match-card-new {
+    background: white;
+    border-radius: var(--pv-radius-lg);
+    padding: var(--pv-spacing-lg);
+    margin-bottom: var(--pv-spacing-md);
+    transition: all var(--pv-transition-fast);
+    box-shadow: var(--pv-shadow-sm);
+}
+
+.match-card-new:hover {
+    box-shadow: var(--pv-shadow-md);
+    transform: translateY(-2px);
+}
+
+.match-card-new--unscheduled {
+    border-left: 4px solid var(--pv-danger);
+}
+
+.match-card-new--upcoming {
+    border-left: 4px solid var(--pv-info);
+}
+
+.match-card-new--played {
+    border-left: 4px solid var(--pv-success);
+}
+
+/* CFU/CFE special styling */
+.match-card-new--cfu {
+    border: 3px solid var(--pv-cfu-border) !important;
+    box-shadow: 0 4px 12px var(--pv-cfu-shadow), 
+                0 0 20px rgba(255, 215, 0, 0.3) !important;
+}
+
+.match-card-new--cfe {
+    border: 3px solid var(--pv-cfe-border) !important;
+    box-shadow: 0 4px 12px var(--pv-cfe-shadow), 
+                0 0 20px rgba(74, 144, 226, 0.3) !important;
+}
+
+/* Match Card Header */
+.match-card__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--pv-spacing-md);
+    padding-bottom: var(--pv-spacing-sm);
+    border-bottom: 1px solid rgba(0, 85, 164, 0.1);
+}
+
+.match-card__badges {
+    display: flex;
+    gap: var(--pv-spacing-sm);
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.match-card__status {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.25rem 0.6rem;
+    border-radius: var(--pv-radius-sm);
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.match-card__status--played {
+    background: var(--pv-success-light);
+    color: var(--pv-success);
+    border: 1px solid rgba(39, 174, 96, 0.25);
+}
+
+.match-card__status--upcoming {
+    background: var(--pv-info-light);
+    color: var(--pv-info);
+    border: 1px solid rgba(0, 123, 255, 0.25);
+}
+
+.match-card__status--unscheduled {
+    background: var(--pv-danger-light);
+    color: var(--pv-danger);
+    border: 1px solid rgba(239, 65, 53, 0.25);
+}
+
+.match-card__badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.25rem 0.6rem;
+    border-radius: var(--pv-radius-sm);
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.match-card__badge--cfu {
+    background: var(--pv-cfu-bg);
+    color: #000;
+    border: 2px solid var(--pv-cfu-border);
+    box-shadow: 0 2px 8px var(--pv-cfu-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.match-card__badge--cfe {
+    background: var(--pv-cfe-bg);
+    color: #FFF;
+    border: 2px solid var(--pv-cfe-border);
+    box-shadow: 0 2px 8px var(--pv-cfe-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+.match-card__badge--entente {
+    background: var(--pv-entente-light);
+    color: #F57C00;
+    border: 1px solid rgba(255, 193, 7, 0.4);
+}
+
+.match-card__week {
+    font-size: 0.75rem;
+    font-weight: 800;
+    color: #666;
+    font-family: var(--pv-font-mono);
+    padding: 0.25rem 0.6rem;
+    background: rgba(0, 85, 164, 0.08);
+    border-radius: var(--pv-radius-sm);
+    border: 1px solid rgba(0, 85, 164, 0.15);
+}
+
+/* Match Card Body (Teams) */
+.match-card__body {
+    display: flex;
+    align-items: center;
+    gap: var(--pv-spacing-lg);
+    margin-bottom: var(--pv-spacing-md);
+    padding: var(--pv-spacing-md);
+    border-radius: var(--pv-radius-md);
+}
+
+.match-card__body--male {
+    background: linear-gradient(135deg, rgba(0, 123, 255, 0.08) 0%, rgba(0, 123, 255, 0.03) 100%);
+}
+
+.match-card__body--female {
+    background: linear-gradient(135deg, rgba(255, 20, 147, 0.08) 0%, rgba(255, 20, 147, 0.03) 100%);
+}
+
+.match-card__team {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.match-card__team--winner {
+    background: var(--pv-gold-light);
+    padding: var(--pv-spacing-sm);
+    border-radius: var(--pv-radius-sm);
+    border: 2px solid rgba(255, 215, 0, 0.4);
+}
+
+.match-card__team-row {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    justify-content: space-between;
+}
+
+.match-card__team--right .match-card__team-row {
+    flex-direction: row-reverse;
+    text-align: right;
+}
+
+.match-card__team-number {
+    font-size: 0.65rem;
+    font-weight: 800;
+    background: rgba(0, 85, 164, 0.15);
+    padding: 0.15rem 0.4rem;
+    border-radius: 4px;
+    font-family: var(--pv-font-mono);
+    color: var(--pv-primary);
+}
+
+.match-card__team-name {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #333;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.match-card__team-name--winner {
+    font-weight: 900;
+    color: var(--pv-primary);
+}
+
+.match-card__score {
+    font-size: 1.1rem;
+    font-weight: 900;
+    font-family: var(--pv-font-mono);
+    min-width: 30px;
+    text-align: center;
+}
+
+.match-card__score--winner {
+    color: var(--pv-gold);
+}
+
+.match-card__trophy {
+    font-size: 1.2rem;
+}
+
+.match-card__vs {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    background: white;
+    border: 2px solid rgba(0, 85, 164, 0.2);
+    border-radius: 50%;
+    font-size: 0.65rem;
+    font-weight: 900;
+    color: var(--pv-primary);
+    box-shadow: var(--pv-shadow-sm);
+    flex-shrink: 0;
+}
+
+/* Match Card Footer */
+.match-card__footer {
+    display: flex;
+    gap: var(--pv-spacing-lg);
+    flex-wrap: wrap;
+    font-size: 0.75rem;
+}
+
+.match-card__footer-info {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.25rem 0.5rem;
+    background: rgba(0, 85, 164, 0.06);
+    border-radius: var(--pv-radius-sm);
+    border: 1px solid rgba(0, 85, 164, 0.1);
+}
+
+.match-card__footer-info--danger {
+    background: var(--pv-danger-light);
+    border-color: rgba(239, 65, 53, 0.25);
+}
+
+.match-card__footer-icon {
+    font-size: 0.85rem;
+}
+
+.match-card__footer-text {
+    font-weight: 600;
+    color: #555;
+}
+
+.match-card__footer-text--danger {
+    font-weight: 700;
+    color: var(--pv-danger);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+}
+
+.match-card__footer-text--mono {
+    font-weight: 800;
+    font-family: var(--pv-font-mono);
+}
+
+/* Week Group in Match List */
+.week-group {
+    margin-bottom: var(--pv-spacing-xl);
+}
+
+.week-group__title {
+    font-size: 0.9rem;
+    font-weight: 800;
+    color: var(--pv-primary);
+    margin: 0 0 var(--pv-spacing-md) 0;
+    padding: var(--pv-spacing-sm) var(--pv-spacing-md);
+    background: rgba(0, 85, 164, 0.08);
+    border-left: 4px solid var(--pv-primary);
+    border-radius: var(--pv-radius-sm);
+    display: flex;
+    align-items: center;
+    gap: var(--pv-spacing-sm);
+}
+
+.matches-grid {
+    display: grid;
+    gap: var(--pv-spacing-md);
+}
+
+/* ============================================================
+   11. EMPTY STATES
+   ============================================================ */
+
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 4rem 2rem;
+    text-align: center;
+}
+
+.empty-state__icon {
+    font-size: 5rem;
+    margin-bottom: var(--pv-spacing-xl);
+    opacity: 0.5;
+}
+
+.empty-state__title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #333;
+    margin: 0 0 var(--pv-spacing-md) 0;
+}
+
+.empty-state__message {
+    font-size: 1rem;
+    color: #666;
+    margin: 0;
+}
+
+.no-matches,
+.matches-empty {
+    text-align: center;
+    padding: 3rem 2rem;
+    color: #999;
+    font-size: 0.95rem;
+    font-weight: 600;
+    background: rgba(0, 85, 164, 0.03);
+    border-radius: var(--pv-radius-md);
+    border: 1px dashed rgba(0, 85, 164, 0.2);
+}
+
+.standings-empty {
+    text-align: center;
+    padding: 2rem;
+    color: #999;
+    font-size: 0.9rem;
+}
+
+/* ============================================================
+   11.5 MATCH CARD - REFACTORED CLASSES
+   ============================================================ */
+
+/* Base Match Card */
+.match-card {
+    background: white;
+    border-radius: var(--pv-radius-lg);
+    padding: var(--pv-spacing-lg);
+    margin-bottom: var(--pv-spacing-md);
+    transition: all var(--pv-transition-fast);
+    box-shadow: var(--pv-shadow-sm);
+}
+
+.match-card:hover {
+    box-shadow: var(--pv-shadow-md);
+    transform: translateY(-2px);
+}
+
+.match-card--unscheduled {
+    border-left: 4px solid var(--pv-danger);
+}
+
+.match-card--upcoming {
+    border-left: 4px solid var(--pv-info);
+}
+
+.match-card--played {
+    border-left: 4px solid var(--pv-success);
+}
+
+.match-card--cfu {
+    border: 3px solid var(--pv-cfu-border) !important;
+    box-shadow: 0 4px 12px var(--pv-cfu-shadow), 
+                0 0 20px rgba(255, 215, 0, 0.3) !important;
+}
+
+.match-card--cfe {
+    border: 3px solid var(--pv-cfe-border) !important;
+    box-shadow: 0 4px 12px var(--pv-cfe-shadow), 
+                0 0 20px rgba(74, 144, 226, 0.3) !important;
+}
+
+.match-card--male .match-card__body {
+    background: linear-gradient(135deg, rgba(0, 123, 255, 0.08) 0%, rgba(0, 123, 255, 0.03) 100%);
+}
+
+.match-card--female .match-card__body {
+    background: linear-gradient(135deg, rgba(255, 20, 147, 0.08) 0%, rgba(255, 20, 147, 0.03) 100%);
+}
+
+/* Match Badges */
+.match-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.25rem 0.6rem;
+    border-radius: var(--pv-radius-sm);
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.match-badge--cfu {
+    background: var(--pv-cfu-bg);
+    color: #000;
+    border: 2px solid var(--pv-cfu-border);
+    box-shadow: 0 2px 8px var(--pv-cfu-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.match-badge--cfe {
+    background: var(--pv-cfe-bg);
+    color: #FFF;
+    border: 2px solid var(--pv-cfe-border);
+    box-shadow: 0 2px 8px var(--pv-cfe-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+.match-badge--entente {
+    background: var(--pv-entente-light);
+    color: #F57C00;
+    border: 1px solid rgba(255, 193, 7, 0.4);
+    font-size: 0.65rem;
+}
+
+.match-badge__icon {
+    font-size: 0.8rem;
+}
+
+/* Match Card Status */
+.match-card__status-icon {
+    font-size: 0.9rem;
+}
+
+.match-card__status-label {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* Match Card Team Info */
+.match-card__team-info {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    width: 100%;
+    justify-content: space-between;
+}
+
+.match-card__team-info--reverse {
+    flex-direction: row-reverse;
+}
+
+.match-card__team-details {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.match-card__team-num {
+    font-size: 0.65rem;
+    font-weight: 800;
+    background: rgba(0, 85, 164, 0.15);
+    padding: 0.15rem 0.4rem;
+    border-radius: 4px;
+    font-family: var(--pv-font-mono);
+    color: var(--pv-primary);
+}
+
+.match-card__versus {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+/* Match Card Info (Footer) */
+.match-card__info {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.25rem 0.5rem;
+    background: rgba(0, 85, 164, 0.06);
+    border-radius: var(--pv-radius-sm);
+    border: 1px solid rgba(0, 85, 164, 0.1);
+}
+
+.match-card__info--warning {
+    background: var(--pv-danger-light);
+    border-color: rgba(239, 65, 53, 0.25);
+}
+
+.match-card__info-icon {
+    font-size: 0.85rem;
+}
+
+.match-card__info-text {
+    font-weight: 600;
+    color: #555;
+}
+
+.match-card__info--warning .match-card__info-text {
+    font-weight: 700;
+    color: var(--pv-danger);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+}
+
+.match-card__info-text--mono {
+    font-weight: 800;
+    font-family: var(--pv-font-mono);
+}
+
+/* Match Card Penalties */
+.match-penalty--high {
+    background: var(--pv-danger-light);
+    border-color: rgba(239, 65, 53, 0.25);
+}
+
+.match-penalty--high .match-card__info-text {
+    color: var(--pv-danger);
+}
+
+.match-penalty--medium {
+    background: var(--pv-warning-light);
+    border-color: rgba(255, 149, 0, 0.25);
+}
+
+.match-penalty--medium .match-card__info-text {
+    color: var(--pv-warning);
+}
+
+.match-penalty--low {
+    background: var(--pv-success-light);
+    border-color: rgba(39, 174, 96, 0.25);
+}
+
+.match-penalty--low .match-card__info-text {
+    color: var(--pv-success);
+}
+
+/* Match Tab Refactored Classes */
+.match-tab--unscheduled {
+    background: var(--pv-danger-light);
+    color: var(--pv-danger);
+    border-color: rgba(239, 65, 53, 0.2);
+}
+
+.match-tab--unscheduled:hover {
+    background: rgba(239, 65, 53, 0.15);
+    border-color: rgba(239, 65, 53, 0.4);
+}
+
+.match-tab--unscheduled.match-tab--active {
+    background: linear-gradient(135deg, var(--pv-danger) 0%, #C0392B 100%);
+    color: white;
+    border-color: var(--pv-danger);
+    box-shadow: 0 2px 6px rgba(239, 65, 53, 0.3);
+}
+
+/* Matches Content visibility */
+.matches-content {
+    display: none;
+}
+
+.matches-content--active {
+    display: block;
+}
+
+/* Standings Table Refactored Classes */
+.standings-table__header-row {
+    background: rgba(0, 85, 164, 0.08);
+    border-bottom: 2px solid rgba(0, 85, 164, 0.2);
+}
+
+.standings-table__th {
+    padding: 0.6rem 0.5rem;
+    text-align: center;
+    font-size: 0.7rem;
+    font-weight: 800;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.standings-table__th--rank {
+    width: 40px;
+}
+
+.standings-table__th--team {
+    text-align: left;
+    padding-left: 0.75rem;
+}
+
+.standings-table__th--stat {
+    width: 40px;
+}
+
+.standings-table__th--points {
+    color: var(--pv-primary);
+    width: 50px;
+}
+
+.standings-table__row {
+    border-bottom: 1px solid rgba(0, 85, 164, 0.1);
+    transition: background var(--pv-transition-fast);
+}
+
+.standings-table__row:hover {
+    background: rgba(0, 85, 164, 0.03);
+}
+
+.standings-table__row--position-1 {
+    background: var(--pv-gold-light);
+}
+
+.standings-table__row--position-2 {
+    background: var(--pv-silver-light);
+}
+
+.standings-table__row--position-3 {
+    background: var(--pv-bronze-light);
+}
+
+.standings-table__td {
+    padding: 0.6rem 0.5rem;
+    text-align: center;
+    font-weight: 600;
+    font-family: var(--pv-font-mono);
+}
+
+.standings-table__td--rank {
+    font-weight: 700;
+    color: #666;
+}
+
+.standings-table__td--top3 {
+    color: var(--pv-primary);
+}
+
+.standings-table__td--team {
+    text-align: left;
+    padding-left: 0.75rem;
+    font-family: var(--pv-font-main);
+    color: #333;
+}
+
+.standings-table__td--played {
+    color: #666;
+}
+
+.standings-table__td--won {
+    color: var(--pv-success);
+}
+
+.standings-table__td--drawn {
+    color: var(--pv-warning);
+}
+
+.standings-table__td--lost {
+    color: var(--pv-danger);
+}
+
+.standings-table__td--points {
+    font-weight: 900;
+    font-size: 1rem;
+    color: var(--pv-primary);
+}
+
+/* ============================================================
+   12. ANIMATIONS
+   ============================================================ */
+
+@keyframes pv-fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pv-slideDown {
+    from { opacity: 0; max-height: 0; }
+    to { opacity: 1; max-height: 2000px; }
+}
+
+.pool-card.expanded .pool-content {
+    animation: pv-slideDown 0.3s ease-out;
+}
+
+.pool-card {
+    animation: pv-fadeIn 0.3s ease-out;
+}
+
+/* ============================================================
+   13. RESPONSIVE
+   ============================================================ */
+
+@media (max-width: 1024px) {
+    .pool-details-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .pools-summary__cards {
+        gap: var(--pv-spacing-md);
+    }
+    
+    .summary-card {
+        min-width: 100px;
+    }
+}
+
+@media (max-width: 768px) {
+    .pools-view {
+        padding: var(--pv-spacing-md);
+    }
+    
+    .pool-header {
+        padding: var(--pv-spacing-lg);
+    }
+    
+    .pool-header__info {
+        gap: var(--pv-spacing-md);
+    }
+    
+    .gender-separator__content {
+        flex-direction: column;
+        gap: var(--pv-spacing-md);
+    }
+    
+    .gender-separator__line {
+        width: 100%;
+        height: 2px;
+    }
+    
+    .match-card__body {
+        flex-direction: column;
+        gap: var(--pv-spacing-md);
+    }
+    
+    .match-card__team--right .match-card__team-row {
+        flex-direction: row;
+        text-align: left;
+    }
+    
+    .matches-tabs {
+        flex-wrap: wrap;
+    }
+    
+    .match-tab {
+        flex: 1 1 45%;
+    }
+}
+
+@media (max-width: 480px) {
+    .pool-stats {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .pool-header__title {
+        font-size: 1.1rem;
+    }
+    
+    .standings-table {
+        font-size: 0.75rem;
+    }
+    
+    .standings-table th,
+    .standings-table td {
+        padding: 0.4rem 0.3rem;
+    }
+}
+
+/* ============================================================
+   DARK THEME SUPPORT
+   ============================================================ */
+
+[data-theme="dark"] .pools-view {
+    --pv-primary-light: rgba(0, 85, 164, 0.2);
+}
+
+[data-theme="dark"] .pool-card,
+[data-theme="dark"] .match-card-new,
+[data-theme="dark"] .pool-content-section,
+[data-theme="dark"] .summary-card {
+    background: var(--surface-raised);
+    border-color: var(--border-color);
+}
+
+[data-theme="dark"] .pool-content {
+    background: rgba(0, 0, 0, 0.2);
+}
+
+[data-theme="dark"] .standings-table thead tr {
+    background: rgba(0, 85, 164, 0.15);
+}
+
+[data-theme="dark"] .standings-table tbody tr:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+[data-theme="dark"] .match-card__team-name,
+[data-theme="dark"] .empty-state__title {
+    color: var(--text-primary);
+}
+
+[data-theme="dark"] .match-card__footer-text,
+[data-theme="dark"] .stat-item__label,
+[data-theme="dark"] .summary-card__label {
+    color: var(--text-secondary);
+}
+
+/* Level separators dark mode */
+[data-theme="dark"] .level-separator__line {
+    background: linear-gradient(to right, transparent, var(--border-color), transparent);
+}
+
+[data-theme="dark"] .level-separator__badge {
+    background: var(--surface-muted);
+    border-color: var(--border-color);
+}
+
+[data-theme="dark"] .level-separator__title {
+    color: var(--text-primary);
+}
+
+[data-theme="dark"] .level-separator__stats {
+    color: var(--text-secondary);
+}
+
+/* Pool cards dark mode improvements */
+[data-theme="dark"] .pool-header {
+    background: linear-gradient(135deg, 
+        color-mix(in srgb, var(--primary) 35%, var(--surface-raised) 65%) 0%,
+        color-mix(in srgb, var(--primary-dark) 40%, var(--surface-muted) 60%) 100%);
+}
+
+[data-theme="dark"] .standings-table td {
+    color: var(--text-primary);
+    border-color: var(--border-color);
+}
+
+[data-theme="dark"] .standings-table .team-name {
+    color: var(--text-primary);
+}
+
+[data-theme="dark"] .standings-table .team-institution {
+    color: var(--text-secondary);
+}
+
+/* ============================================================
+   COMPACT MODE
+   ============================================================ */
+
+.pools-view--compact .pools-summary {
+    padding: var(--pv-spacing-md);
+    margin-bottom: var(--pv-spacing-md);
+}
+
+.pools-view--compact .pools-summary__cards {
+    gap: var(--pv-spacing-sm);
+    padding: var(--pv-spacing-md);
+}
+
+.pools-view--compact .summary-card {
+    padding: var(--pv-spacing-sm);
+    min-width: 80px;
+}
+
+.pools-view--compact .summary-card__value {
+    font-size: 1.25rem;
+}
+
+.pools-view--compact .summary-card__label {
+    font-size: 0.6rem;
+}
+
+.pools-view--compact .pool-card {
+    border-radius: var(--pv-radius-md);
+}
+
+.pools-view--compact .pool-header {
+    padding: var(--pv-spacing-md);
+}
+
+.pools-view--compact .pool-header__title {
+    font-size: 1rem;
+}
+
+.pools-view--compact .pool-header__badges {
+    gap: var(--pv-spacing-xs);
+}
+
+.pools-view--compact .pool-header__badge {
+    padding: 0.15rem 0.4rem;
+    font-size: 0.65rem;
+}
+
+.pools-view--compact .pool-content {
+    padding: var(--pv-spacing-md);
+}
+
+.pools-view--compact .pool-content-section {
+    padding: var(--pv-spacing-sm);
+    margin-bottom: var(--pv-spacing-sm);
+}
+
+.pools-view--compact .pool-content-section__title {
+    font-size: 0.8rem;
+    margin-bottom: var(--pv-spacing-sm);
+}
+
+.pools-view--compact .pool-stats {
+    gap: var(--pv-spacing-xs);
+}
+
+.pools-view--compact .stat-item {
+    padding: var(--pv-spacing-xs);
+}
+
+.pools-view--compact .stat-item__value {
+    font-size: 1rem;
+}
+
+.pools-view--compact .stat-item__label {
+    font-size: 0.6rem;
+}
+
+.pools-view--compact .standings-table th,
+.pools-view--compact .standings-table td {
+    padding: 0.4rem 0.5rem;
+    font-size: 0.7rem;
+}
+
+.pools-view--compact .match-card-new {
+    padding: var(--pv-spacing-sm);
+}
+
+.pools-view--compact .match-card__team-name {
+    font-size: 0.75rem;
+}
+
+.pools-view--compact .match-card__score {
+    font-size: 1rem;
+    padding: 0.2rem 0.5rem;
+}
+
+.pools-view--compact .gender-separator,
+.pools-view--compact .level-separator {
+    padding: var(--pv-spacing-md);
+    margin: var(--pv-spacing-md) 0;
+}
+
+.pools-view--compact .gender-separator__title {
+    font-size: 1.2rem;
+}
+
+.pools-view--compact .level-separator__title {
+    font-size: 0.85rem;
+}

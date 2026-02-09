@@ -13,29 +13,73 @@ fichiers:
 
 # Paramètres de planification
 planification:
-  nb_semaines: 11
-  semaine_min: 1  # Semaine minimum à partir de laquelle planifier
+  nb_semaines: 11    # Nombre total de semaines de compétition (calendrier: semaine 1 à nb_semaines)
+  semaine_min: 1     # Première semaine où le planificateur peut poser de nouveaux matchs
 
 # Configuration CP-SAT (OR-Tools - recherche solution optimale)
 cpsat:
   temps_max_secondes: 120  # Temps maximum de résolution (minimum recommandé pour problèmes complexes)
   afficher_progression: false  # Afficher les détails du solver pendant la résolution
-  niveau_log: 1  # Niveau de verbosité des logs
   warm_start: true  # Utiliser la solution précédente comme point de départ
   warm_start_file: "volley"  # Nom du fichier pour sauvegarder/charger les solutions de démarrage
+  use_prefilter: true  # Si true: préfiltre les combinaisons impossibles avant création des variables (plus rapide)
+  
+  # Paramètres avancés du solver OR-Tools
+  num_search_workers: 8  # Nombre de threads pour la recherche parallèle (0 = auto)
+  relative_gap_limit: 0.0  # Limite d'écart relatif (0 = continuer jusqu'au timeout)
+  absolute_gap_limit: 0.0  # Limite d'écart absolu (0 = continuer jusqu'au timeout)
+  
+  # ============================================================================
+  # MODE PERFORMANCE - Contrôle la complexité du modèle
+  # ============================================================================
+  # Mode "fast" désactive automatiquement les contraintes les plus coûteuses
+  # pour accélérer la résolution. Utile pour tests rapides ou problèmes simples.
+  # Les flags individuels ci-dessous permettent un contrôle fin.
+  mode_fast: false  # Si true: désactive automatiquement les contraintes coûteuses
+  
+  # Flags individuels pour les contraintes COÛTEUSES EN CALCUL
+  # Ces flags permettent de désactiver sélectivement les contraintes les plus lourdes
+  # ⚠️ IMPACT PERFORMANCE: désactiver = plus rapide, mais solution potentiellement moins bonne
+  
+  # 🔴 CRITIQUE: Espacement repos inter-matchs (O(équipes × semaines²))
+  # Crée ~3 variables auxiliaires par paire de semaines par équipe
+  # Exemple: 50 équipes × 13 semaines² = ~25,000 variables
+  enable_espacement_repos: true
+  
+  # 🔴 CRITIQUE: Espacement aller-retour (O(paires × créneaux²)) 
+  # Crée 1 variable par combinaison (aller_creneau, retour_creneau)
+  # Exemple: 100 paires × 200² créneaux = potentiellement millions de comparaisons
+  enable_aller_retour_espacement: false
+  
+  # 🟠 ÉLEVÉ: Mode simplifié pour espacement repos
+  # Au lieu de pénaliser chaque paire de semaines, pénalise seulement les semaines consécutives
+  # Réduit la complexité de O(semaines²) à O(semaines)
+  espacement_repos_simplifie: false
+  
+  # 🟠 ÉLEVÉ: Mode simplifié pour aller-retour
+  # Au lieu de pénaliser chaque paire de créneaux, utilise une formulation agrégée par semaine
+  # Réduit la complexité de O(créneaux²) à O(semaines²)
+  aller_retour_simplifie: false
 
 # Contraintes
 contraintes:
   # --- Préférences de gymnase ---
-  bonus_preferences_gymnases: [10.0, 8.0, 5.0, 2.0, 1.0]  # Réduction de coût par rang de préférence
+  # Système de bonus par rang : si une équipe obtient son gymnase préféré de rang N,
+  # elle reçoit une réduction de pénalité de bonus_preferences_gymnases[N]
+  # Plus la valeur est haute, plus le gymnase de ce rang est favorisé
+  bonus_preferences_gymnases: [10.0, 8.0, 5.0, 2.0, 1.0]
 
   # --- Pondérations globales des gymnases par niveau ---
-  # Convention: valeurs NÉGATIVES = bonus (réduction coût), POSITIVES = pénalité (augmentation coût)
-  # Exemple: A1 (haut niveau) sur gymnase haut niveau → bonus (valeur négative)
-  #          A1 (haut niveau) sur gymnase bas niveau → pénalité (valeur positive)
-  poids_niveaux_gymnases_haut: [-12, -8, -3, 0]  # Bonus: A1/A2 fortement encouragés sur gym haut (valeurs négatives)
-  poids_niveaux_gymnases_bas: [30, 12, 4, 1]  # Pénalités: évite A1 en gym bas mais tolère A4 (valeur négative)
-  penalite_gymnase_priorite_genre: 25.0  # Pénalité si un gymnase prioritaire M/F reçoit un match du genre opposé
+  # Ces valeurs sont AJOUTÉES à l'objectif (négatif = encourage, positif = décourage)
+  # Index = niveau du match (0=A1, 1=A2, 2=A3, 3=A4)
+  # poids_niveaux_gymnases_haut: bonus/malus quand le match est dans un gymnase "haut niveau"
+  # poids_niveaux_gymnases_bas: bonus/malus quand le match est dans un gymnase "bas niveau"
+  # 
+  # Exemple: match A1 (index 0) dans gymnase haut niveau → poids_haut[0] = -6 (bonus de 6)
+  #          match A1 (index 0) dans gymnase bas niveau → poids_bas[0] = 30 (pénalité de 30)
+  poids_niveaux_gymnases_haut: [-6, -4, -2, 0]  # A1/A2 encouragés en gym haut, A4 neutre
+  poids_niveaux_gymnases_bas: [30, 12, 4, 1]   # A1 très découragé en gym bas, A4 toléré
+  penalite_gymnase_priorite_genre: 15.0  # Pénalité si un gymnase prioritaire M/F reçoit un match du genre opposé
 
   # --- Horaires préférés avec système de tolérance ---
   # Formule: pénalité = multiplicateur × ((distance / diviseur)²)
@@ -61,7 +105,7 @@ contraintes:
   # Index 1 = 1 semaine d'écart entre matchs
   # Index 2 = 2 semaines d'écart, etc.
   # Si repos >= longueur liste, pénalité = 0
-  penalites_espacement_repos: [5.0, 2.0, 1.0]
+  penalites_espacement_repos: [25.0, 16.0, 9.0, 5.0, 2.0]
 
   # --- Compaction temporelle ---
   # Pénalise les matchs planifiés tard dans la saison pour favoriser planification précoce
@@ -76,7 +120,7 @@ contraintes:
   # Si aucun groupe configuré: contrainte automatiquement désactivée (message de warning)
   overlap_institution_actif: false  # Activer/désactiver cette contrainte
   overlap_institution_poids: 10.0  # Pénalité par chevauchement détecté (recommandé: 10-100)
-  coach_overlap_actif: true
+  coach_overlap_actif: false
   coach_overlap_penalite_simultane_diff_gym: 20.0
   coach_overlap_penalite_simultane_meme_gym: 2.0
   coach_overlap_penalite_deplacement: 8.0
@@ -89,16 +133,18 @@ contraintes:
   # --- Équilibrage des matchs (système max-min avec bonus progressif) ---
   # Garantit que le minimum de matchs par équipe soit maximal
   # Utilise des bonus dégressifs: 1er match = bonus élevé, 2ème = bonus/2, 3ème = bonus/4, etc.
+  # ⚠️ PERFORMANCE: Le mode avec ententes est O(équipes × seuils × ententes) - très coûteux
   equilibrage_actif: true
-  equilibrage_bonus_base: 5000.0  # Bonus pour le premier match d'une équipe
+  equilibrage_bonus_base: 500000.0  # Bonus pour le premier match d'une équipe
   equilibrage_facteur_decroissance: 0.7  # Facteur multiplicatif pour chaque match suivant
-  equilibrage_bonus_minimum: 1.0  # Bonus plancher 
+  equilibrage_bonus_minimum: 1.0  # Bonus plancher
+  equilibrage_mode_simplifie: false  # Si true: mode simplifié O(équipes × seuils) sans gestion fine des ententes
 
   # --- Ententes (matchs entre institutions spécifiques) ---
   # Les ententes sont des matchs gérés par les équipes (sans créneau assigné)
   # Utilisées comme "soupape de sécurité" quand le calendrier est saturé
-  entente_actif: true
-  entente_facteur_reduction_bonus: 0.90  # Réduction multiplicative du bonus total de l'équipe par entente (0.90 = -10% par entente)
+  entente_actif: false
+  entente_facteur_reduction_bonus: 0.6  # Réduction multiplicative du bonus total de l'équipe par entente (0.90 = -10% par entente)
 
   # --- Contraintes temporelles (CFE, phases de poules, etc.) ---
   # Permet de forcer certains matchs avant/après une semaine donnée
@@ -115,10 +161,27 @@ contraintes:
 # Gestion du calendrier avec dates réelles
 calendrier:
   actif: true  # Activer pour afficher dates réelles au lieu de numéros de semaine
-  date_debut: "2025-10-12"  # Date de début de saison (format YYYY-MM-DD)
+  date_debut: "2025-10-13"  # Date de début de saison (format YYYY-MM-DD)
   jour_match: "jeudi"  # Jour de la semaine des matchs
   semaines_banalisees: []  # Liste des semaines banalisées (vacances, pas de matchs)
 
 # Paramètres spécifiques au sport
+# ================================
+# Utilisez 'type' ou 'preset' pour charger les paramètres prédéfinis d'un sport.
+# Les valeurs prédéfinies sont dans configs/sports_presets.yaml
+# Vous pouvez surcharger n'importe quel paramètre individuellement.
+#
+# Sports supportés: volleyball, handball, basketball, football, futsal, rugby, badminton, tennis_table
+# Alias acceptés: volley/VB, hand/HB, basket/BB, foot/FB, FS, RG, BD, TT
 sport:
-  duree_match_minutes: 90  # Durée d'un match en minutes (90 pour handball, 120 pour volley)
+  type: "volleyball"                    # Type de sport (charge les préréglages)
+  # prefix: "VB"                        # Préfixe dans les codes de poule (auto depuis type)
+  # name: "Volleyball"                  # Nom complet (auto depuis type)
+  # name_short: "Volley"                # Nom court (auto depuis type)
+  # emoji: "🏐"                         # Emoji du sport (auto depuis type)
+  # duree_match_minutes: 120              # Durée d'un match (peut surcharger le preset)
+  # duree_entre_matchs_minutes: 15      # Temps entre deux matchs
+  # score_format: "sets"                # Format des scores: "sets" ou "points"
+  # niveaux: ["A1", "A2", "A3", "A4"]   # Niveaux disponibles
+  # genres: ["M", "F"]                  # Genres: M(asculin), F(éminin), X(mixte)
+  # types_championnat: ["Acad", "CFE", "CFU"]  # Types de compétition

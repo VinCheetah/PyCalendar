@@ -1,0 +1,724 @@
+/**
+ * PyCalendar Pool Editor - Modals
+ * Modal dialogs styling
+ */
+
+/* ==================== Modal Base ==================== */
+.modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: var(--z-modal);
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-lg);
+}
+
+.modal.active {
+    display: flex;
+}
+
+.modal-backdrop {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px);
+    z-index: -1;
+    animation: fadeIn 200ms ease;
+}
+
+.modal-content {
+    background: var(--color-surface);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-xl);
+    width: 100%;
+    max-width: 500px;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    animation: slideUp 250ms var(--transition-spring);
+}
+
+.modal-content.modal-md {
+    max-width: 550px;
+}
+
+.modal-content.modal-lg {
+    max-width: 700px;
+}
+
+.modal-content.modal-xl {
+    max-width: 900px;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px) scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+/* ==================== Modal Header ==================== */
+.modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-md) var(--space-lg);
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-surface-alt);
+}
+
+.modal-header h2 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--color-text);
+}
+
+.modal-close {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-md);
+    font-size: 1.5rem;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.modal-close:hover {
+    background: var(--color-danger-light);
+    color: var(--color-danger);
+}
+
+/* ==================== Modal Body ==================== */
+.modal-body {
+    padding: var(--space-lg);
+    overflow-y: auto;
+    flex: 1;
+}
+
+.modal-description {
+    color: var(--color-text-secondary);
+    margin-bottom: var(--space-lg);
+    line-height: 1.6;
+}
+
+/* ==================== Modal Footer ==================== */
+.modal-footer {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-md) var(--space-lg);
+    border-top: 1px solid var(--color-border);
+    background: var(--color-surface-alt);
+}
+
+.modal-footer .spacer {
+    flex: 1;
+}
+
+/* ==================== Import Modal ==================== */
+.import-tabs {
+    display: flex;
+    gap: var(--space-xs);
+    margin-bottom: var(--space-lg);
+    padding: var(--space-xs);
+    background: var(--color-surface-alt);
+    border-radius: var(--radius-lg);
+}
+
+.tab-btn {
+    flex: 1;
+    padding: var(--space-sm) var(--space-md);
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-md);
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.tab-btn:hover {
+    color: var(--color-text);
+}
+
+.tab-btn.active {
+    background: var(--color-surface);
+    color: var(--color-primary);
+    box-shadow: var(--shadow-sm);
+}
+
+.tab-content {
+    display: none;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+.tab-description {
+    color: var(--color-text-secondary);
+    font-size: 0.9rem;
+    margin-bottom: var(--space-lg);
+    line-height: 1.6;
+}
+
+.file-input-group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    margin-bottom: var(--space-md);
+}
+
+.file-input-group label {
+    cursor: pointer;
+}
+
+.file-name {
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+    padding: var(--space-sm);
+    background: var(--color-surface-alt);
+    border-radius: var(--radius-md);
+    text-align: center;
+}
+
+.file-name.has-file {
+    color: var(--color-success);
+    background: var(--color-success-light);
+}
+
+.excel-file-group {
+    padding: var(--space-md);
+    background: var(--color-surface-alt);
+    border-radius: var(--radius-md);
+    margin-top: var(--space-md);
+}
+
+.excel-file-group p {
+    font-size: 0.85rem;
+    margin-bottom: var(--space-sm);
+}
+
+/* ==================== Export Modal ==================== */
+.export-options {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-md);
+}
+
+.export-option {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-lg);
+    background: var(--color-surface-alt);
+    border: 2px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.export-option:hover {
+    border-color: var(--color-primary);
+    background: var(--color-primary-light);
+    transform: translateY(-2px);
+}
+
+.export-icon {
+    font-size: 2rem;
+}
+
+.export-label {
+    font-weight: 600;
+    color: var(--color-text);
+}
+
+.export-desc {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+}
+
+/* ==================== Help Modal ==================== */
+.help-section {
+    margin-bottom: var(--space-lg);
+}
+
+.help-section:last-child {
+    margin-bottom: 0;
+}
+
+.help-section h3 {
+    font-size: 1rem;
+    margin-bottom: var(--space-sm);
+    color: var(--color-text);
+}
+
+.help-section ul {
+    padding-left: var(--space-lg);
+}
+
+.help-section li {
+    margin-bottom: var(--space-xs);
+    color: var(--color-text-secondary);
+    line-height: 1.6;
+}
+
+.help-section li strong {
+    color: var(--color-text);
+}
+
+/* ==================== Toast Messages ==================== */
+.toast-container {
+    position: fixed;
+    bottom: var(--space-lg);
+    right: var(--space-lg);
+    z-index: var(--z-toast);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.toast {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-md) var(--space-lg);
+    background: var(--color-surface);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    border-left: 4px solid var(--color-primary);
+    animation: slideInRight 300ms ease, fadeOut 300ms ease 2.7s forwards;
+    min-width: 280px;
+    max-width: 400px;
+}
+
+@keyframes slideInRight {
+    from {
+        opacity: 0;
+        transform: translateX(100%);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+@keyframes fadeOut {
+    from {
+        opacity: 1;
+    }
+    to {
+        opacity: 0;
+    }
+}
+
+.toast-icon {
+    font-size: 1.25rem;
+    flex-shrink: 0;
+}
+
+.toast-content {
+    flex: 1;
+}
+
+.toast-title {
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: var(--color-text);
+}
+
+.toast-message {
+    font-size: 0.85rem;
+    color: var(--color-text-secondary);
+}
+
+.toast-close {
+    padding: 4px;
+    background: transparent;
+    border: none;
+    font-size: 1rem;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    opacity: 0.5;
+    transition: opacity var(--transition-fast);
+}
+
+.toast-close:hover {
+    opacity: 1;
+}
+
+/* Toast variants */
+.toast.success {
+    border-left-color: var(--color-success);
+}
+
+.toast.warning {
+    border-left-color: var(--color-warning);
+}
+
+.toast.error {
+    border-left-color: var(--color-danger);
+}
+
+.toast.info {
+    border-left-color: var(--color-info);
+}
+
+/* ==================== Confirmation Dialog ==================== */
+.confirm-dialog {
+    text-align: center;
+}
+
+.confirm-dialog .modal-body {
+    padding: var(--space-xl);
+}
+
+.confirm-icon {
+    font-size: 3rem;
+    margin-bottom: var(--space-md);
+}
+
+.confirm-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin-bottom: var(--space-sm);
+}
+
+.confirm-message {
+    color: var(--color-text-secondary);
+    margin-bottom: var(--space-lg);
+}
+
+.confirm-actions {
+    display: flex;
+    justify-content: center;
+    gap: var(--space-md);
+}
+
+/* ==================== New Import Modal Styles ==================== */
+.import-section {
+    margin-bottom: var(--space-md);
+    padding: var(--space-md);
+    background: var(--color-surface-alt);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--color-border);
+}
+
+.import-section-primary {
+    background: var(--color-primary-light);
+    border-color: var(--color-primary);
+}
+
+.import-section-title {
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: var(--space-sm);
+    color: var(--color-text);
+}
+
+.import-instructions {
+    background: var(--color-surface);
+    border-radius: var(--radius-md);
+    padding: var(--space-sm) var(--space-md);
+    margin-bottom: var(--space-md);
+    font-size: 0.85rem;
+    border: 1px solid var(--color-border);
+}
+
+.import-instructions p {
+    margin: 0;
+    line-height: 1.6;
+}
+
+.import-instructions code {
+    background: var(--color-surface-alt);
+    padding: 1px 4px;
+    border-radius: var(--radius-sm);
+    font-size: 0.8rem;
+    color: var(--color-primary);
+    font-weight: 600;
+}
+
+.import-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+}
+
+.form-group-inline {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.form-group-inline label {
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.select-sport {
+    padding: var(--space-xs) var(--space-sm);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    font-size: 0.9rem;
+    background: var(--color-surface);
+}
+
+.file-input-inline {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex: 1;
+}
+
+.file-input-inline .file-name {
+    padding: var(--space-xs) var(--space-sm);
+    background: var(--color-surface);
+    border-radius: var(--radius-sm);
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+}
+
+.file-input-inline .file-name.has-file {
+    color: var(--color-success);
+    font-weight: 500;
+}
+
+.btn-import-action {
+    white-space: nowrap;
+}
+
+.import-description {
+    font-size: 0.9rem;
+    color: var(--color-text-secondary);
+    margin-bottom: var(--space-md);
+}
+
+.import-divider {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    margin: var(--space-md) 0;
+    color: var(--color-text-muted);
+    font-size: 0.85rem;
+}
+
+.import-divider::before,
+.import-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--color-border);
+}
+
+/* ==================== New Export Modal Styles ==================== */
+.export-main-option {
+    display: flex;
+    gap: var(--space-lg);
+    align-items: flex-start;
+    padding: var(--space-lg);
+    background: var(--color-primary-light);
+    border-radius: var(--radius-lg);
+    border: 2px solid var(--color-primary);
+}
+
+.export-main-icon {
+    font-size: 2.5rem;
+    flex-shrink: 0;
+}
+
+.export-main-content h3 {
+    font-size: 1.1rem;
+    margin-bottom: var(--space-xs);
+    color: var(--color-text);
+}
+
+.export-main-content p {
+    font-size: 0.9rem;
+    color: var(--color-text-secondary);
+    margin-bottom: var(--space-md);
+    line-height: 1.5;
+}
+
+.export-divider {
+    height: 1px;
+    background: var(--color-border);
+    margin: var(--space-lg) 0;
+}
+
+.export-secondary-options {
+    text-align: center;
+}
+
+.export-secondary-title {
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-sm);
+}
+
+.export-secondary-buttons {
+    display: flex;
+    justify-content: center;
+    gap: var(--space-sm);
+}
+
+/* ==================== Form Section (Horaires Aménagés) ==================== */
+.form-section {
+    margin-top: var(--space-lg);
+    padding: var(--space-md);
+    background: var(--color-surface-alt);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--color-border);
+}
+
+.form-section-header {
+    margin-bottom: var(--space-sm);
+}
+
+.form-section-content {
+    padding-top: var(--space-md);
+    border-top: 1px solid var(--color-border);
+    margin-top: var(--space-sm);
+}
+
+/* Checkbox styled */
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    cursor: pointer;
+    font-weight: 500;
+    color: var(--color-text);
+}
+
+.checkbox-label input[type="checkbox"] {
+    display: none;
+}
+
+.checkbox-custom {
+    width: 20px;
+    height: 20px;
+    border: 2px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all var(--transition-fast);
+    flex-shrink: 0;
+}
+
+.checkbox-custom::after {
+    content: '✓';
+    font-size: 12px;
+    color: white;
+    opacity: 0;
+    transform: scale(0);
+    transition: all var(--transition-fast);
+}
+
+.checkbox-label input[type="checkbox"]:checked + .checkbox-custom {
+    background: var(--color-primary);
+    border-color: var(--color-primary);
+}
+
+.checkbox-label input[type="checkbox"]:checked + .checkbox-custom::after {
+    opacity: 1;
+    transform: scale(1);
+}
+
+/* Gymnases checkboxes grid */
+.gymnases-checkboxes {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: var(--space-sm);
+    max-height: 180px;
+    overflow-y: auto;
+    padding: var(--space-sm);
+    background: var(--color-surface);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border);
+}
+
+.gymnase-checkbox-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: var(--space-xs) var(--space-sm);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: background var(--transition-fast);
+    font-size: 0.85rem;
+}
+
+.gymnase-checkbox-item:hover {
+    background: var(--color-surface-alt);
+}
+
+.gymnase-checkbox-item input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--color-primary);
+    cursor: pointer;
+}
+
+.gymnase-checkbox-item label {
+    cursor: pointer;
+    flex: 1;
+}
+
+.gymnase-checkbox-item.selected {
+    background: var(--color-primary-light);
+    border: 1px solid var(--color-primary);
+}
+
+/* Team with amenaged schedule indicator */
+.team-badge-amenage {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 3px 8px;
+    background: linear-gradient(135deg, #fff3cd, #ffc107);
+    color: #856404;
+    border: 1px solid #ffc107;
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    font-weight: 700;
+    box-shadow: 0 1px 3px rgba(255, 193, 7, 0.4);
+    animation: pulse-amenage 2s infinite;
+}
+
+@keyframes pulse-amenage {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.8; }
+}
+
+.has-amenaged-schedule {
+    border-left: 3px solid #ffc107 !important;
+    background: linear-gradient(to right, rgba(255, 193, 7, 0.1), transparent) !important;
+}

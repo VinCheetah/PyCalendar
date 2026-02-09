@@ -1,0 +1,48 @@
+[
+  {
+    "name": "core",
+    "description": "Design tokens, resets and layout primitives (load first).",
+    "files": [
+      "core/00-tokens.css",
+      "core/01-reset.css",
+      "core/02-base.css",
+      "core/03-layout.css",
+      "core/04-effects.css",
+      "core/05-decorations.css"
+    ]
+  },
+  {
+    "name": "components",
+    "description": "Reusable UI components shared across views.",
+    "files": [
+      "components/match-card.css",
+      "components/filters.css",
+      "components/modals.css",
+      "components/loading.css",
+      "components/sidebars.css"
+    ]
+  },
+  {
+    "name": "views",
+    "description": "View-specific layouts and overrides.",
+    "files": [
+      "views/agenda-view.css",
+      "views/pools-view.css",
+      "views/pools-view-refactored.css",
+      "views/teams-view-refactored.css",
+      "views/matches-view.css",
+      "views/penalties-view.css"
+    ]
+  },
+  {
+    "name": "themes",
+    "description": "Palette overrides, theme skins, and print styles (load last).",
+    "files": [
+      "themes/palettes.css",
+      "themes/default.css",
+      "themes/dark.css",
+      "themes/tricolore.css",
+      "themes/print.css"
+    ]
+  }
+]

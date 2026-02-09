@@ -1,0 +1,55 @@
+{
+  "teams": [
+    {
+      "id": "team_1",
+      "nom": "LYON 1 (1)",
+      "genre": "F",
+      "niveau": "A1",
+      "horaire": "14H",
+      "institution": "LYON 1",
+      "poule": "VBFA1PA"
+    },
+    {
+      "id": "team_2",
+      "nom": "INSA (2)",
+      "genre": "F",
+      "niveau": "A1",
+      "horaire": "14H",
+      "institution": "INSA",
+      "poule": "VBFA1PA"
+    },
+    {
+      "id": "team_3",
+      "nom": "ENTPE (1)",
+      "genre": "F",
+      "niveau": "A1",
+      "horaire": "14H",
+      "institution": "ENTPE",
+      "poule": "VBFA1PA"
+    },
+    {
+      "id": "team_4",
+      "nom": "INSA (1)",
+      "genre": "F",
+      "niveau": "A1",
+      "horaire": "14H",
+      "institution": "INSA",
+      "poule": "VBFA1PA"
+    },
+    {
+      "id": "team_5",
+      "nom": "LYON 1 (11)",
+      "genre": "F",
+      "niveau": "A1",
+      "horaire": "14H",
+      "institution": "LYON 1",
+      "poule": "VBFA1PA"
+    }
+  ],
+  "pools": [],
+  "settings": {
+    "sport": "volleyball",
+    "prefix": "VB"
+  },
+  "exportDate": "2026-01-07T21:00:00.000Z"
+}

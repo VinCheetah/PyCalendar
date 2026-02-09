@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="PyCalendar - Éditeur de Poules FFSU">
+    <title>🏆 PyCalendar - Éditeur de Poules</title>
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- FontAwesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    
+    <!-- js-yaml for parsing YAML -->
+    <script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
+    
+    <!-- SheetJS for reading Excel files -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    
+    <!-- CSS -->
+    <link rel="stylesheet" href="css/variables.css">
+    <link rel="stylesheet" href="css/base.css">
+    <link rel="stylesheet" href="css/components.css">
+    <link rel="stylesheet" href="css/pools.css">
+    <link rel="stylesheet" href="css/modals.css">
+    <link rel="stylesheet" href="css/animations.css">
+</head>
+<body>
+    <div class="app-container" id="app">
+        <!-- ==================== HEADER ==================== -->
+        <header class="main-header">
+            <div class="header-left">
+                <div class="logo">
+                    <span class="logo-icon" id="sport-icon">🏆</span>
+                    <div class="logo-text">
+                        <h1>Éditeur de Poules</h1>
+                        <span class="subtitle" id="sport-name">PyCalendar FFSU</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="header-center">
+                <div class="stats-bar">
+                    <div class="stat-item">
+                        <span class="stat-icon">👥</span>
+                        <span class="stat-value" id="stat-teams">0</span>
+                        <span class="stat-label">Équipes</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-icon">🏆</span>
+                        <span class="stat-value" id="stat-pools">0</span>
+                        <span class="stat-label">Poules</span>
+                    </div>
+                    <div class="stat-item feminine">
+                        <span class="stat-value" id="stat-female">0</span>
+                        <span class="stat-label">Féminines</span>
+                    </div>
+                    <div class="stat-item masculine">
+                        <span class="stat-value" id="stat-male">0</span>
+                        <span class="stat-label">Masculines</span>
+                    </div>
+                    <div class="stat-item stat-matches">
+                        <span class="stat-icon">⚔️</span>
+                        <span class="stat-value" id="stat-total-matches">0</span>
+                        <span class="stat-label">Matchs</span>
+                    </div>
+                    <div class="stat-item stat-ar" title="Poules aller-retour">
+                        <span class="stat-icon">🔄</span>
+                        <span class="stat-value" id="stat-ar-pools">0</span>
+                        <span class="stat-label">AR</span>
+                    </div>
+                    <div class="stat-item warning" id="unsaved-indicator" style="display: none;">
+                        <span class="stat-icon">⚠️</span>
+                        <span class="stat-value" id="stat-changes">0</span>
+                        <span class="stat-label">Non sauvegardé</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="header-right">
+                <button class="btn-icon" id="btn-theme" title="Changer le thème">
+                    <span class="theme-icon-light">☀️</span>
+                    <span class="theme-icon-dark">🌙</span>
+                </button>
+                <button class="btn-icon" id="btn-help" title="Aide">❓</button>
+            </div>
+        </header>
+
+        <!-- ==================== TOOLBAR ==================== -->
+        <div class="toolbar">
+            <div class="toolbar-left">
+                <!-- View Mode Selector -->
+                <div class="view-mode-group">
+                    <button class="view-mode-btn active" data-view="pools" title="Vue par poules">
+                        <i class="fas fa-th-large"></i> Poules
+                    </button>
+                    <button class="view-mode-btn" data-view="list" title="Vue en liste">
+                        <i class="fas fa-list"></i> Liste
+                    </button>
+                </div>
+            </div>
+            
+            <div class="toolbar-right">
+                <div class="btn-group">
+                    <button class="btn btn-secondary" id="btn-undo" disabled>
+                        ↩️ Annuler
+                    </button>
+                    <button class="btn btn-secondary" id="btn-redo" disabled>
+                        ↪️ Rétablir
+                    </button>
+                </div>
+                
+                <button class="btn btn-primary" id="btn-import">
+                    📂 Importer
+                </button>
+                
+                <button class="btn btn-success" id="btn-export">
+                    💾 Exporter
+                </button>
+            </div>
+        </div>
+
+        <!-- ==================== MAIN CONTENT ==================== -->
+        <div class="main-content">
+            <!-- Sidebar -->
+            <aside class="sidebar" id="sidebar">
+                <div class="sidebar-section">
+                    <h3 class="sidebar-title">⚡ Actions</h3>
+                    <div class="sidebar-actions">
+                        <button class="btn btn-block" id="btn-add-team">
+                            ➕ Nouvelle équipe
+                        </button>
+                        <button class="btn btn-block" id="btn-add-pool">
+                            ➕ Nouvelle poule
+                        </button>
+                        <button class="btn btn-block btn-secondary" id="btn-auto-create">
+                            🎯 Créer poules auto
+                        </button>
+                        <button class="btn btn-block btn-secondary" id="btn-balance">
+                            ⚖️ Équilibrer poules
+                        </button>
+                        <hr style="margin: 8px 0; border-color: var(--color-border);">
+                        <button class="btn btn-block btn-danger" id="btn-clear-cache" title="Efface les données en cache et recharge la page">
+                            🗑️ Vider le cache
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="sidebar-section">
+                    <h3 class="sidebar-title">📊 Statistiques</h3>
+                    <div class="stats-panel" id="stats-panel">
+                        <div class="stat-row">
+                            <span class="stat-name">Matchs 14H:</span>
+                            <span class="stat-count" id="stat-time-14">0</span>
+                        </div>
+                        <div class="stat-row">
+                            <span class="stat-name">Matchs 16H:</span>
+                            <span class="stat-count" id="stat-time-16">0</span>
+                        </div>
+                        <div class="stat-row">
+                            <span class="stat-name">Matchs 18H:</span>
+                            <span class="stat-count" id="stat-time-18">0</span>
+                        </div>
+                        <div class="stat-row">
+                            <span class="stat-name">Matchs 20H:</span>
+                            <span class="stat-count" id="stat-time-20">0</span>
+                        </div>
+                        <hr class="stat-divider">
+                        <div class="stat-row">
+                            <span class="stat-name">Poules AR:</span>
+                            <span class="stat-count" id="stat-ar-pools">0</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="sidebar-section">
+                    <h3 class="sidebar-title">📜 Historique</h3>
+                    <div class="history-panel" id="history-panel">
+                        <p class="empty-message">Aucune action récente</p>
+                    </div>
+                </div>
+                
+                <div class="sidebar-section">
+                    <h3 class="sidebar-title">🏫 Légende Institutions</h3>
+                    <div class="legend-panel" id="legend-panel">
+                        <!-- Filled dynamically -->
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Pools Grid -->
+            <main class="pools-container">
+                <!-- Équipes non assignées -->
+                <section class="unassigned-section" id="unassigned-section">
+                    <h2 class="section-title">
+                        <span class="section-icon">📋</span>
+                        Équipes non assignées
+                        <span class="section-count" id="unassigned-count">0</span>
+                        <button class="btn btn-sm btn-secondary toggle-section" id="toggle-unassigned">▼</button>
+                    </h2>
+                    <div class="unassigned-grid" id="unassigned-grid">
+                        <!-- Feminine -->
+                        <div class="unassigned-category" data-gender="F">
+                            <h3 class="category-title feminine">👩 Féminines</h3>
+                            <div class="unassigned-levels">
+                                <div class="unassigned-level" data-level="A1">
+                                    <span class="level-badge level-a1">A1</span>
+                                    <div class="teams-dropzone" data-gender="F" data-level="A1"></div>
+                                </div>
+                                <div class="unassigned-level" data-level="A2">
+                                    <span class="level-badge level-a2">A2</span>
+                                    <div class="teams-dropzone" data-gender="F" data-level="A2"></div>
+                                </div>
+                                <div class="unassigned-level" data-level="A3">
+                                    <span class="level-badge level-a3">A3</span>
+                                    <div class="teams-dropzone" data-gender="F" data-level="A3"></div>
+                                </div>
+                                <div class="unassigned-level" data-level="A4">
+                                    <span class="level-badge level-a4">A4</span>
+                                    <div class="teams-dropzone" data-gender="F" data-level="A4"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Masculine -->
+                        <div class="unassigned-category" data-gender="M">
+                            <h3 class="category-title masculine">👨 Masculines</h3>
+                            <div class="unassigned-levels">
+                                <div class="unassigned-level" data-level="A1">
+                                    <span class="level-badge level-a1">A1</span>
+                                    <div class="teams-dropzone" data-gender="M" data-level="A1"></div>
+                                </div>
+                                <div class="unassigned-level" data-level="A2">
+                                    <span class="level-badge level-a2">A2</span>
+                                    <div class="teams-dropzone" data-gender="M" data-level="A2"></div>
+                                </div>
+                                <div class="unassigned-level" data-level="A3">
+                                    <span class="level-badge level-a3">A3</span>
+                                    <div class="teams-dropzone" data-gender="M" data-level="A3"></div>
+                                </div>
+                                <div class="unassigned-level" data-level="A4">
+                                    <span class="level-badge level-a4">A4</span>
+                                    <div class="teams-dropzone" data-gender="M" data-level="A4"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Poules Féminines -->
+                <section class="pools-section feminine-section" id="feminine-section">
+                    <h2 class="section-title feminine">
+                        <span class="section-icon">👩</span>
+                        Poules Féminines
+                        <span class="section-count" id="feminine-count">0</span>
+                    </h2>
+                    <div class="pools-grid-wrapper">
+                        <div class="pools-columns">
+                            <div class="pools-column" data-gender="F" data-level="A1">
+                                <h3 class="column-title"><span class="level-badge level-a1">A1</span></h3>
+                                <div class="pools-list" id="pools-F-A1"></div>
+                            </div>
+                            <div class="pools-column" data-gender="F" data-level="A2">
+                                <h3 class="column-title"><span class="level-badge level-a2">A2</span></h3>
+                                <div class="pools-list" id="pools-F-A2"></div>
+                            </div>
+                            <div class="pools-column" data-gender="F" data-level="A3">
+                                <h3 class="column-title"><span class="level-badge level-a3">A3</span></h3>
+                                <div class="pools-list" id="pools-F-A3"></div>
+                            </div>
+                            <div class="pools-column" data-gender="F" data-level="A4">
+                                <h3 class="column-title"><span class="level-badge level-a4">A4</span></h3>
+                                <div class="pools-list" id="pools-F-A4"></div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Poules Masculines -->
+                <section class="pools-section masculine-section" id="masculine-section">
+                    <h2 class="section-title masculine">
+                        <span class="section-icon">👨</span>
+                        Poules Masculines
+                        <span class="section-count" id="masculine-count">0</span>
+                    </h2>
+                    <div class="pools-grid-wrapper">
+                        <div class="pools-columns">
+                            <div class="pools-column" data-gender="M" data-level="A1">
+                                <h3 class="column-title"><span class="level-badge level-a1">A1</span></h3>
+                                <div class="pools-list" id="pools-M-A1"></div>
+                            </div>
+                            <div class="pools-column" data-gender="M" data-level="A2">
+                                <h3 class="column-title"><span class="level-badge level-a2">A2</span></h3>
+                                <div class="pools-list" id="pools-M-A2"></div>
+                            </div>
+                            <div class="pools-column" data-gender="M" data-level="A3">
+                                <h3 class="column-title"><span class="level-badge level-a3">A3</span></h3>
+                                <div class="pools-list" id="pools-M-A3"></div>
+                            </div>
+                            <div class="pools-column" data-gender="M" data-level="A4">
+                                <h3 class="column-title"><span class="level-badge level-a4">A4</span></h3>
+                                <div class="pools-list" id="pools-M-A4"></div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ==================== LIST VIEW (hidden by default) ==================== -->
+                <div class="list-view-container" id="list-view-container" style="display: none;">
+                    <!-- Feminine List -->
+                    <section class="list-section feminine-list" id="feminine-list-section">
+                        <h2 class="section-title feminine">
+                            <span class="section-icon">👩</span>
+                            Équipes Féminines
+                            <span class="section-count" id="feminine-list-count">0</span>
+                        </h2>
+                        <div class="list-levels">
+                            <div class="list-level-section" data-gender="F" data-level="A1">
+                                <h3 class="list-level-title"><span class="level-badge level-a1">A1</span> <span class="list-level-count"></span></h3>
+                                <div class="list-teams-container" id="list-F-A1"></div>
+                            </div>
+                            <div class="list-level-section" data-gender="F" data-level="A2">
+                                <h3 class="list-level-title"><span class="level-badge level-a2">A2</span> <span class="list-level-count"></span></h3>
+                                <div class="list-teams-container" id="list-F-A2"></div>
+                            </div>
+                            <div class="list-level-section" data-gender="F" data-level="A3">
+                                <h3 class="list-level-title"><span class="level-badge level-a3">A3</span> <span class="list-level-count"></span></h3>
+                                <div class="list-teams-container" id="list-F-A3"></div>
+                            </div>
+                            <div class="list-level-section" data-gender="F" data-level="A4">
+                                <h3 class="list-level-title"><span class="level-badge level-a4">A4</span> <span class="list-level-count"></span></h3>
+                                <div class="list-teams-container" id="list-F-A4"></div>
+                            </div>
+                        </div>
+                    </section>
+                    
+                    <!-- Masculine List -->
+                    <section class="list-section masculine-list" id="masculine-list-section">
+                        <h2 class="section-title masculine">
+                            <span class="section-icon">👨</span>
+                            Équipes Masculines
+                            <span class="section-count" id="masculine-list-count">0</span>
+                        </h2>
+                        <div class="list-levels">
+                            <div class="list-level-section" data-gender="M" data-level="A1">
+                                <h3 class="list-level-title"><span class="level-badge level-a1">A1</span> <span class="list-level-count"></span></h3>
+                                <div class="list-teams-container" id="list-M-A1"></div>
+                            </div>
+                            <div class="list-level-section" data-gender="M" data-level="A2">
+                                <h3 class="list-level-title"><span class="level-badge level-a2">A2</span> <span class="list-level-count"></span></h3>
+                                <div class="list-teams-container" id="list-M-A2"></div>
+                            </div>
+                            <div class="list-level-section" data-gender="M" data-level="A3">
+                                <h3 class="list-level-title"><span class="level-badge level-a3">A3</span> <span class="list-level-count"></span></h3>
+                                <div class="list-teams-container" id="list-M-A3"></div>
+                            </div>
+                            <div class="list-level-section" data-gender="M" data-level="A4">
+                                <h3 class="list-level-title"><span class="level-badge level-a4">A4</span> <span class="list-level-count"></span></h3>
+                                <div class="list-teams-container" id="list-M-A4"></div>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- ==================== MODALS ==================== -->
+    
+    <!-- Import Modal -->
+    <div class="modal" id="modal-import">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content modal-lg">
+            <div class="modal-header">
+                <h2>📂 Importer des données</h2>
+                <button class="modal-close" data-close>&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="import-section import-section-primary">
+                    <h3 class="import-section-title">📊 Importer depuis Excel</h3>
+                    <div class="import-instructions">
+                        <p><strong>Format attendu :</strong> Une feuille <code>Equipes</code> avec les colonnes <code>Equipe</code>, <code>Genre</code> (F/M), <code>Niveau</code> (A1-A4), <code>Horaire</code> (14H/16H/18H/20H), et optionnellement <code>Poule</code>.</p>
+                    </div>
+                    <div class="import-row">
+                        <div class="form-group form-group-inline">
+                            <label for="excel-sport">Sport :</label>
+                            <select id="excel-sport" class="select-sport">
+                                <option value="volleyball">🏐 Volleyball</option>
+                                <option value="basketball">🏀 Basketball</option>
+                                <option value="handball">🤾 Handball</option>
+                            </select>
+                        </div>
+                        <div class="file-input-group file-input-inline">
+                            <input type="file" id="file-excel-direct" accept=".xlsx,.xls" hidden>
+                            <label for="file-excel-direct" class="btn btn-primary">
+                                📂 Choisir un fichier Excel
+                            </label>
+                            <span class="file-name" id="excel-direct-filename">Aucun fichier</span>
+                        </div>
+                        <button class="btn btn-success btn-import-action" id="btn-import-excel">
+                            ✓ Importer
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="import-divider">
+                    <span>ou</span>
+                </div>
+                
+                <div class="import-section">
+                    <h3 class="import-section-title">📄 Reprendre une session sauvegardée</h3>
+                    <div class="import-row">
+                        <div class="file-input-group file-input-inline">
+                            <input type="file" id="file-json" accept=".json" hidden>
+                            <label for="file-json" class="btn btn-secondary">
+                                📂 Choisir un fichier JSON
+                            </label>
+                            <span class="file-name" id="json-filename">Aucun fichier</span>
+                        </div>
+                        <button class="btn btn-success btn-import-action" id="btn-import-json">
+                            ✓ Charger
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="import-divider">
+                    <span>ou</span>
+                </div>
+                
+                <div class="import-section">
+                    <h3 class="import-section-title">🎮 Mode démonstration</h3>
+                    <p class="import-description">Essayez l'interface avec des données fictives.</p>
+                    <button class="btn btn-success btn-block" id="btn-load-demo">
+                        🎮 Charger les données de démonstration
+                    </button>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-close>Fermer</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Export Modal -->
+    <div class="modal" id="modal-export">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content modal-md">
+            <div class="modal-header">
+                <h2>💾 Exporter les données</h2>
+                <button class="modal-close" data-close>&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="export-main-option">
+                    <div class="export-main-icon">📄</div>
+                    <div class="export-main-content">
+                        <h3>Sauvegarder votre travail</h3>
+                        <p>Téléchargez un fichier JSON que vous pourrez réimporter plus tard pour continuer votre travail.</p>
+                        <button class="btn btn-primary btn-lg" id="btn-export-json">
+                            💾 Télécharger la sauvegarde (JSON)
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="export-divider"></div>
+                
+                <div class="export-secondary-options">
+                    <p class="export-secondary-title">Autres formats :</p>
+                    <div class="export-secondary-buttons">
+                        <button class="btn btn-secondary" id="btn-export-csv" title="Export pour tableur">
+                            📊 CSV (tableur)
+                        </button>
+                        <button class="btn btn-secondary" id="btn-export-clipboard" title="Copier dans le presse-papiers">
+                            📋 Copier
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Team Editor Modal -->
+    <div class="modal" id="modal-team">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content modal-md">
+            <div class="modal-header">
+                <h2 id="team-modal-title">➕ Nouvelle équipe</h2>
+                <button class="modal-close" data-close>&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="team-form">
+                    <input type="hidden" id="team-id">
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="team-name">Nom de l'équipe *</label>
+                            <input type="text" id="team-name" required placeholder="Ex: Paris 1 Panthéon-Sorbonne">
+                        </div>
+                    </div>
+                    
+                    <div class="form-row two-cols">
+                        <div class="form-group">
+                            <label for="team-gender">Genre *</label>
+                            <select id="team-gender" required>
+                                <option value="">-- Choisir --</option>
+                                <option value="F">Féminin</option>
+                                <option value="M">Masculin</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="team-level">Niveau *</label>
+                            <select id="team-level" required>
+                                <option value="">-- Choisir --</option>
+                                <option value="A1">A1</option>
+                                <option value="A2">A2</option>
+                                <option value="A3">A3</option>
+                                <option value="A4">A4</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row two-cols">
+                        <div class="form-group">
+                            <label for="team-institution">Institution</label>
+                            <input type="text" id="team-institution" placeholder="Ex: Université Paris 1">
+                        </div>
+                        <div class="form-group">
+                            <label for="team-time">Horaire préféré *</label>
+                            <select id="team-time" required>
+                                <option value="">-- Choisir --</option>
+                                <option value="14H">14H</option>
+                                <option value="16H">16H</option>
+                                <option value="18H">18H</option>
+                                <option value="20H">20H</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="team-pool">Poule (optionnel)</label>
+                            <select id="team-pool">
+                                <option value="">-- Non assignée --</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <!-- Section horaires aménagés -->
+                    <div class="form-section" id="section-horaire-amenage">
+                        <div class="form-section-header">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="team-has-amenage">
+                                <span class="checkbox-custom"></span>
+                                ⏰ Horaire aménagé (peut jouer plus tôt sur certains gymnases)
+                            </label>
+                        </div>
+                        <div class="form-section-content" id="amenage-details" style="display: none;">
+                            <div class="form-row two-cols">
+                                <div class="form-group">
+                                    <label for="team-horaire-amenage">Horaire disponible</label>
+                                    <select id="team-horaire-amenage">
+                                        <option value="">-- Choisir --</option>
+                                        <option value="14H">14H</option>
+                                        <option value="16H">16H</option>
+                                        <option value="18H">18H</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>Gymnases concernés (où l'équipe peut jouer à cet horaire)</label>
+                                <div class="gymnases-checkboxes" id="gymnases-list">
+                                    <!-- Rempli dynamiquement -->
+                                    <p class="empty-message">Chargez d'abord un fichier Excel pour voir les gymnases</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-danger" id="btn-delete-team" style="display: none;">
+                    🗑️ Supprimer
+                </button>
+                <div class="spacer"></div>
+                <button class="btn btn-secondary" data-close>Annuler</button>
+                <button class="btn btn-primary" id="btn-save-team">Enregistrer</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Pool Editor Modal -->
+    <div class="modal" id="modal-pool">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content modal-md">
+            <div class="modal-header">
+                <h2 id="pool-modal-title">➕ Nouvelle poule</h2>
+                <button class="modal-close" data-close>&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="pool-form">
+                    <input type="hidden" id="pool-id">
+                    
+                    <div class="form-row two-cols">
+                        <div class="form-group">
+                            <label for="pool-gender">Genre *</label>
+                            <select id="pool-gender" required>
+                                <option value="">-- Choisir --</option>
+                                <option value="F">Féminin</option>
+                                <option value="M">Masculin</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="pool-level">Niveau *</label>
+                            <select id="pool-level" required>
+                                <option value="">-- Choisir --</option>
+                                <option value="A1">A1</option>
+                                <option value="A2">A2</option>
+                                <option value="A3">A3</option>
+                                <option value="A4">A4</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row two-cols">
+                        <div class="form-group">
+                            <label for="pool-letter">Lettre de poule *</label>
+                            <select id="pool-letter" required>
+                                <option value="">-- Choisir --</option>
+                                <option value="A">A</option>
+                                <option value="B">B</option>
+                                <option value="C">C</option>
+                                <option value="D">D</option>
+                                <option value="E">E</option>
+                                <option value="F">F</option>
+                                <option value="G">G</option>
+                                <option value="H">H</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="pool-type">Type de poule</label>
+                            <select id="pool-type">
+                                <option value="classique">Classique (aller simple)</option>
+                                <option value="aller-retour">Aller-retour</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Nom de la poule (généré)</label>
+                            <div class="pool-name-preview" id="pool-name-preview">--</div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-danger" id="btn-delete-pool" style="display: none;">
+                    🗑️ Supprimer
+                </button>
+                <div class="spacer"></div>
+                <button class="btn btn-secondary" data-close>Annuler</button>
+                <button class="btn btn-primary" id="btn-save-pool">Enregistrer</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Auto Create Pools Modal -->
+    <div class="modal" id="modal-auto-create">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content modal-md">
+            <div class="modal-header">
+                <h2>🎯 Création automatique de poules</h2>
+                <button class="modal-close" data-close>&times;</button>
+            </div>
+            <div class="modal-body">
+                <p class="modal-description">
+                    Cette fonctionnalité va créer des poules équilibrées en tenant compte des horaires préférés des équipes.
+                </p>
+                
+                <div class="form-row two-cols">
+                    <div class="form-group">
+                        <label for="auto-gender">Genre</label>
+                        <select id="auto-gender">
+                            <option value="all">Tous</option>
+                            <option value="F">Féminin uniquement</option>
+                            <option value="M">Masculin uniquement</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="auto-level">Niveau</label>
+                        <select id="auto-level">
+                            <option value="all">Tous</option>
+                            <option value="A1">A1 uniquement</option>
+                            <option value="A2">A2 uniquement</option>
+                            <option value="A3">A3 uniquement</option>
+                            <option value="A4">A4 uniquement</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="form-row two-cols">
+                    <div class="form-group">
+                        <label for="auto-min-size">Taille min. poule</label>
+                        <input type="number" id="auto-min-size" value="3" min="2" max="8">
+                    </div>
+                    <div class="form-group">
+                        <label for="auto-max-size">Taille max. poule</label>
+                        <input type="number" id="auto-max-size" value="5" min="2" max="8">
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="auto-time-balance">
+                        <span>Équilibrer les horaires dans chaque poule</span>
+                    </label>
+                </div>
+                
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="auto-institution-diversity">
+                        <span>Favoriser la diversité des institutions</span>
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-close>Annuler</button>
+                <button class="btn btn-primary" id="btn-do-auto-create">Créer les poules</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Help Modal -->
+    <div class="modal" id="modal-help">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content modal-lg">
+            <div class="modal-header">
+                <h2>❓ Aide - Éditeur de Poules</h2>
+                <button class="modal-close" data-close>&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="help-section">
+                    <h3>🎯 Fonctionnalités principales</h3>
+                    <ul>
+                        <li><strong>Glisser-déposer :</strong> Déplacez les équipes entre les poules ou vers la zone "Non assignées"</li>
+                        <li><strong>Double-clic :</strong> Modifiez rapidement une équipe ou une poule</li>
+                        <li><strong>Filtres :</strong> Filtrez par institution, horaire ou niveau</li>
+                        <li><strong>Historique :</strong> Annulez ou rétablissez vos actions</li>
+                    </ul>
+                </div>
+                
+                <div class="help-section">
+                    <h3>📊 Statistiques</h3>
+                    <ul>
+                        <li><strong>Nombre de matchs :</strong> Calculé automatiquement (n*(n-1)/2 pour classique, n*(n-1) pour aller-retour)</li>
+                        <li><strong>Horaires :</strong> L'horaire d'un match est le plus tardif des deux équipes</li>
+                    </ul>
+                </div>
+                
+                <div class="help-section">
+                    <h3>🏫 Couleurs des institutions</h3>
+                    <p>Chaque institution a une couleur unique pour visualiser rapidement la diversité des poules.</p>
+                </div>
+                
+                <div class="help-section">
+                    <h3>⌨️ Raccourcis clavier</h3>
+                    <ul>
+                        <li><kbd>Ctrl</kbd> + <kbd>Z</kbd> : Annuler</li>
+                        <li><kbd>Ctrl</kbd> + <kbd>Y</kbd> : Rétablir</li>
+                        <li><kbd>Ctrl</kbd> + <kbd>S</kbd> : Exporter</li>
+                        <li><kbd>Esc</kbd> : Fermer les modales</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Toast Container -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <!-- JavaScript -->
+    <script src="js/utils.js"></script>
+    <script src="js/data-manager.js"></script>
+    <script src="js/history-manager.js"></script>
+    <script src="js/drag-drop.js"></script>
+    <script src="js/pool-renderer.js"></script>
+    <script src="js/team-editor.js"></script>
+    <script src="js/pool-editor.js"></script>
+    <script src="js/auto-pools.js"></script>
+    <script src="js/statistics.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,76 @@
+{
+  "teams": [
+    {
+      "id": "team_1",
+      "nom": "LYON 1 (1)",
+      "genre": "F",
+      "niveau": "A1",
+      "horaire": "14H",
+      "institution": "LYON 1",
+      "poule": "VBFA1PA"
+    },
+    {
+      "id": "team_2",
+      "nom": "LYON 1 (2)",
+      "genre": "M",
+      "niveau": "A1",
+      "horaire": "16H",
+      "institution": "LYON 1",
+      "poule": "VBMA1PA"
+    },
+    {
+      "id": "team_3",
+      "nom": "PARIS SCIENCES (1)",
+      "genre": "F",
+      "niveau": "A2",
+      "horaire": "18H",
+      "institution": "PARIS SCIENCES",
+      "poule": "VBFA2PA"
+    },
+    {
+      "id": "team_4",
+      "nom": "SORBONNE (1)",
+      "genre": "M",
+      "niveau": "A1",
+      "horaire": "14H",
+      "institution": "SORBONNE",
+      "poule": null
+    }
+  ],
+  "pools": [
+    {
+      "id": "VBFA1PA",
+      "name": "VBFA1PA",
+      "gender": "F",
+      "level": "A1",
+      "letter": "A",
+      "type": "classique",
+      "teams": []
+    },
+    {
+      "id": "VBMA1PA",
+      "name": "VBMA1PA",
+      "gender": "M",
+      "level": "A1",
+      "letter": "A",
+      "type": "aller-retour",
+      "teams": []
+    },
+    {
+      "id": "VBFA2PA",
+      "name": "VBFA2PA",
+      "gender": "F",
+      "level": "A2",
+      "letter": "A",
+      "type": "classique",
+      "teams": []
+    }
+  ],
+  "settings": {
+    "sport": "volleyball",
+    "prefix": "VB",
+    "minPoolSize": 3,
+    "maxPoolSize": 5
+  },
+  "exportDate": "2026-01-07T20:15:00.000Z"
+}

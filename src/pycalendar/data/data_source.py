@@ -114,14 +114,17 @@ class DataSource:
             
             gymnase = gymnases_map[nom_gymnase]
             
-            # Semaine
+            # Semaine - format peut être "6" ou "6 (26/02)"
             semaine = row.get('Semaine')
             if pd.isna(semaine):
                 continue
             
             try:
-                semaine = int(semaine)
-            except (ValueError, TypeError):
+                semaine_str = str(semaine).strip()
+                # Extraire le nombre au début (avant la parenthèse si présent)
+                semaine = int(semaine_str.split()[0])
+            except (ValueError, TypeError, IndexError):
+                logger.warning(f"Format de semaine invalide: '{semaine}'")
                 continue
             
             # Horaires

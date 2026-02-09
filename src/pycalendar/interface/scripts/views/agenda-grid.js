@@ -46,10 +46,12 @@ class AgendaGridView {
         this.displayMode = 'week'; // Par défaut : navigation par journée
         
         // Mode de coloration des matchs
-        this.colorCodingMode = 'none'; // Par défaut : pas de coloration
+        this.colorCodingMode = 'mixte'; // Par défaut : coloration mixte (genre + niveau)
         
         // Affichage des créneaux libres
         this.showEmptySlots = false; // Par défaut : masqués
+        // Affichage des badges de pénalités
+        this.showPenalties = false;
         
         // Navigation par journée (mode 'week')
         this.currentWeekIndex = 0;
@@ -59,14 +61,36 @@ class AgendaGridView {
         this.currentVenueIndex = 0;
         this.venues = []; // Liste des gymnases disponibles
         
-        // Date de début du championnat (J1 = jeudi 16 octobre 2025)
-        this.championshipStartDate = new Date(2025, 9, 16); // Mois 9 = octobre (0-indexed)
+        // Date de début du championnat - sera initialisée depuis les données de config
+        // Valeur par défaut si non spécifiée dans config
+        this.championshipStartDate = this._initChampionshipStartDate();
         
         // Stockage des event listeners pour nettoyage
         this._eventListeners = [];
 
         // Contexte spécifique au mode entente (stats + listes)
         this.ententeContext = null;
+    }
+    
+    /**
+     * Initialise la date de début du championnat depuis les données de configuration
+     * @returns {Date} Date de début du championnat
+     */
+    _initChampionshipStartDate() {
+        // Essayer de récupérer la date depuis les données de configuration
+        const data = this.dataManager?.getData?.();
+        const dateDebut = data?.config?.calendrier?.date_debut;
+        
+        if (dateDebut) {
+            // Format attendu: "YYYY-MM-DD"
+            const [year, month, day] = dateDebut.split('-').map(Number);
+            console.log(`📅 Date de début chargée depuis config: ${dateDebut}`);
+            return new Date(year, month - 1, day); // month - 1 car les mois JS sont 0-indexed
+        }
+        
+        // Valeur par défaut si non spécifiée
+        console.warn('⚠️ Date de début non trouvée dans config, utilisation de la valeur par défaut');
+        return new Date(2025, 9, 16); // 16 octobre 2025
     }
     
     /**
@@ -114,8 +138,7 @@ class AgendaGridView {
                     label: 'Navigation par',
                     values: [
                         { value: 'week', text: '📅 Journée' },
-                        { value: 'venue', text: '🏛️ Gymnase' },
-                        { value: 'entente', text: '🤝 Ententes' }
+                        { value: 'venue', text: '🏛️ Gymnase' }
                     ],
                     default: this.displayMode,
                     action: (value) => {
@@ -127,13 +150,14 @@ class AgendaGridView {
                     id: 'agenda-color-coding',
                     label: 'Coloration des matchs',
                     values: [
-                        { value: 'none', text: '🎨 Aucune' },
+                        { value: 'mixte', text: '✨ Mixte' },
                         { value: 'genre', text: '👥 Genre' },
-                        { value: 'niveau', text: '🎯 Niveau (A1-A4)' },
+                        { value: 'niveau', text: '🎯 Niveau' },
                         { value: 'penalite', text: '⚠️ Pénalités' },
-                        { value: 'statut', text: '✅ Statut' }
+                        { value: 'statut', text: '✅ Statut' },
+                        { value: 'none', text: '⚫ Neutre' }
                     ],
-                    default: this.colorCodingMode || 'none',
+                    default: this.colorCodingMode || 'mixte',
                     action: (value) => {
                         this.setColorCoding(value);
                     }
@@ -147,6 +171,16 @@ class AgendaGridView {
                     action: (value) => {
                         this.setShowAvailableSlots(value);
                     }
+                },
+                {
+                    type: 'checkbox',
+                    id: 'agenda-show-penalties',
+                    label: 'Badges pénalités',
+                    description: 'Afficher les badges indiquant le total de pénalités',
+                    default: this.showPenalties,
+                    action: (value) => {
+                        this.setShowPenalties(value);
+                    }
                 }
             ]
         };
@@ -157,7 +191,7 @@ class AgendaGridView {
      * @param {string} mode - 'none', 'genre', 'niveau', 'penalite', ou 'statut'
      */
     setColorCoding(mode) {
-        const validModes = ['none', 'genre', 'niveau', 'penalite', 'statut'];
+        const validModes = ['none', 'genre', 'niveau', 'penalite', 'statut', 'mixte'];
         if (!validModes.includes(mode)) {
             console.warn(`Mode de coloration invalide: ${mode}`);
             return;
@@ -169,89 +203,19 @@ class AgendaGridView {
         const container = document.querySelector('.agenda-view-container');
         if (container) {
             // Retirer toutes les classes de coloration
-            container.classList.remove('color-none', 'color-genre', 'color-niveau', 'color-penalite', 'color-statut');
+            container.classList.remove('color-none', 'color-genre', 'color-niveau', 'color-penalite', 'color-statut', 'color-mixte');
             // Ajouter la nouvelle classe
             container.classList.add(`color-${mode}`);
         }
         
         // Re-rendre la vue pour appliquer les changements
         this.render();
-        
-        // FORCER l'application des couleurs via JavaScript (fallback si CSS ne fonctionne pas)
-        setTimeout(() => this.applyColorCoding(), 50);
-    }
-    
-    /**
-     * Applique les couleurs directement via JavaScript (fallback)
-     */
-    applyColorCoding() {
-        if (!this.colorCodingMode || this.colorCodingMode === 'none') return;
-        
-        const cards = document.querySelectorAll('.match-card');
-        
-        cards.forEach(card => {
-            let background = null;
-            
-            if (this.colorCodingMode === 'genre') {
-                if (card.classList.contains('male') || card.classList.contains('match-male')) {
-                    // Bleu dynamique avec reflets clairs
-                    background = 'linear-gradient(135deg, #60a5fa 0%, #3b82f6 50%, #2563eb 100%)';
-                } else if (card.classList.contains('female') || card.classList.contains('match-female')) {
-                    // Rose vibrant avec reflets
-                    background = 'linear-gradient(135deg, #f472b6 0%, #ec4899 50%, #db2777 100%)';
-                } else if (card.classList.contains('mixed')) {
-                    // Violet énergique
-                    background = 'linear-gradient(135deg, #a78bfa 0%, #8b5cf6 50%, #7c3aed 100%)';
-                }
-            } else if (this.colorCodingMode === 'niveau') {
-                const category = card.getAttribute('data-category');
-                const categoryLower = category ? category.toLowerCase() : '';
-                if (categoryLower === 'a1') {
-                    // Violet royal premium (A1 = élite)
-                    background = 'linear-gradient(135deg, #a855f7 0%, #9333ea 40%, #7c3aed 100%)';
-                } else if (categoryLower === 'a2') {
-                    // Bleu indigo profond
-                    background = 'linear-gradient(135deg, #6366f1 0%, #4f46e5 50%, #4338ca 100%)';
-                } else if (categoryLower === 'a3') {
-                    // Bleu ciel dynamique
-                    background = 'linear-gradient(135deg, #38bdf8 0%, #0ea5e9 50%, #0284c7 100%)';
-                } else if (categoryLower === 'a4') {
-                    // Teal aqua frais
-                    background = 'linear-gradient(135deg, #2dd4bf 0%, #14b8a6 50%, #0d9488 100%)';
-                }
-            } else if (this.colorCodingMode === 'penalite') {
-                const penalties = parseInt(card.getAttribute('data-penalties') || '0');
-                if (penalties === 0) {
-                    // Vert émeraude positif
-                    background = 'linear-gradient(135deg, #34d399 0%, #10b981 50%, #059669 100%)';
-                } else if (penalties <= 5) {
-                    // Orange ambre attention
-                    background = 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 50%, #d97706 100%)';
-                } else {
-                    // Rouge corail alerte
-                    background = 'linear-gradient(135deg, #f87171 0%, #ef4444 50%, #dc2626 100%)';
-                }
-            } else if (this.colorCodingMode === 'statut') {
-                if (card.classList.contains('match-fixed')) {
-                    // Violet améthyste (fixé)
-                    background = 'linear-gradient(135deg, #a78bfa 0%, #8b5cf6 50%, #7c3aed 100%)';
-                } else if (card.classList.contains('match-conflict-critical')) {
-                    // Rouge rubis critique
-                    background = 'linear-gradient(135deg, #f87171 0%, #ef4444 50%, #dc2626 100%)';
-                } else if (card.classList.contains('match-conflict-warning')) {
-                    // Orange topaze warning
-                    background = 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 50%, #d97706 100%)';
-                } else {
-                    // Bleu saphir flexible
-                    background = 'linear-gradient(135deg, #60a5fa 0%, #3b82f6 50%, #2563eb 100%)';
-                }
-            }
-            
-            if (background) {
-                card.style.background = background;
-                card.style.color = 'white';
-            }
-        });
+
+        if (window.logThemeDiagnostics) {
+            window.logThemeDiagnostics(`color-coding:${mode}`);
+        } else {
+            console.info('[ColorCoding] Applied', mode);
+        }
     }
     
     /**
@@ -289,6 +253,11 @@ class AgendaGridView {
         console.log(`🔄 Créneaux libres: ${show ? 'AFFICHÉS' : 'MASQUÉS'}`);
         this.render();
     }
+
+    setShowPenalties(show) {
+        this.showPenalties = Boolean(show);
+        this.render();
+    }
     
     /**
      * Alias pour compatibilité
@@ -310,9 +279,10 @@ class AgendaGridView {
     filterMatches(matches) {
         let filtered = [...matches];
         
+        // Filtre par genre - utiliser m.genre en priorité (déterminé par le serveur)
         if (this.filters.gender) {
             filtered = filtered.filter(m => {
-                const genre = m.equipe1_genre || m.equipe2_genre;
+                const genre = m.genre || m.equipe1_genre || m.equipe2_genre;
                 return genre === this.filters.gender;
             });
         }
@@ -480,6 +450,9 @@ class AgendaGridView {
                 return;
             }
             
+            // Rafraîchir la date de début du championnat depuis les données
+            this.championshipStartDate = this._initChampionshipStartDate();
+            
             const isEntenteMode = this.displayMode === 'entente';
             const filtersActive = Object.values(this.filters || {}).some(Boolean);
 
@@ -600,9 +573,9 @@ class AgendaGridView {
             // Synchroniser le scroll horizontal des en-têtes avec les colonnes
             this.syncHeaderScroll();
             
-            // Réappliquer les couleurs si un mode de coloration est actif
+            // Log du mode de coloration actif (le style est désormais géré côté CSS)
             if (this.colorCodingMode && this.colorCodingMode !== 'none') {
-                setTimeout(() => this.applyColorCoding(), 50);
+                console.debug('[ColorCoding] Active during render', this.colorCodingMode);
             }
             
             console.log('✅ [AgendaGrid] render() terminé avec succès');
@@ -651,13 +624,17 @@ class AgendaGridView {
         
         if (isWeekLikeMode) {
             // MODE JOURNÉE: Colonnes = Gymnases
-            venues = this.getVenuesWithCapacity(matches, data);
+            // Récupérer le numéro de semaine courante pour filtrer les créneaux libres
+            const currentWeekNumber = this.weeks?.[this.currentWeekIndex]?.weekNumber || null;
+            
+            // Inclure les gymnases avec créneaux libres si l'option est activée
+            venues = this.getVenuesWithCapacity(matches, data, this.showEmptySlots, currentWeekNumber);
             matchesByVenue = this.groupMatchesByVenue(matches);
             
             // Calculer le nombre maximum de slots nécessaires par gymnase
             // Si showEmptySlots, inclure les créneaux disponibles dans le calcul
             if (this.showEmptySlots) {
-                venueMaxSimultaneous = this.calculateMaxSlotsWithAvailable(matchesByVenue);
+                venueMaxSimultaneous = this.calculateMaxSlotsWithAvailable(matchesByVenue, currentWeekNumber);
             } else {
                 venueMaxSimultaneous = this.calculateMaxSimultaneousMatches(matchesByVenue);
             }
@@ -733,6 +710,7 @@ class AgendaGridView {
         
         // Conserver la classe de coloration si elle est définie
         const colorClass = this.colorCodingMode && this.colorCodingMode !== 'none' ? ` color-${this.colorCodingMode}` : '';
+        const penaltyClass = this.showPenalties ? ' show-penalties' : '';
         
         // Générer les en-têtes de colonnes séparément
         let headersHTML = '';
@@ -741,12 +719,12 @@ class AgendaGridView {
                 const widthInfo = columnWidths.get(venue.id) || { width: this.columnMinWidth, widthPerSlot: 200 };
                 const maxSim = venueMaxSimultaneous.get(venue.id) || 1;
                 return `
-                    <div class="venue-header-cell" style="width: ${widthInfo.width}px; flex-shrink: 0; padding: 0; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; display: flex; flex-direction: column; border-radius: 8px 8px 0 0; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-right: 4px;">
-                        <div class="venue-name" style="font-size: 1.2rem; font-weight: 800; text-transform: uppercase; letter-spacing: 1.5px; text-shadow: 0 2px 4px rgba(0,0,0,0.3); background: rgba(0, 0, 0, 0.15); padding: 0.8rem 1rem; border-bottom: 2px solid rgba(255, 255, 255, 0.15); text-align: center;">${venue.name}</div>
-                        <div class="venue-info" style="display: flex; gap: 0.75rem; font-size: 0.8rem; font-weight: 600; padding: 0.6rem 1rem; justify-content: center; flex-wrap: wrap;">
-                            <span class="venue-capacity" style="display: flex; align-items: center; gap: 0.3rem; background: rgba(255, 255, 255, 0.25); padding: 0.3rem 0.7rem; border-radius: 12px; font-size: 0.75rem; white-space: nowrap;">⚡ Capacité: ${venue.capacity}</span>
-                            <span class="venue-matches" style="display: flex; align-items: center; gap: 0.3rem; background: rgba(255, 255, 255, 0.25); padding: 0.3rem 0.7rem; border-radius: 12px; font-size: 0.75rem; white-space: nowrap;">📊 ${(matchesByVenue.get(venue.id) || []).length} matchs</span>
-                            ${maxSim > 1 ? `<span class="venue-simultaneous" style="display: flex; align-items: center; gap: 0.3rem; background: rgba(255, 215, 0, 0.4); padding: 0.3rem 0.7rem; border-radius: 12px; font-size: 0.75rem; white-space: nowrap; font-weight: 700;">🔀 Max: ${maxSim}</span>` : ''}
+                    <div class="venue-header-cell agenda-header-card" style="width: ${widthInfo.width}px;">
+                        <div class="venue-name">${venue.name}</div>
+                        <div class="venue-info">
+                            <span class="venue-capacity">⚡ Capacité: ${venue.capacity}</span>
+                            <span class="venue-matches">📊 ${(matchesByVenue.get(venue.id) || []).length} matchs</span>
+                            ${maxSim > 1 ? `<span class="venue-simultaneous">🔀 Max: ${maxSim}</span>` : ''}
                         </div>
                     </div>
                 `;
@@ -760,11 +738,11 @@ class AgendaGridView {
                 const weekLabel = this.formatWeekLabel(week);
                 const maxSim = weekMaxSimultaneous.get(week.weekNumber) || 1;
                 return `
-                    <div class="week-header-cell" style="width: ${widthInfo.width}px; flex-shrink: 0; padding: 0; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; display: flex; flex-direction: column; border-radius: 8px 8px 0 0; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-right: 4px;">
-                        <div class="week-name" style="font-size: 1.2rem; font-weight: 800; text-transform: uppercase; letter-spacing: 1.5px; text-shadow: 0 2px 4px rgba(0,0,0,0.3); background: rgba(0, 0, 0, 0.15); padding: 0.8rem 1rem; border-bottom: 2px solid rgba(255, 255, 255, 0.15); text-align: center;">${weekLabel}</div>
-                        <div class="week-info" style="display: flex; gap: 0.75rem; font-size: 0.8rem; font-weight: 600; padding: 0.6rem 1rem; justify-content: center; flex-wrap: wrap;">
-                            <span class="week-matches" style="display: flex; align-items: center; gap: 0.3rem; background: rgba(255, 255, 255, 0.25); padding: 0.3rem 0.7rem; border-radius: 12px; font-size: 0.75rem; white-space: nowrap;">📊 ${(matchesByWeek.get(week.weekNumber) || []).length} matchs</span>
-                            ${maxSim > 1 ? `<span class="week-simultaneous" style="display: flex; align-items: center; gap: 0.3rem; background: rgba(255, 215, 0, 0.4); padding: 0.3rem 0.7rem; border-radius: 12px; font-size: 0.75rem; white-space: nowrap; font-weight: 700;">🔀 Max: ${maxSim}</span>` : ''}
+                    <div class="week-header-cell agenda-header-card" style="width: ${widthInfo.width}px;">
+                        <div class="week-name">${weekLabel}</div>
+                        <div class="week-info">
+                            <span class="week-matches">📊 ${(matchesByWeek.get(week.weekNumber) || []).length} matchs</span>
+                            ${maxSim > 1 ? `<span class="week-simultaneous">🔀 Max: ${maxSim}</span>` : ''}
                         </div>
                     </div>
                 `;
@@ -772,26 +750,17 @@ class AgendaGridView {
         }
         
         return `
-            <div class="agenda-view-container${colorClass}">
+            <div class="agenda-view-container${colorClass}${penaltyClass}">
                 <!-- Barre de navigation en haut (non-scrollable) -->
                 ${this.generateNavigationBar(matches, venues, data)}
                 
                 <!-- Rangée des en-têtes de colonnes (au-dessus de la grille) -->
-                <div class="agenda-headers-row" style="display: flex; flex-direction: row; background: #fafbfc; padding: 0.5rem 0.5rem 0 0.5rem; overflow: hidden;">
+                <div class="agenda-headers-row">
                     <!-- Espace pour la colonne des horaires -->
-                    <div style="width: ${AgendaGridView.TIME_COLUMN_WIDTH}px; flex-shrink: 0; margin-right: ${AgendaGridView.COLUMN_MARGIN}px;"></div>
+                    <div class="agenda-header-spacer" style="width: ${AgendaGridView.TIME_COLUMN_WIDTH}px; margin-right: ${AgendaGridView.COLUMN_MARGIN}px;"></div>
                     <!-- Container scrollable pour les en-têtes -->
-                    <div class="agenda-headers-scroll" style="overflow-x: auto; overflow-y: hidden; flex: 1;">
-                        <style>
-                            .agenda-headers-scroll::-webkit-scrollbar {
-                                display: none;
-                            }
-                            .agenda-headers-scroll {
-                                -ms-overflow-style: none;
-                                scrollbar-width: none;
-                            }
-                        </style>
-                        <div style="display: flex; flex-direction: row; flex-wrap: nowrap; gap: 0;">
+                    <div class="agenda-headers-scroll">
+                        <div class="agenda-headers-track">
                             ${headersHTML}
                         </div>
                     </div>
@@ -799,14 +768,14 @@ class AgendaGridView {
                 
                 <!-- Zone de contenu (scrollable verticalement uniquement) -->
                 <div class="agenda-scroll-wrapper">
-                    <div class="agenda-grid-container" style="display:flex; flex-direction:row; background:#fafbfc; padding:0.5rem;">
+                    <div class="agenda-grid-container">
                         <!-- Colonne des horaires (fixée à gauche) -->
-                        <div class="time-column-fixed" style="width: ${AgendaGridView.TIME_COLUMN_WIDTH}px; flex-shrink: 0; background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); border-right: 3px solid #667eea; box-shadow: 2px 0 8px rgba(0,0,0,0.06); margin-right: ${AgendaGridView.COLUMN_MARGIN}px; position: sticky; left: 0; z-index: 10;">
+                        <div class="time-column-fixed" style="width: ${AgendaGridView.TIME_COLUMN_WIDTH}px; margin-right: ${AgendaGridView.COLUMN_MARGIN}px;">
                             ${this.generateTimeScale(minHour, maxHour, pixelsPerHour, totalHeight)}
                         </div>
                         
                         <!-- Colonnes dynamiques selon le mode -->
-                        <div class="${containerClass}" style="display:flex; flex-direction:row; flex-wrap:nowrap; overflow-x:auto; background:#ffffff; padding:0.25rem; gap:0;">
+                        <div class="${containerClass}">
                             ${columnsHTML}
                         </div>
                     </div>
@@ -818,13 +787,44 @@ class AgendaGridView {
 
     /**
      * Récupère tous les gymnases avec leurs capacités
+     * Si includeAvailableSlots est true, inclut aussi les gymnases ayant des créneaux libres
+     * @param {Array} matches - Liste des matchs
+     * @param {Object} data - Données complètes
+     * @param {boolean} includeAvailableSlots - Inclure les gymnases avec créneaux libres
+     * @param {number|null} currentWeek - Numéro de semaine pour filtrer (null = toutes semaines)
      */
-    getVenuesWithCapacity(matches, data) {
+    getVenuesWithCapacity(matches, data, includeAvailableSlots = false, currentWeek = null) {
         const venueMap = new Map();
         const venues = data.entities?.venues || {};
         
-        // D'abord, ajouter tous les gymnases depuis les entités
+        // Récupérer les IDs de gymnases depuis les matchs de cette semaine
+        const venuesWithMatches = new Set();
+        matches.forEach(match => {
+            if (match.gymnase) {
+                venuesWithMatches.add(match.gymnase);
+            }
+        });
+        
+        // Si on affiche les créneaux libres, récupérer les gymnases ayant des créneaux libres
+        const venuesWithSlots = new Set();
+        if (includeAvailableSlots && data.slots?.available) {
+            data.slots.available.forEach(slot => {
+                // Filtrer par semaine courante si spécifiée
+                if (currentWeek !== null && slot.semaine !== currentWeek) return;
+                if (slot.gymnase) {
+                    venuesWithSlots.add(slot.gymnase);
+                }
+            });
+        }
+        
+        // Combiner les deux ensembles
+        const allVenueIds = new Set([...venuesWithMatches, ...venuesWithSlots]);
+        
+        // Ajouter uniquement les gymnases pertinents depuis les entités
         Object.entries(venues).forEach(([id, venueData]) => {
+            // Si on n'a ni matchs ni créneaux libres, ne pas inclure ce gymnase
+            if (!allVenueIds.has(id)) return;
+            
             venueMap.set(id, {
                 id: id,
                 name: venueData.nom || id,
@@ -832,9 +832,9 @@ class AgendaGridView {
             });
         });
         
-        // Ensuite, vérifier les matchs pour s'assurer qu'on n'a pas oublié de gymnases
+        // Ajouter les gymnases des matchs qui ne sont pas dans les entités
         matches.forEach(match => {
-            const venueId = match.gymnase; // Utiliser 'gymnase' au lieu de 'gymnase_id'
+            const venueId = match.gymnase;
             if (venueId && !venueMap.has(venueId)) {
                 venueMap.set(venueId, {
                     id: venueId,
@@ -843,6 +843,21 @@ class AgendaGridView {
                 });
             }
         });
+        
+        // Ajouter les gymnases des slots libres qui ne sont pas dans les entités
+        if (includeAvailableSlots && data.slots?.available) {
+            data.slots.available.forEach(slot => {
+                if (currentWeek !== null && slot.semaine !== currentWeek) return;
+                const venueId = slot.gymnase;
+                if (venueId && !venueMap.has(venueId)) {
+                    venueMap.set(venueId, {
+                        id: venueId,
+                        name: venueId,
+                        capacity: 1
+                    });
+                }
+            });
+        }
         
         return Array.from(venueMap.values()).sort((a, b) => a.name.localeCompare(b.name));
     }
@@ -929,8 +944,10 @@ class AgendaGridView {
     /**
      * Calcule le nombre maximum de slots nécessaires (matchs + créneaux libres) par gymnase
      * Prend en compte à la fois les matchs planifiés ET les créneaux disponibles
+     * @param {Map} matchesByVenue - Map des matchs par gymnase
+     * @param {number|null} currentWeek - Numéro de semaine pour filtrer (passé en paramètre)
      */
-    calculateMaxSlotsWithAvailable(matchesByVenue) {
+    calculateMaxSlotsWithAvailable(matchesByVenue, currentWeek = null) {
         const maxSlots = new Map();
         const data = this.dataManager?.getData();
         
@@ -939,14 +956,21 @@ class AgendaGridView {
             return this.calculateMaxSimultaneousMatches(matchesByVenue);
         }
         
-        matchesByVenue.forEach((matches, venueId) => {
-            let max = 1;
+        // Récupérer tous les gymnases qui ont des créneaux libres cette semaine
+        const allVenuesWithSlots = new Set();
+        data.slots.available.forEach(slot => {
+            if (currentWeek !== null && slot.semaine !== currentWeek) return;
+            allVenuesWithSlots.add(slot.gymnase);
+        });
+        
+        // Calculer pour tous les gymnases (ceux avec matchs + ceux avec slots libres seulement)
+        const allVenueIds = new Set([...matchesByVenue.keys(), ...allVenuesWithSlots]);
+        
+        allVenueIds.forEach(venueId => {
+            const matches = matchesByVenue.get(venueId) || [];
+            let max = 0;
             
             // Filtrer les slots disponibles pour ce gymnase et la semaine courante
-            const currentWeek = this.displayMode === 'week' && this.weeks && this.weeks[this.currentWeekIndex] 
-                ? this.weeks[this.currentWeekIndex].weekNumber 
-                : null;
-            
             const venueSlots = data.slots.available.filter(slot => {
                 if (slot.gymnase !== venueId) return false;
                 if (currentWeek !== null && slot.semaine !== currentWeek) return false;
@@ -976,6 +1000,12 @@ class AgendaGridView {
                 allTimes.add(parseFloat(time));
             });
             
+            // Si pas d'horaires, maximum = 0
+            if (allTimes.size === 0) {
+                maxSlots.set(venueId, 0);
+                return;
+            }
+            
             // Pour chaque horaire, compter matchs + slots
             allTimes.forEach(time => {
                 const slotStart = time;
@@ -996,7 +1026,7 @@ class AgendaGridView {
                 max = Math.max(max, total);
             });
             
-            maxSlots.set(venueId, max);
+            maxSlots.set(venueId, Math.max(1, max));
         });
         
         return maxSlots;
@@ -1130,10 +1160,10 @@ class AgendaGridView {
         console.log(`🔍 [Week ${week.weekNumber}] maxSimultaneous: ${maxSimultaneous}, widthPerSlot: ${widthPerSlot}px, columnWidth: ${columnWidth}px`);
         
         return `
-            <div class="week-column" 
-                 data-week="${week.weekNumber}"
-                 data-max-simultaneous="${maxSimultaneous}"
-                 style="width: ${columnWidth}px; flex-shrink: 0; margin-right: ${AgendaGridView.COLUMN_MARGIN}px;">
+              <div class="week-column" 
+                  data-week="${week.weekNumber}"
+                  data-max-simultaneous="${maxSimultaneous}"
+                  style="width: ${columnWidth}px; margin-right: ${AgendaGridView.COLUMN_MARGIN}px;">
                 <!-- En-tête de la journée -->
                 <div class="column-header week-header">
                     <div class="column-title">${week.label}</div>
@@ -1145,7 +1175,7 @@ class AgendaGridView {
                 </div>
                 
                 <!-- Corps avec les matchs -->
-                <div class="column-body" style="height: ${totalHeight}px; position: relative;">
+                <div class="column-body" style="height: ${totalHeight}px;">
                     ${this.generateWeekMatches(matches, minHour, pixelsPerHour, matchDuration, maxSimultaneous, widthPerSlot)}
                 </div>
             </div>
@@ -1170,10 +1200,10 @@ class AgendaGridView {
             <div class="week-column" 
                  data-week="${week.weekNumber}"
                  data-max-simultaneous="${maxSimultaneous}"
-                 style="width: ${columnWidth}px; flex-shrink: 0; background: linear-gradient(180deg, #ffffff 0%, #f8f9fa 100%); border-right: 2px solid #e9ecef; margin-right: ${AgendaGridView.COLUMN_MARGIN}px; border-radius: 0 0 8px 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
+                 style="width: ${columnWidth}px; margin-right: ${AgendaGridView.COLUMN_MARGIN}px;">
                 
                 <!-- Corps avec les matchs et créneaux libres (sans en-tête) -->
-                <div class="week-body" style="height: ${totalHeight}px; position: relative; background-image: repeating-linear-gradient(to bottom, transparent 0, transparent 119px, rgba(102, 126, 234, 0.08) 119px, rgba(102, 126, 234, 0.08) 120px);">
+                <div class="week-body" style="height: ${totalHeight}px;">
                     ${emptySlotsHTML}
                     ${this.generateWeekMatches(matches, minHour, pixelsPerHour, matchDuration, maxSimultaneous, widthPerSlot)}
                 </div>
@@ -1251,8 +1281,6 @@ class AgendaGridView {
         }
         
         let navigationContent = '';
-        const btnStyle = "padding: 0.75rem 1.25rem; background: linear-gradient(135deg, #667eea, #764ba2); color: white; border: none; border-radius: 12px; cursor: pointer; font-weight: 700; box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3); transition: all 0.2s ease;";
-        const btnDisabledStyle = "padding: 0.75rem 1.25rem; background: linear-gradient(135deg, #adb5bd, #868e96); color: white; border: none; border-radius: 12px; cursor: not-allowed; font-weight: 700; box-shadow: none; opacity: 0.3;";
         
         if (this.displayMode === 'week' || isEntenteMode) {
             const currentWeek = this.weeks[this.currentWeekIndex];
@@ -1265,8 +1293,8 @@ class AgendaGridView {
                     month: 'long',
                     day: 'numeric'
                 });
-                const prevDisabled = this.currentWeekIndex === 0 ? 'disabled' : '';
-                const nextDisabled = this.currentWeekIndex === this.weeks.length - 1 ? 'disabled' : '';
+                const prevDisabled = this.currentWeekIndex === 0;
+                const nextDisabled = this.currentWeekIndex === this.weeks.length - 1;
                 const weekIndicator = `${this.currentWeekIndex + 1}/${this.weeks.length}`;
                 
                 let subtitle = fullDate;
@@ -1278,97 +1306,97 @@ class AgendaGridView {
                         ? `${stats.scheduledCount}/${stats.total} planifiées • ${ratio}%`
                         : 'Aucune entente planifiée';
                     subtitle = `${fullDate} • ${progressText}`;
-                    titleIcon = '<span class="nav-item-icon" style="font-size: 1.5rem;">🤝</span>';
+                    titleIcon = '<span class="nav-item-icon">🤝</span>';
                 }
                 
                 navigationContent = `
-                    <button id="prev-week" class="nav-button nav-prev" ${prevDisabled} title="Journée précédente" style="${prevDisabled ? btnDisabledStyle : btnStyle}">
-                        <span class="nav-button-icon" style="font-size: 1.25rem; font-weight: 900;">◀</span>
+                    <button id="prev-week" class="nav-button nav-prev" ${prevDisabled ? 'disabled' : ''} title="Journée précédente">
+                        <span class="nav-button-icon">◀</span>
                     </button>
                     
-                    <div class="nav-current-item" style="display: flex; flex-direction: column; align-items: center; gap: 0.5rem; min-width: 350px; padding: 0.75rem 1.5rem; background: white; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08);">
-                        <div class="nav-item-main" style="display: flex; align-items: center; gap: 1rem;">
+                    <div class="nav-current-item">
+                        <div class="nav-item-main">
                             ${titleIcon}
-                            <span class="nav-item-label" style="font-size: 1.5rem; font-weight: 900; color: #667eea; letter-spacing: 1px;">${weekLabel}</span>
-                            <span class="nav-item-indicator" style="padding: 0.25rem 0.75rem; background: linear-gradient(135deg, #f8f9fa, #e9ecef); border-radius: 20px; font-size: 0.85rem; font-weight: 600; color: #495057;">${weekIndicator}</span>
+                            <span class="nav-item-label">${weekLabel}</span>
+                            <span class="nav-item-indicator">${weekIndicator}</span>
                         </div>
-                        <div class="nav-item-subtitle" title="${fullDate}" style="font-size: 0.9rem; color: #6c757d; font-weight: 600;">
+                        <div class="nav-item-subtitle" title="${fullDate}">
                             ${subtitle}
                         </div>
                     </div>
                     
-                    <button id="next-week" class="nav-button nav-next" ${nextDisabled} title="Journée suivante" style="${nextDisabled ? btnDisabledStyle : btnStyle}">
-                        <span class="nav-button-icon" style="font-size: 1.25rem; font-weight: 900;">▶</span>
+                    <button id="next-week" class="nav-button nav-next" ${nextDisabled ? 'disabled' : ''} title="Journée suivante">
+                        <span class="nav-button-icon">▶</span>
                     </button>
                 `;
             }
         } else if (this.displayMode === 'venue') {
             const currentVenue = this.venues[this.currentVenueIndex];
             const venueName = currentVenue.displayName || currentVenue.venueName;
-            const prevDisabled = this.currentVenueIndex === 0 ? 'disabled' : '';
-            const nextDisabled = this.currentVenueIndex === this.venues.length - 1 ? 'disabled' : '';
+            const prevDisabled = this.currentVenueIndex === 0;
+            const nextDisabled = this.currentVenueIndex === this.venues.length - 1;
             const venueIndicator = `${this.currentVenueIndex + 1}/${this.venues.length}`;
             const uniqueWeeks = new Set(currentVenue.matches.map(m => m.semaine));
             const weekCount = uniqueWeeks.size;
             
             navigationContent = `
-                <button id="prev-venue" class="nav-button nav-prev" ${prevDisabled} title="Gymnase précédent" style="${prevDisabled ? btnDisabledStyle : btnStyle}">
-                    <span class="nav-button-icon" style="font-size: 1.25rem; font-weight: 900;">◀</span>
+                <button id="prev-venue" class="nav-button nav-prev" ${prevDisabled ? 'disabled' : ''} title="Gymnase précédent">
+                    <span class="nav-button-icon">◀</span>
                 </button>
                 
-                <div class="nav-current-item" style="display: flex; flex-direction: column; align-items: center; gap: 0.5rem; min-width: 350px; padding: 0.75rem 1.5rem; background: white; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08);">
-                    <div class="nav-item-main" style="display: flex; align-items: center; gap: 1rem;">
-                        <span class="nav-item-icon" style="font-size: 1.5rem;">🏛️</span>
-                        <span class="nav-item-label" style="font-size: 1.5rem; font-weight: 900; color: #667eea; letter-spacing: 1px;">${venueName}</span>
-                        <span class="nav-item-indicator" style="padding: 0.25rem 0.75rem; background: linear-gradient(135deg, #f8f9fa, #e9ecef); border-radius: 20px; font-size: 0.85rem; font-weight: 600; color: #495057;">${venueIndicator}</span>
+                <div class="nav-current-item">
+                    <div class="nav-item-main">
+                        <span class="nav-item-icon">🏛️</span>
+                        <span class="nav-item-label">${venueName}</span>
+                        <span class="nav-item-indicator">${venueIndicator}</span>
                     </div>
-                    <div class="nav-item-subtitle" style="font-size: 0.9rem; color: #6c757d; font-weight: 600;">
+                    <div class="nav-item-subtitle">
                         ${totalMatches} match${totalMatches > 1 ? 's' : ''} • ${weekCount} journée${weekCount > 1 ? 's' : ''}
                     </div>
                 </div>
                 
-                <button id="next-venue" class="nav-button nav-next" ${nextDisabled} title="Gymnase suivant" style="${nextDisabled ? btnDisabledStyle : btnStyle}">
-                    <span class="nav-button-icon" style="font-size: 1.25rem; font-weight: 900;">▶</span>
+                <button id="next-venue" class="nav-button nav-next" ${nextDisabled ? 'disabled' : ''} title="Gymnase suivant">
+                    <span class="nav-button-icon">▶</span>
                 </button>
             `;
         }
         
         const pendingInfo = isEntenteMode ? `
-            <div class="nav-info-group" style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; background: rgba(102, 126, 234, 0.05); border-radius: 8px; transition: all 0.2s ease;">
-                <span class="nav-icon" style="font-size: 1.25rem;">⌛</span>
-                <span class="nav-label" style="font-size: 0.85rem; color: #6c757d; font-weight: 600;">À organiser</span>
-                <span class="nav-value" style="font-size: 1rem; font-weight: 700; color: #f97316;">${this.ententeContext?.pendingCount || 0}</span>
+            <div class="nav-info-group nav-info-warning">
+                <span class="nav-icon">⌛</span>
+                <span class="nav-label">À organiser</span>
+                <span class="nav-value">${this.ententeContext?.pendingCount || 0}</span>
             </div>
         ` : '';
         
         return `
-            <div class="agenda-navigation-bar" style="display: flex; justify-content: space-between; align-items: center; padding: 1rem 1.5rem; background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%); border-bottom: 3px solid #667eea; box-shadow: 0 4px 12px rgba(0,0,0,0.08); flex-shrink: 0; gap: 2rem; z-index: 100;">
+            <div class="agenda-navigation-bar">
                 <!-- Section gauche: Informations générales -->
-                <div class="nav-section nav-left" style="display: flex; align-items: center; gap: 1rem; min-width: 250px;">
-                    <div class="nav-info-group" style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; background: rgba(102, 126, 234, 0.05); border-radius: 8px; transition: all 0.2s ease;">
-                        <span class="nav-icon" style="font-size: 1.25rem;">🏟️</span>
-                        <span class="nav-label" style="font-size: 0.85rem; color: #6c757d; font-weight: 600;">Gymnases</span>
-                        <span class="nav-value" style="font-size: 1rem; font-weight: 700; color: #667eea;">${totalVenues}</span>
+                <div class="nav-section nav-left">
+                    <div class="nav-info-group">
+                        <span class="nav-icon">🏟️</span>
+                        <span class="nav-label">Gymnases</span>
+                        <span class="nav-value">${totalVenues}</span>
                     </div>
-                    <div class="nav-info-group" style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; background: rgba(102, 126, 234, 0.05); border-radius: 8px; transition: all 0.2s ease;">
-                        <span class="nav-icon" style="font-size: 1.25rem;">🎯</span>
-                        <span class="nav-label" style="font-size: 0.85rem; color: #6c757d; font-weight: 600;">Matchs</span>
-                        <span class="nav-value" style="font-size: 1rem; font-weight: 700; color: #667eea;">${totalMatches}</span>
+                    <div class="nav-info-group">
+                        <span class="nav-icon">🎯</span>
+                        <span class="nav-label">Matchs</span>
+                        <span class="nav-value">${totalMatches}</span>
                     </div>
                     ${pendingInfo}
                 </div>
                 
                 <!-- Section centrale: Navigation dynamique selon le mode -->
-                <div class="nav-section nav-center" style="display: flex; align-items: center; gap: 1rem; flex: 1; justify-content: center; min-width: 500px;">
+                <div class="nav-section nav-center">
                     ${navigationContent}
                 </div>
                 
                 <!-- Section droite: Informations horaires -->
-                <div class="nav-section nav-right" style="display: flex; align-items: center; gap: 1rem; min-width: 250px; justify-content: flex-end;">
-                    <div class="nav-info-group" style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; background: rgba(102, 126, 234, 0.05); border-radius: 8px; transition: all 0.2s ease;">
-                        <span class="nav-icon" style="font-size: 1.25rem;">🕒</span>
-                        <span class="nav-label" style="font-size: 0.85rem; color: #6c757d; font-weight: 600;">Horaires</span>
-                        <span class="nav-value" style="font-size: 1rem; font-weight: 700; color: #667eea;">14h - 23h</span>
+                <div class="nav-section nav-right">
+                    <div class="nav-info-group">
+                        <span class="nav-icon">🕒</span>
+                        <span class="nav-label">Horaires</span>
+                        <span class="nav-value">14h - 23h</span>
                     </div>
                 </div>
             </div>
@@ -1423,7 +1451,7 @@ class AgendaGridView {
                  data-venue-id="${venue.id}"
                  data-capacity="${venue.capacity}"
                  data-max-simultaneous="${maxSimultaneous}"
-                 style="width: ${columnWidth}px; flex-shrink: 0;">
+                  style="width: ${columnWidth}px;">
                 <!-- En-tête du gymnase -->
                 <div class="venue-header">
                     <div class="venue-name">${venue.name}</div>
@@ -1435,7 +1463,7 @@ class AgendaGridView {
                 </div>
                 
                 <!-- Corps avec les matchs -->
-                <div class="venue-body" style="height: ${totalHeight}px; position: relative;">
+                <div class="venue-body" style="height: ${totalHeight}px;">
                     ${this.generateVenueMatches(matches, minHour, pixelsPerHour, matchDuration, maxSimultaneous, widthPerSlot)}
                 </div>
             </div>
@@ -1453,10 +1481,10 @@ class AgendaGridView {
                  data-venue-id="${venue.id}"
                  data-capacity="${venue.capacity}"
                  data-max-simultaneous="${maxSimultaneous}"
-                 style="width: ${columnWidth}px; flex-shrink: 0; background: linear-gradient(180deg, #ffffff 0%, #f8f9fa 100%); border-right: 2px solid #e9ecef; margin-right: 4px; border-radius: 0 0 8px 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
+                 style="width: ${columnWidth}px; margin-right: ${AgendaGridView.COLUMN_MARGIN}px;">
                 
                 <!-- Corps avec les matchs et créneaux libres (sans en-tête) -->
-                <div class="venue-body" style="height: ${totalHeight}px; position: relative; background-image: repeating-linear-gradient(to bottom, transparent 0, transparent 119px, rgba(102, 126, 234, 0.08) 119px, rgba(102, 126, 234, 0.08) 120px);">
+                <div class="venue-body" style="height: ${totalHeight}px;">
                     ${showEmptySlots ? this.generateEmptySlots(matches, venue, minHour, maxHour, pixelsPerHour, widthPerSlot) : ''}
                     ${this.generateVenueMatches(matches, minHour, pixelsPerHour, matchDuration, maxSimultaneous, widthPerSlot)}
                 </div>
@@ -1836,12 +1864,13 @@ class AgendaGridView {
 
     /**
      * Vérifie si une entente est planifiée (créneau confirmé)
+     * Utilise le nouveau système EntenteStatus: scheduled ou played = planifié
      */
     isEntentePlanned(match) {
         if (!this.isEntenteMatch(match)) return false;
         if (match.entente_status) {
             const status = match.entente_status.toLowerCase();
-            return status === 'planifiee' || status === 'planifiée';
+            return status === 'scheduled' || status === 'played';
         }
         return Boolean(match.semaine && match.gymnase && match.horaire);
     }
@@ -1853,6 +1882,97 @@ class AgendaGridView {
             match.horaire &&
             (match.gymnase || match.gymnase_id || match.venue || match.venue_id)
         );
+    }
+
+    /**
+     * Catégorise les ententes selon leur statut EntenteStatus
+     * @param {Array} matches - Liste des matchs entente
+     * @returns {Object} Objet avec les matchs catégorisés par statut
+     */
+    categorizeEntentesByStatus(matches) {
+        const categories = {
+            played: [],      // Ententes jouées (score enregistré)
+            scheduled: [],   // Ententes planifiées (créneau confirmé)
+            confirmed: [],   // Ententes confirmées (accord des équipes)
+            suggested: [],   // Ententes suggérées (proposition système)
+            unknown: []      // Sans statut clair
+        };
+
+        matches.forEach(match => {
+            const status = (match.entente_status || '').toLowerCase();
+            switch (status) {
+                case 'played':
+                    categories.played.push(match);
+                    break;
+                case 'scheduled':
+                    categories.scheduled.push(match);
+                    break;
+                case 'confirmed':
+                    categories.confirmed.push(match);
+                    break;
+                case 'suggested':
+                    categories.suggested.push(match);
+                    break;
+                default:
+                    // Fallback basé sur la présence de créneau
+                    if (this.hasEntenteSlot(match)) {
+                        categories.scheduled.push(match);
+                    } else {
+                        categories.suggested.push(match);
+                    }
+                    break;
+            }
+        });
+
+        return categories;
+    }
+
+    /**
+     * Génère la configuration d'affichage pour chaque catégorie d'entente
+     */
+    getEntenteStatusConfig() {
+        return {
+            played: {
+                title: 'Jouées',
+                subtitle: 'Matchs terminés avec score enregistré',
+                icon: '✅',
+                color: '#27AE60',
+                bgColor: 'rgba(39, 174, 96, 0.1)',
+                borderColor: 'rgba(39, 174, 96, 0.3)',
+                emptyMessage: 'Aucune entente jouée pour le moment',
+                emptyIcon: '🏆'
+            },
+            scheduled: {
+                title: 'Planifiées',
+                subtitle: 'Créneaux confirmés dans le calendrier',
+                icon: '📅',
+                color: '#3498DB',
+                bgColor: 'rgba(52, 152, 219, 0.1)',
+                borderColor: 'rgba(52, 152, 219, 0.3)',
+                emptyMessage: 'Aucune entente n\'a encore de créneau',
+                emptyIcon: '📅'
+            },
+            confirmed: {
+                title: 'Confirmées',
+                subtitle: 'Accord des équipes obtenu',
+                icon: '🤝',
+                color: '#9B59B6',
+                bgColor: 'rgba(155, 89, 182, 0.1)',
+                borderColor: 'rgba(155, 89, 182, 0.3)',
+                emptyMessage: 'Aucune entente en attente de planification',
+                emptyIcon: '🤝'
+            },
+            suggested: {
+                title: 'Suggérées',
+                subtitle: 'Propositions à valider par les équipes',
+                icon: '💡',
+                color: '#F39C12',
+                bgColor: 'rgba(243, 156, 18, 0.1)',
+                borderColor: 'rgba(243, 156, 18, 0.3)',
+                emptyMessage: 'Aucune suggestion d\'entente',
+                emptyIcon: '💡'
+            }
+        };
     }
 
     renderEntenteFallbackView(plannedMatches, pendingMatches, filtersActive) {
@@ -1869,8 +1989,9 @@ class AgendaGridView {
             message = "Aucun match d'entente planifié à afficher pour cette sélection.";
         }
         
+        const penaltyClass = this.showPenalties ? ' show-penalties' : '';
         this.container.innerHTML = `
-            <div class="agenda-view-container agenda-entente-mode entente-fallback">
+            <div class="agenda-view-container agenda-entente-mode entente-fallback${penaltyClass}">
                 <div class="empty-state">${message}</div>
                 ${panelContent ? `<section class="agenda-entente-mode entente-followup">${panelContent}</section>` : ''}
             </div>
@@ -1878,6 +1999,11 @@ class AgendaGridView {
     }
 
     buildEntentePanelContent(plannedMatches, pendingMatches, stats = null) {
+        // Utiliser le nouveau système de catégorisation si disponible
+        const allMatches = [...plannedMatches, ...pendingMatches];
+        const categories = this.categorizeEntentesByStatus(allMatches);
+        const statusConfig = this.getEntenteStatusConfig();
+        
         const plannedCount = stats?.scheduledCount ?? plannedMatches.length;
         const pendingCount = stats?.pendingCount ?? pendingMatches.length;
         const totalCount = stats?.total ?? (plannedCount + pendingCount);
@@ -1900,23 +2026,113 @@ class AgendaGridView {
             ? 'Les filtres actifs masquent ces ententes planifiées.'
             : undefined;
         
+        // Générer le contenu avec le nouveau système de catégories
         return `
-            ${this.generateEntenteSummaryBar(totalCount, plannedCount, pendingCount)}
-            <div class="entente-columns">
-                ${this.generateEntenteColumn('À organiser', pendingMatches, 'pending', {
-                    countOverride: pendingCount,
-                    subtitleExtra: pendingFilteredLabel,
-                    emptyMessage: pendingEmptyMessage
-                })}
-                ${this.generateEntenteColumn('Planifiées', plannedMatches, 'planned', {
-                    countOverride: plannedCount,
-                    subtitleExtra: plannedFilteredLabel,
-                    emptyMessage: plannedEmptyMessage
-                })}
+            ${this.generateEntenteSummaryBarEnhanced(categories, totalCount)}
+            <div class="entente-columns entente-columns-enhanced">
+                ${this.generateEntenteColumnEnhanced('suggested', categories.suggested, statusConfig.suggested)}
+                ${this.generateEntenteColumnEnhanced('confirmed', categories.confirmed, statusConfig.confirmed)}
+                ${this.generateEntenteColumnEnhanced('scheduled', categories.scheduled, statusConfig.scheduled)}
+                ${this.generateEntenteColumnEnhanced('played', categories.played, statusConfig.played)}
             </div>
         `;
     }
 
+    /**
+     * Génère la barre de résumé améliorée avec les 4 catégories
+     */
+    generateEntenteSummaryBarEnhanced(categories, total) {
+        const statusConfig = this.getEntenteStatusConfig();
+        const finalized = categories.scheduled.length + categories.played.length;
+        const ratio = total ? Math.round((finalized / total) * 100) : 0;
+        
+        return `
+            <div class="entente-summary-bar entente-summary-enhanced">
+                <div class="entente-summary-card total">
+                    <div>
+                        <div class="entente-summary-label">Total ententes</div>
+                        <div class="entente-summary-value">${total}</div>
+                    </div>
+                    <span class="entente-summary-icon">🤝</span>
+                </div>
+                <div class="entente-summary-card suggested" style="border-left: 3px solid ${statusConfig.suggested.color};">
+                    <div>
+                        <div class="entente-summary-label">${statusConfig.suggested.title}</div>
+                        <div class="entente-summary-value">${categories.suggested.length}</div>
+                    </div>
+                    <span class="entente-summary-icon">${statusConfig.suggested.icon}</span>
+                </div>
+                <div class="entente-summary-card confirmed" style="border-left: 3px solid ${statusConfig.confirmed.color};">
+                    <div>
+                        <div class="entente-summary-label">${statusConfig.confirmed.title}</div>
+                        <div class="entente-summary-value">${categories.confirmed.length}</div>
+                    </div>
+                    <span class="entente-summary-icon">${statusConfig.confirmed.icon}</span>
+                </div>
+                <div class="entente-summary-card scheduled" style="border-left: 3px solid ${statusConfig.scheduled.color};">
+                    <div>
+                        <div class="entente-summary-label">${statusConfig.scheduled.title}</div>
+                        <div class="entente-summary-value">${categories.scheduled.length}</div>
+                    </div>
+                    <span class="entente-summary-icon">${statusConfig.scheduled.icon}</span>
+                </div>
+                <div class="entente-summary-card played" style="border-left: 3px solid ${statusConfig.played.color};">
+                    <div>
+                        <div class="entente-summary-label">${statusConfig.played.title}</div>
+                        <div class="entente-summary-value">${categories.played.length}</div>
+                    </div>
+                    <span class="entente-summary-icon">${statusConfig.played.icon}</span>
+                </div>
+                <div class="entente-summary-card ratio">
+                    <div>
+                        <div class="entente-summary-label">Avancement</div>
+                        <div class="entente-summary-value">${ratio}%</div>
+                    </div>
+                    <span class="entente-summary-icon">📈</span>
+                </div>
+            </div>
+        `;
+    }
+
+    /**
+     * Génère une colonne de catégorie d'entente avec la configuration de statut
+     */
+    generateEntenteColumnEnhanced(statusKey, matches, config) {
+        const count = matches.length;
+        const cards = count > 0
+            ? matches.map((match, index) => `
+                    <div class="entente-card-wrapper">
+                        ${this.cardRenderer.renderMatchCard(match, false, index, false, null)}
+                    </div>
+                `).join('')
+            : `
+                <div class="entente-empty-state">
+                    <div class="entente-empty-icon">${config.emptyIcon}</div>
+                    <div>${config.emptyMessage}</div>
+                </div>
+            `;
+        
+        return `
+            <section class="entente-column entente-${statusKey}" style="border-top: 3px solid ${config.color}; background: ${config.bgColor};">
+                <header class="entente-column-header" style="border-bottom: 1px solid ${config.borderColor};">
+                    <div>
+                        <div class="entente-column-title" style="color: ${config.color};">
+                            ${config.icon} ${config.title}
+                        </div>
+                        <div class="entente-column-subtitle">${config.subtitle}</div>
+                    </div>
+                    <span class="entente-count" style="background: ${config.color}; color: white;">${count}</span>
+                </header>
+                <div class="entente-column-body">
+                    ${cards}
+                </div>
+            </section>
+        `;
+    }
+
+    /**
+     * @deprecated Utilisez generateEntenteSummaryBarEnhanced à la place
+     */
     generateEntenteSummaryBar(total, planned, pending) {
         const ratio = total ? Math.round((planned / total) * 100) : 0;
         return `
@@ -1953,6 +2169,9 @@ class AgendaGridView {
         `;
     }
 
+    /**
+     * @deprecated Utilisez generateEntenteColumnEnhanced à la place
+     */
     generateEntenteColumn(title, matches, variant, options = {}) {
         const count = typeof options.countOverride === 'number' ? options.countOverride : matches.length;
         const baseSubtitle = options.subtitle || (variant === 'pending'
@@ -2109,11 +2328,18 @@ class AgendaGridView {
     }
     
     /**
-     * Met à jour les filtres depuis le panneau latéral
+     * Définit les filtres depuis le panneau latéral (compatible avec EnhancedFilterSystem)
      */
-    updateFilters(filters) {
+    setFilters(filters) {
         this.filters = { ...this.filters, ...filters };
         this.render();
+    }
+    
+    /**
+     * Met à jour les filtres depuis le panneau latéral (alias pour setFilters)
+     */
+    updateFilters(filters) {
+        this.setFilters(filters);
     }
 }
 

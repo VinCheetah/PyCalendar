@@ -1,50 +1,99 @@
 {
   "/home/vincheetah/Downloads/J1.xlsx": {
-    "size": 35533,
-    "mtime": 1762265089.4459314,
+    "size": 34914,
+    "mtime": 1769095683.2550366,
     "week": 1,
-    "last_imported": "2025-12-02T17:51:42+00:00"
+    "detected_week": 1,
+    "dates": [
+      "2026-01-22"
+    ],
+    "last_imported": "2026-01-22T15:31:45+00:00"
+  },
+  "/home/vincheetah/Downloads/J9.xlsx": {
+    "size": 38285,
+    "mtime": 1765798175.7070546,
+    "week": 9,
+    "detected_week": 9,
+    "dates": [
+      "2025-12-09",
+      "2025-12-11",
+      "2025-12-15"
+    ],
+    "last_imported": "2026-01-07T13:15:34+00:00"
   },
   "/home/vincheetah/Downloads/J2.xlsx": {
-    "size": 36668,
-    "mtime": 1764682226.6395435,
+    "size": 38865,
+    "mtime": 1769594760.6446486,
     "week": 2,
-    "last_imported": "2025-12-02T17:51:46+00:00"
+    "detected_week": 2,
+    "dates": [
+      "2026-01-26",
+      "2026-01-29"
+    ],
+    "last_imported": "2026-01-28T10:06:28+00:00"
   },
   "/home/vincheetah/Downloads/J4.xlsx": {
     "size": 35086,
     "mtime": 1764682256.8701499,
     "week": 4,
-    "last_imported": "2025-12-02T17:51:51+00:00"
+    "detected_week": 4,
+    "dates": [
+      "2025-11-06"
+    ],
+    "last_imported": "2026-01-07T13:15:03+00:00"
   },
   "/home/vincheetah/Downloads/J5.xlsx": {
     "size": 37212,
     "mtime": 1764589530.695846,
     "week": 5,
-    "last_imported": "2025-12-02T17:51:55+00:00"
+    "detected_week": 5,
+    "dates": [
+      "2025-11-13"
+    ],
+    "last_imported": "2026-01-07T13:15:10+00:00"
   },
   "/home/vincheetah/Downloads/J6.xlsx": {
-    "size": 37808,
-    "mtime": 1764676460.8734307,
+    "size": 37799,
+    "mtime": 1765798213.6329079,
     "week": 6,
-    "last_imported": "2025-12-02T17:52:00+00:00"
+    "detected_week": 6,
+    "dates": [
+      "2025-11-18",
+      "2025-11-20"
+    ],
+    "last_imported": "2026-01-07T13:15:16+00:00"
   },
   "/home/vincheetah/Downloads/J7.xlsx": {
-    "size": 39296,
-    "mtime": 1764697849.2854378,
+    "size": 39498,
+    "mtime": 1767605836.5023665,
     "week": 7,
-    "last_imported": "2025-12-02T17:52:04+00:00"
+    "detected_week": 7,
+    "dates": [
+      "2025-11-27"
+    ],
+    "last_imported": "2026-01-07T13:15:22+00:00"
   },
   "/home/vincheetah/Downloads/J8.xlsx": {
-    "size": 39311,
-    "mtime": 1764948159.301974,
+    "size": 39737,
+    "mtime": 1765798199.4847834,
     "week": 8,
-    "last_imported": "2025-12-05T15:50:39+00:00"
+    "detected_week": 8,
+    "dates": [
+      "2025-12-01",
+      "2025-12-02",
+      "2025-12-03",
+      "2025-12-04"
+    ],
+    "last_imported": "2026-01-07T13:15:28+00:00"
   },
-  "/home/vincheetah/Downloads/J9.xlsx": {
-    "size": 35542,
-    "mtime": 1764753524.5823054,
-    "week": 9,
-    "last_imported": "2025-12-05T15:50:47+00:00"
+  "/home/vincheetah/Downloads/J13.xlsx": {
+    "size": 33031,
+    "mtime": 1767604728.5052848,
+    "week": 13,
+    "detected_week": 13,
+    "dates": [
+      "2026-01-08"
+    ],
+    "last_imported": "2026-01-07T13:15:40+00:00"
   }
 }

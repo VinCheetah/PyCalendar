@@ -141,8 +141,8 @@ class ExcelExporter:
             eq1_nom = match.equipe1.nom_complet.replace(' [F]', '').replace(' [M]', '').strip()
             eq2_nom = match.equipe2.nom_complet.replace(' [F]', '').replace(' [M]', '').strip()
             
-            # Récupérer le score depuis les metadata si disponible
-            score = match.metadata.get('score', '') if match.metadata.get('fixe', False) else ''
+            # Récupérer le score depuis les metadata si disponible (utiliser la propriété is_fixed)
+            score = match.metadata.get('score', '') if match.is_fixed else ''
             type_comp = match.metadata.get('type_competition', 'Acad')
             remarques = match.metadata.get('remarques', '')
             date_str = ExcelExporter._format_date_for_output(match.metadata.get('date'))

@@ -10,7 +10,7 @@ from datetime import datetime
 import difflib
 import logging
 import re
-from typing import List, Dict, Set, Tuple, Optional
+from typing import List, Dict, Set, Tuple, Optional, Union
 
 import pandas as pd
 
@@ -27,6 +27,34 @@ from pycalendar.core.calendar_manager import CalendarManager
 from pycalendar.core.constants import format_user_date
 
 logger = logging.getLogger(__name__)
+
+
+def parser_semaine(valeur: Union[str, int, float, None]) -> Optional[int]:
+    """
+    Parse une valeur de semaine qui peut être:
+    - Un entier simple: 5
+    - Une chaîne avec date: "5 (16/10)"
+    - Une valeur flottante depuis Excel: 5.0
+    
+    Returns:
+        Le numéro de semaine comme entier, ou None si invalide
+    """
+    if valeur is None or (isinstance(valeur, float) and pd.isna(valeur)):
+        return None
+    
+    if isinstance(valeur, (int, float)):
+        return int(valeur)
+    
+    valeur_str = str(valeur).strip()
+    if not valeur_str:
+        return None
+    
+    # Regex pour extraire le numéro de semaine (commence par des chiffres)
+    match = re.match(r'^(\d+)', valeur_str)
+    if match:
+        return int(match.group(1))
+    
+    return None
 
 
 class DataLoader:
@@ -333,16 +361,11 @@ class DataLoader:
             if not institution or pd.isna(institution):
                 continue
             
-            # Récupérer la semaine
-            semaine = row.get('Semaine')
-            if pd.isna(semaine):
-                logger.warning(f"Indisponibilité institution '{institution}': semaine manquante, ligne ignorée")
-                continue
-            
-            try:
-                semaine = int(semaine)
-            except (ValueError, TypeError):
-                logger.warning(f"Indisponibilité institution '{institution}': semaine invalide '{semaine}', ligne ignorée")
+            # Récupérer la semaine (supporte le format "N (dd/mm)")
+            semaine_raw = row.get('Semaine')
+            semaine = parser_semaine(semaine_raw)
+            if semaine is None:
+                logger.warning(f"Indisponibilité institution '{institution}': semaine manquante ou invalide, ligne ignorée")
                 continue
             
             # Vérifier si des horaires spécifiques sont définis
@@ -459,10 +482,10 @@ class DataLoader:
         """
         df = self.config.lire_feuille('Indispos_Equipes')
         if df is None or df.empty:
-            print("⚠️  INDISPOS: Feuille Indispos_Equipes vide ou inexistante")
+            logger.debug("Feuille Indispos_Equipes vide ou inexistante")
             return {}
         
-        print(f"📋 INDISPOS: Chargement de {len(df)} lignes depuis Indispos_Equipes")
+        logger.debug(f"Chargement de {len(df)} lignes depuis Indispos_Equipes")
         
         # Structure: {nom_equipe: {semaine: set(horaires)}} ou {nom_equipe|genre: {semaine: set(horaires)}}
         # Si le nom contient [F] ou [M], on stocke avec le genre pour appliquer uniquement à ce genre
@@ -491,16 +514,11 @@ class DataLoader:
                 # Pas de genre → indispo pour tous les genres
                 cle_indispo = equipe_nom
             
-            # Récupérer la semaine
-            semaine = row.get('Semaine')
-            if pd.isna(semaine):
-                logger.warning(f"Indisponibilité équipe '{cle_indispo}': semaine manquante, ligne ignorée")
-                continue
-            
-            try:
-                semaine = int(semaine)
-            except (ValueError, TypeError):
-                logger.warning(f"Indisponibilité équipe '{cle_indispo}': semaine invalide '{semaine}', ligne ignorée")
+            # Récupérer la semaine (supporte le format "N (dd/mm)")
+            semaine_raw = row.get('Semaine')
+            semaine = parser_semaine(semaine_raw)
+            if semaine is None:
+                logger.warning(f"Indisponibilité équipe '{cle_indispo}': semaine manquante ou invalide, ligne ignorée")
                 continue
             
             # Vérifier si des horaires spécifiques sont définis
@@ -890,7 +908,7 @@ class DataLoader:
             eq2_str = str(row.get('Equipe_2', '')).strip()
             genre_str = str(row.get('Genre', '')).strip().upper()
             type_contrainte = str(row.get('Type_Contrainte', '')).strip()
-            semaine = row.get('Semaine')
+            semaine_raw = row.get('Semaine')
             
             # Validation des champs obligatoires
             if not eq1_str or pd.isna(row.get('Equipe_1')):
@@ -905,8 +923,11 @@ class DataLoader:
             if not type_contrainte or pd.isna(row.get('Type_Contrainte')):
                 logger.warning(f"Ligne {ligne_num}: Type_Contrainte manquant, ligne ignorée")
                 continue
-            if pd.isna(semaine):
-                logger.warning(f"Ligne {ligne_num}: Semaine manquante, ligne ignorée")
+            
+            # Valider la semaine (supporte le format "N (dd/mm)")
+            semaine_int = parser_semaine(semaine_raw)
+            if semaine_int is None:
+                logger.warning(f"Ligne {ligne_num}: Semaine manquante ou invalide, ligne ignorée")
                 continue
             
             # Valider le genre
@@ -919,14 +940,9 @@ class DataLoader:
                 logger.warning(f"Ligne {ligne_num}: Type_Contrainte invalide '{type_contrainte}', ligne ignorée")
                 continue
             
-            # Valider la semaine
-            try:
-                semaine_int = int(semaine)
-                if semaine_int < 1 or semaine_int > 52:
-                    logger.warning(f"Ligne {ligne_num}: Semaine invalide ({semaine_int}), doit être entre 1 et 52")
-                    continue
-            except (ValueError, TypeError):
-                logger.warning(f"Ligne {ligne_num}: Semaine invalide '{semaine}', doit être un nombre")
+            # Valider les limites de la semaine
+            if semaine_int < 1 or semaine_int > 52:
+                logger.warning(f"Ligne {ligne_num}: Semaine invalide ({semaine_int}), doit être entre 1 et 52")
                 continue
             
             # Parser les horaires possibles (optionnel)
@@ -1639,15 +1655,7 @@ class DataLoader:
                 logger.info(f"Ligne {ligne_num}: équipe externe '{equipe2_nom}' créée pour match fixe (genre: {genre_equipe or 'non défini'})")
             
             semaine_cell = row.get('Semaine')
-            semaine = None
-            if pd.notna(semaine_cell) and str(semaine_cell).strip() and str(semaine_cell).strip().lower() != 'nan':
-                try:
-                    semaine = int(float(semaine_cell))
-                except (ValueError, TypeError):
-                    logger.warning(
-                        f"Ligne {ligne_num}: semaine invalide '{semaine_cell}' pour {equipe1_nom} vs {equipe2_nom}, ligne ignorée"
-                    )
-                    continue
+            semaine = parser_semaine(semaine_cell)
             
             if semaine is None:
                 if semaine_depuis_date is not None:
@@ -1714,7 +1722,16 @@ class DataLoader:
             remarques = row.get('Remarques')
             remarques_str = str(remarques).strip() if pd.notna(remarques) and str(remarques).strip() else ''
             
-            # Créer le match (on utilise un créneau fictif pour l'instant)
+            # Vérifier si le match doit être ignoré (non traité comme fixé)
+            ignorer_val = row.get('Ignorer', '')
+            ignorer_str = str(ignorer_val).strip().lower() if pd.notna(ignorer_val) else ''
+            is_ignored = ignorer_str in ['oui', 'x', 'yes', 'true', '1', 'o']
+            
+            if is_ignored:
+                logger.info(f"Ligne {ligne_num}: Match {equipe1_nom} vs {equipe2_nom} marqué comme 'Ignorer' - sera replanifié")
+                continue  # Ne pas ajouter ce match aux matchs fixes
+            
+            # Créer le match avec les métadonnées appropriées
             # Le créneau sera créé/trouvé lors de l'intégration dans le pipeline
             match = Match(
                 equipe1=equipe1,
@@ -1723,18 +1740,19 @@ class DataLoader:
                 creneau=None,  # Sera assigné plus tard dans le pipeline
                 championship_type=type_competition_str,  # Type de championnat depuis Excel
                 metadata={
-                    'fixe': True,
+                    'is_fixed': True,  # Nouveau format (remplace 'fixe')
                     'semaine': semaine,
                     'horaire': horaire,
                     'gymnase': gymnase,
                     'date': format_user_date(match_date) if match_date else None,
                     'score': score_str,
-                    'type_competition': type_competition_str,  # Garder aussi dans metadata pour compatibilité
+                    'type_competition': type_competition_str,
                     'remarques': remarques_str,
-                    'genre_fixe': genre if genre in ['F', 'M'] else None,  # Préserver le genre du match fixé
-                    'is_entente': is_entente  # Marquer explicitement comme match en entente
+                    'genre_fixe': genre if genre in ['F', 'M'] else None,
+                    'is_entente': is_entente,
                 }
             )
+            # Note: entente_status sera calculé dynamiquement via la propriété Match.entente_status
             
             matchs_fixes.append(match)
         

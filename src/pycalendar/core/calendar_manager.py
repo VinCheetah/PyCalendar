@@ -52,6 +52,7 @@ class CalendarManager:
         self._semaine_to_date: Dict[int, datetime] = {}
         self._date_to_semaine: Dict[datetime, int] = {}
         self._first_week_date: Optional[datetime] = None
+        self._first_week_monday: Optional[datetime] = None
         self._build_calendar_mapping()
 
     def _build_calendar_mapping(self):
@@ -70,6 +71,7 @@ class CalendarManager:
         
         # Sauvegarder la toute première date alignée pour les conversions
         self._first_week_date = current_date
+        self._first_week_monday = current_date - timedelta(days=current_date.weekday())
 
         # Construire le mapping pour les semaines suivantes
         semaine_num = 1
@@ -113,10 +115,11 @@ class CalendarManager:
         if mapped:
             return mapped
 
-        if not self._first_week_date:
+        reference = self._first_week_monday or self._first_week_date
+        if not reference:
             return None
 
-        delta_days = (normalized - self._first_week_date).days
+        delta_days = (normalized - reference).days
         if delta_days < 0:
             return None
 

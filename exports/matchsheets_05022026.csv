@@ -1,0 +1,32 @@
+﻿ID,Date,Heure,Competition,Lieu,Receveur,Rec_Joueurs,Rec_Min,Rec_Valide,Rec_Staffs,Visiteur,Vis_Joueurs,Vis_Min,Vis_Valide,Vis_Staffs,Nb_Arbitres,Arbitres,Pret
+20185,05/02/2026,14:00,LYON VBF PH2 - Championnat Académique de Volley Féminin,N/A,ENTPE (1),8,6,False,0,INSA (1),10,6,False,1,1,Mme SOUAK Lydia,False
+20188,05/02/2026,16:00,LYON VBF PH2 - Championnat Académique de Volley Féminin,N/A,LYON 1 (11),0,6,False,0,LYON 1 (1),0,6,False,0,1,Mme SOUAK Lydia,False
+20203,05/02/2026,20:00,LYON VBF PH2 - Championnat Académique de Volley Féminin,N/A,SANTE (1),9,6,False,0,LYON 2 (1),7,6,False,1,0,,False
+20206,05/02/2026,20:00,LYON VBF PH2 - Championnat Académique de Volley Féminin,N/A,ESA (1),10,6,False,0,LYON 3 (1),8,6,False,1,1,M DELMAS Thomas,False
+20211,05/02/2026,16:00,LYON VBF PH2 - Championnat Académique de Volley Féminin,N/A,ECL (1),8,6,False,1,INSA (3),10,6,False,1,1,M ROUGELOT Antoine,False
+20217,05/02/2026,20:00,LYON VBF PH2 - Championnat Académique de Volley Féminin,N/A,LYON 1 (4),9,6,True,1,SANTE (2),9,6,False,1,1,M SION Mathieu,False
+20242,05/02/2026,20:00,LYON VBF PH2 - Championnat Académique de Volley Féminin,N/A,CPE (1),0,6,False,0,LYON 1 (6),0,6,False,0,1,M KUDRENKO Pavlo,False
+20256,05/02/2026,20:00,LYON VBF PH2 - Championnat Académique de Volley Féminin,N/A,LYON 2 (IEP) (4),11,6,False,1,CATHO (1),0,6,False,0,0,,False
+20259,05/02/2026,14:00,LYON VBF PH2 - Championnat Académique de Volley Féminin,N/A,ECL (2),7,6,False,1,LYON 1 (7),0,6,False,0,1,M DELMAS Thomas,False
+20265,05/02/2026,16:00,LYON VBF PH2 - Championnat Académique de Volley Féminin,N/A,ESSCA (1),0,6,False,0,LYON 1 (13),0,6,False,0,0,,False
+20269,05/02/2026,18:00,LYON VBF PH2 - Championnat Académique de Volley Féminin,N/A,ESME (2),0,6,False,0,LYON 1 (10),6,6,False,0,1,M DUPUY Ronan Claude Simon,False
+20288,05/02/2026,20:00,LYON VBF PH2 - Championnat Académique de Volley Féminin,N/A,ESA (2),7,6,False,0,EML (2),0,6,False,0,0,,False
+21305,05/02/2026,14:00,LYON VBM PH2 - Championnat Académique Volley Masculin,N/A,ENTPE (1),0,6,False,0,LYON 1 (26),0,6,False,0,1,M DUBUC Theophile,False
+21320,05/02/2026,16:00,LYON VBM PH2 - Championnat Académique Volley Masculin,N/A,LYON 1 (8),0,6,False,0,ECL (1),9,6,False,1,0,,False
+21322,05/02/2026,14:00,LYON VBM PH2 - Championnat Académique Volley Masculin,N/A,ECL (2),8,6,False,1,INSA (3),12,6,False,0,1,Mme LE GALL Marion,False
+21329,05/02/2026,18:00,LYON VBM PH2 - Championnat Académique Volley Masculin,N/A,INSA (4),12,6,False,1,LYON 1 (5),0,6,False,0,1,M DUBUC Theophile,False
+21339,05/02/2026,18:00,LYON VBM PH2 - Championnat Académique Volley Masculin,N/A,LYON 1 (6),0,6,False,0,LYON 1 (7),0,6,False,0,1,M SION Mathieu,False
+21343,05/02/2026,18:00,LYON VBM PH2 - Championnat Académique Volley Masculin,N/A,LYON 1 (4),0,6,False,0,ESME (1),0,6,False,0,0,,False
+21359,05/02/2026,20:00,LYON VBM PH2 - Championnat Académique Volley Masculin,N/A,LYON 1 (21),7,6,False,1,LYON 2 (IEP) (4),12,6,True,1,0,,False
+21373,05/02/2026,14:00,LYON VBM PH2 - Championnat Académique Volley Masculin,N/A,ECL (3),9,6,False,1,LYON 1 (13),0,6,False,0,1,M ROBERT Antoine,False
+21374,05/02/2026,16:00,LYON VBM PH2 - Championnat Académique Volley Masculin,N/A,INSA (5),10,6,False,1,INSA (6),10,6,False,1,1,M SION Mathieu,False
+21381,05/02/2026,16:00,LYON VBM PH2 - Championnat Académique Volley Masculin,N/A,LYON 1 (10),0,6,False,0,LYON 1 (24),0,6,False,0,0,,False
+21382,05/02/2026,16:00,LYON VBM PH2 - Championnat Académique Volley Masculin,N/A,ISARA (2),0,6,False,0,CPE (2),8,6,False,1,0,,False
+21389,05/02/2026,18:00,LYON VBM PH2 - Championnat Académique Volley Masculin,N/A,EML (2),0,6,False,0,LYON 2 (6),8,6,True,1,0,,False
+21399,05/02/2026,18:00,LYON VBM PH2 - Championnat Académique Volley Masculin,N/A,LYON 1 (22),0,6,False,0,CATHO (1),0,6,False,0,0,,False
+21403,05/02/2026,18:00,LYON VBM PH2 - Championnat Académique Volley Masculin,N/A,LYON 1 (15),0,6,False,0,LYON 2 (3),9,6,True,1,0,,False
+21411,05/02/2026,20:00,LYON VBM PH2 - Championnat Académique Volley Masculin,N/A,SANTE (3),8,6,False,1,ECAM (2),0,6,False,0,1,M DUPUY Ronan Claude Simon,False
+21428,05/02/2026,20:00,LYON VBM PH2 - Championnat Académique Volley Masculin,N/A,CATHO (2),0,6,False,0,LYON 1 (16),0,6,False,0,0,,False
+21444,05/02/2026,18:00,LYON VBM PH2 - Championnat Académique Volley Masculin,N/A,ISOSTEO (1),0,6,False,0,ESSCA (1),0,6,False,0,1,M DELMAS Thomas,False
+21446,05/02/2026,18:00,LYON VBM PH2 - Championnat Académique Volley Masculin,N/A,LYON 1 (19),0,6,False,0,LYON 1 (11),0,6,False,0,1,M PIERARD Anthon,False
+21449,05/02/2026,20:00,LYON VBM PH2 - Championnat Académique Volley Masculin,N/A,LYON 2 (5),8,6,True,1,LYON 3 (6),7,6,False,1,0,,False

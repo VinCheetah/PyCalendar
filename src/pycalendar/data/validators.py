@@ -2,6 +2,7 @@
 
 from typing import List, Dict
 from pycalendar.core.models import Equipe, Gymnase
+from pycalendar.core.console import print_error, print_warning, print_detail
 
 
 class DataValidator:
@@ -63,14 +64,16 @@ class DataValidator:
         all_warnings = issues_equipes['warnings'] + issues_gymnases['warnings']
         
         if all_errors:
-            print("❌ Validation errors:")
+            print_error("Erreurs de validation:")
             for error in all_errors:
-                print(f"  - {error}")
+                print_detail(error)
             return False
         
         if all_warnings:
-            print("⚠️  Validation warnings:")
-            for warning in all_warnings:
-                print(f"  - {warning}")
+            print_warning(f"{len(all_warnings)} avertissement(s) de validation")
+            for warning in all_warnings[:5]:  # Limiter à 5
+                print_detail(warning)
+            if len(all_warnings) > 5:
+                print_detail(f"... et {len(all_warnings) - 5} autres")
         
         return True

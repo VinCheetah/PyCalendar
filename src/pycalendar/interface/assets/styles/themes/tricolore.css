@@ -1,0 +1,99 @@
+/**
+ * PyCalendar Interface - Tricolore Theme
+ * Celebrates the FFSU identity with blue / white / red accents.
+ */
+
+:root[data-theme="tricolore"] {
+    --page-background: #f5f6fa;
+    --surface-raised: #ffffff;
+    --surface-muted: #f0f4ff;
+    --surface-contrast: #dbe3ff;
+
+    --primary: #0055A4;
+    --primary-hover: #003a73;
+    --primary-dark: #002654;
+    --primary-light: rgba(0, 85, 164, 0.12);
+    --primary-lighter: #e3edff;
+    --primary-gradient: linear-gradient(135deg, #0055A4 0%, #EF4135 100%);
+
+    --accent: #EF4135;
+    --accent-dark: #c1172c;
+    --accent-hover: #ff5c4c;
+    --accent-light: rgba(239, 65, 53, 0.12);
+    --accent-lighter: #ffe3e0;
+
+    --text-primary: #0f1c3d;
+    --text-secondary: #24335b;
+    --text-tertiary: #5c6a8a;
+
+    --border-color: #d0d7f0;
+    --border-hover: #9fb0e0;
+}
+
+body[data-theme="tricolore"] {
+    background: var(--page-background);
+    color: var(--text-primary);
+}
+
+[data-theme="tricolore"] .main-header,
+[data-theme="tricolore"] .sidebar-header {
+    position: relative;
+    overflow: hidden;
+}
+
+[data-theme="tricolore"] .main-header::before,
+[data-theme="tricolore"] .sidebar-header::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, #0055A4 0%, #FFFFFF 50%, #EF4135 100%);
+    opacity: 0.08;
+}
+
+[data-theme="tricolore"] .sidebar-header::after,
+[data-theme="tricolore"] .main-header::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 4px;
+    background: linear-gradient(90deg, #0055A4, #FFFFFF, #EF4135);
+}
+
+[data-theme="tricolore"] .stat-card,
+[data-theme="tricolore"] .header-stat {
+    border-left: 4px solid #0055A4;
+    box-shadow: 0 10px 25px rgba(0, 85, 164, 0.15);
+}
+
+[data-theme="tricolore"] .stat-card:nth-child(2n),
+[data-theme="tricolore"] .header-stat:nth-child(2n) {
+    border-left-color: #EF4135;
+}
+
+[data-theme="tricolore"] .btn-primary {
+    background: linear-gradient(135deg, #0055A4 0%, #EF4135 100%);
+    border: none;
+    color: #fff;
+    box-shadow: 0 8px 18px rgba(0, 85, 164, 0.35);
+}
+
+[data-theme="tricolore"] .btn-primary:hover {
+    box-shadow: 0 12px 30px rgba(239, 65, 53, 0.35);
+}
+
+[data-theme="tricolore"] .badge-primary {
+    background: #0055A4;
+    color: #fff;
+}
+
+[data-theme="tricolore"] .badge-danger {
+    background: #EF4135;
+    color: #fff;
+}
+
+[data-theme="tricolore"] ::selection {
+    background: rgba(0, 85, 164, 0.3);
+    color: #002654;
+}

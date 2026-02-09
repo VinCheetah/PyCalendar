@@ -18,6 +18,7 @@ from dataclasses import dataclass, asdict
 
 from pycalendar.core.models import Solution, Match, Creneau, Equipe
 from pycalendar.core.config import Config
+from pycalendar.core.console import print_success, print_warning, print_error, print_detail, print_info
 
 
 @dataclass
@@ -201,20 +202,18 @@ class SolutionStore:
         Returns:
             Path du fichier sauvegardé
         """
-        print(f"  💾 Sauvegarde de la solution...")
-        
         # Import DataFormatter
         try:
             import sys
             from pathlib import Path as P
-            # Ajouter le répertoire racine du projet au sys.path pour que les imports core.* fonctionnent
+            # Ajouter le répertoire racine du projet au sys.path pour que les imports fonctionnent
             project_root = P(__file__).parent.parent
             if str(project_root) not in sys.path:
                 sys.path.insert(0, str(project_root))
             
-            from interface.core.data_formatter import DataFormatter
+            from pycalendar.interface.core.data_formatter import DataFormatter
         except ImportError as e:
-            print(f"  ❌ Impossible d'importer DataFormatter: {e}")
+            print_error(f"Impossible d'importer DataFormatter: {e}")
             raise ImportError(f"DataFormatter requis pour la sauvegarde: {e}")
         
         # Marquer les matchs fixes dans les metadata
@@ -259,28 +258,23 @@ class SolutionStore:
             json.dump(data, f, indent=2, ensure_ascii=False)
         
         file_size = filename.stat().st_size / 1024  # KB
+        nb_matchs = len(data.get('matches', {}).get('scheduled', []))
         
-        # Validation optionnelle
+        # Validation optionnelle (silencieuse - les erreurs seront affichées ailleurs)
         try:
-            from interface.core.validator import SolutionValidator
+            from pycalendar.interface.core.validator import SolutionValidator
             validator = SolutionValidator()
             is_valid, errors = validator.validate(data)
             
             if is_valid:
-                print(f"  ✅ Solution sauvegardée et validée: {filename.name}")
+                print_success(f"Solution sauvegardée: {filename.name} ({file_size:.0f}KB, {nb_matchs} matchs)")
             else:
-                print(f"  ⚠️  Solution sauvegardée mais validation échouée ({len(errors)} erreurs)")
-                if errors:
-                    print(f"     Première erreur: {errors[0]}")
+                print_warning(f"Solution sauvegardée avec {len(errors)} erreur(s): {filename.name}")
         except ImportError:
-            print(f"  ✅ Solution sauvegardée (validation non disponible): {filename.name}")
+            print_success(f"Solution sauvegardée: {filename.name} ({file_size:.0f}KB, {nb_matchs} matchs)")
         except Exception as e:
-            print(f"  ⚠️  Erreur de validation: {e}")
-            print(f"  ✅ Solution sauvegardée: {filename.name}")
-        
-        print(f"     Taille: {file_size:.1f} KB")
-        print(f"     Poules: {len(data.get('entities', {}).get('poules', []))}")
-        print(f"     Matchs: {len(data.get('matches', {}).get('scheduled', []))}")
+            print_warning(f"Erreur de validation: {e}")
+            print_success(f"Solution sauvegardée: {filename.name}")
         
         return filename
     
@@ -298,7 +292,7 @@ class SolutionStore:
             with open(self.latest_file, 'r', encoding='utf-8') as f:
                 return json.load(f)
         except (json.JSONDecodeError, IOError) as e:
-            print(f"  ⚠️  Erreur lors du chargement de la solution précédente: {e}")
+            print_warning(f"Erreur chargement solution précédente: {e}")
             return None
     
     def validate_and_adapt_solution(self, solution_data: dict, 
@@ -342,10 +336,10 @@ class SolutionStore:
         
         # Si aucun changement, on peut utiliser la solution telle quelle
         if not changes['any_change']:
-            print("  ✅ Configuration inchangée, réutilisation directe de la solution")
+            print_success("Configuration inchangée, réutilisation directe")
             stats['adapted'] = False
         else:
-            print("  🔄 Configuration modifiée, adaptation de la solution...")
+            print_info("Configuration modifiée, adaptation de la solution...")
             self._print_changes(changes)
             stats['adapted'] = True
         
@@ -465,15 +459,15 @@ class SolutionStore:
     def _print_changes(self, changes: Dict[str, bool]):
         """Affiche les changements détectés."""
         if changes['yaml_changed']:
-            print("     • Configuration YAML modifiée")
+            print_detail("Configuration YAML modifiée")
         if changes['excel_changed']:
-            print("     • Fichier Excel modifié")
+            print_detail("Fichier Excel modifié")
         if changes['equipes_changed']:
-            print("     • Équipes ajoutées/supprimées")
+            print_detail("Équipes ajoutées/supprimées")
         if changes['gymnases_changed']:
-            print("     • Gymnases ajoutés/supprimés")
+            print_detail("Gymnases ajoutés/supprimés")
         if changes['structure_changed']:
-            print("     • Structure globale modifiée")
+            print_detail("Structure globale modifiée")
     
     def _print_validation_stats(self, stats: Dict):
         """Affiche les statistiques de validation."""
@@ -484,16 +478,16 @@ class SolutionStore:
         
         if valid > 0:
             pourcentage = (valid / total) * 100
-            print(f"  📊 Assignments réutilisables: {valid}/{total} ({pourcentage:.1f}%)")
+            print_info(f"Assignments réutilisables: {valid}/{total} ({pourcentage:.1f}%)")
         
         if invalid_match > 0:
-            print(f"     ⚠️  {invalid_match} matchs non trouvés (équipes modifiées)")
+            print_warning(f"{invalid_match} matchs non trouvés (équipes modifiées)")
         
         if invalid_creneau > 0:
-            print(f"     ⚠️  {invalid_creneau} créneaux non trouvés (planning modifié)")
+            print_warning(f"{invalid_creneau} créneaux non trouvés (planning modifié)")
         
         if valid == 0:
-            print("  ⚠️  Aucun assignment réutilisable, résolution depuis zéro")
+            print_warning("Aucun assignment réutilisable, résolution depuis zéro")
 
 
 def test_solution_store():

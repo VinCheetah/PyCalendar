@@ -1,0 +1,371 @@
+/**
+ * PyCalendar Interface - Enhancements (Optimized)
+ * Only essential animations and visual improvements
+ */
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes slideDown {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideUp {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideInLeft {
+    from { opacity: 0; transform: translateX(-20px); }
+    to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes slideInRight {
+    from { opacity: 0; transform: translateX(20px); }
+    to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.75; }
+}
+
+@keyframes bounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
+}
+
+@keyframes scaleIn {
+    from { opacity: 0; transform: scale(0.95); }
+    to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-4px); }
+    75% { transform: translateX(4px); }
+}
+
+@keyframes glow {
+    0%, 100% { filter: drop-shadow(0 0 2px currentColor); }
+    50% { filter: drop-shadow(0 0 10px currentColor); }
+}
+
+@keyframes shimmer {
+    0% { background-position: -1000px 0; }
+    100% { background-position: 1000px 0; }
+}
+
+.main-header,
+.sidebar,
+.btn,
+button,
+.filter-option,
+input,
+select {
+    transition: all var(--transition-base);
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+.btn:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+}
+
+.btn:hover,
+button:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow);
+}
+
+.btn:active,
+button:active {
+    transform: translateY(0);
+}
+
+.loading {
+    position: relative;
+    pointer-events: none;
+    opacity: 0.6;
+}
+
+.loading::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 20px;
+    height: 20px;
+    margin: -10px 0 0 -10px;
+    border: 2px solid var(--primary);
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+button:disabled,
+.btn:disabled,
+input:disabled,
+select:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Animation levels */
+
+[data-animation-level="0"],
+[data-animation-level="0"] * {
+    --anim-duration-fast: 0ms !important;
+    --anim-duration-base: 0ms !important;
+    --anim-duration-slow: 0ms !important;
+    --anim-scale-hover: 1 !important;
+    --anim-translate-hover: 0 !important;
+    animation: none !important;
+    transition: none !important;
+}
+
+[data-animation-level="1"] {
+    --anim-duration-fast: 150ms;
+    --anim-duration-base: 250ms;
+    --anim-scale-hover: 1.02;
+    --anim-translate-hover: -2px;
+}
+
+[data-animation-level="2"] {
+    --anim-duration-fast: 200ms;
+    --anim-duration-base: 300ms;
+    --anim-scale-hover: 1.04;
+    --anim-translate-hover: -3px;
+}
+
+[data-animation-level="3"] {
+    --anim-duration-fast: 250ms;
+    --anim-duration-base: 400ms;
+    --anim-scale-hover: 1.06;
+    --anim-translate-hover: -5px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}
+
+/* ==================== FOCUS RING SYSTEM ==================== */
+
+/* Focus visible personnalisé avec animation */
+@keyframes focusRing {
+    0% { box-shadow: 0 0 0 0 var(--primary); }
+    50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 40%, transparent); }
+    100% { box-shadow: 0 0 0 2px var(--primary); }
+}
+
+:focus-visible {
+    outline: none;
+    box-shadow: 
+        0 0 0 2px var(--surface-raised, #fff),
+        0 0 0 4px var(--primary);
+    animation: focusRing 0.3s ease-out forwards;
+}
+
+/* Focus pour les éléments interactifs */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+    outline: none;
+    box-shadow: 
+        0 0 0 2px var(--surface-raised, #fff),
+        0 0 0 4px var(--primary);
+    border-color: var(--primary);
+}
+
+/* Focus inner pour les boutons radio/checkbox */
+input[type="checkbox"]:focus-visible,
+input[type="radio"]:focus-visible {
+    box-shadow: 
+        0 0 0 2px var(--surface-raised, #fff),
+        0 0 0 4px var(--primary);
+}
+
+/* Skip link pour navigation clavier */
+.skip-link {
+    position: absolute;
+    top: -100%;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10000;
+    padding: var(--spacing-md) var(--spacing-xl);
+    background: var(--primary);
+    color: var(--text-inverse);
+    font-weight: 600;
+    text-decoration: none;
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-xl);
+    transition: top 0.2s ease;
+}
+
+.skip-link:focus {
+    top: var(--spacing-md);
+}
+
+/* ==================== HOVER EFFECTS ENHANCED ==================== */
+
+/* Effet de surbrillance pour les cartes */
+.hover-lift {
+    transition: transform var(--anim-duration-base) var(--ease-spring),
+                box-shadow var(--anim-duration-base) ease;
+}
+
+.hover-lift:hover {
+    transform: translateY(calc(var(--anim-translate-hover) * 1.5));
+    box-shadow: var(--shadow-xl);
+}
+
+/* Effet de glow subtil */
+.hover-glow {
+    transition: box-shadow var(--anim-duration-base) ease;
+}
+
+.hover-glow:hover {
+    box-shadow: 
+        var(--shadow-lg),
+        0 0 20px color-mix(in srgb, var(--primary) 25%, transparent);
+}
+
+/* Effet scale doux */
+.hover-scale {
+    transition: transform var(--anim-duration-fast) var(--ease-spring);
+}
+
+.hover-scale:hover {
+    transform: scale(var(--anim-scale-hover));
+}
+
+/* Effet de bordure animée */
+.hover-border {
+    position: relative;
+}
+
+.hover-border::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border: 2px solid transparent;
+    border-radius: inherit;
+    transition: border-color var(--anim-duration-base) ease;
+}
+
+.hover-border:hover::after {
+    border-color: var(--primary);
+}
+
+/* ==================== MICRO-INTERACTIONS ==================== */
+
+/* Effet ripple pour les boutons */
+@keyframes ripple {
+    0% {
+        transform: scale(0);
+        opacity: 0.5;
+    }
+    100% {
+        transform: scale(4);
+        opacity: 0;
+    }
+}
+
+.btn-ripple {
+    position: relative;
+    overflow: hidden;
+}
+
+.btn-ripple::after {
+    content: '';
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(0);
+    background: radial-gradient(circle, var(--text-inverse) 10%, transparent 10.01%);
+    opacity: 0;
+    pointer-events: none;
+}
+
+.btn-ripple:active::after {
+    animation: ripple 0.6s ease-out;
+}
+
+/* Effet de pulsation pour les notifications */
+@keyframes pulseAttention {
+    0%, 100% { 
+        transform: scale(1);
+        box-shadow: 0 0 0 0 var(--primary);
+    }
+    50% { 
+        transform: scale(1.02);
+        box-shadow: 0 0 0 8px transparent;
+    }
+}
+
+.pulse-attention {
+    animation: pulseAttention 2s ease-in-out infinite;
+}
+
+/* Effet de succès */
+@keyframes successPop {
+    0% { transform: scale(0.8); opacity: 0; }
+    50% { transform: scale(1.1); }
+    100% { transform: scale(1); opacity: 1; }
+}
+
+.animate-success {
+    animation: successPop 0.4s var(--ease-spring) forwards;
+}
+
+/* Effet d'erreur/shake */
+@keyframes shakeError {
+    0%, 100% { transform: translateX(0); }
+    20%, 60% { transform: translateX(-6px); }
+    40%, 80% { transform: translateX(6px); }
+}
+
+.animate-error {
+    animation: shakeError 0.5s ease-in-out;
+}
+
+/* ==================== TRANSITION CLASSES ==================== */
+
+.transition-none { transition: none !important; }
+.transition-fast { transition-duration: var(--anim-duration-fast) !important; }
+.transition-base { transition-duration: var(--anim-duration-base) !important; }
+.transition-slow { transition-duration: var(--anim-duration-slow) !important; }
+
+.ease-linear { transition-timing-function: linear !important; }
+.ease-in { transition-timing-function: ease-in !important; }
+.ease-out { transition-timing-function: ease-out !important; }
+.ease-spring { transition-timing-function: var(--ease-spring) !important; }

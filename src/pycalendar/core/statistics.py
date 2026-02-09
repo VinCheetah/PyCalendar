@@ -2,6 +2,10 @@
 
 from typing import List
 from pycalendar.core.models import Solution, Creneau
+from pycalendar.core.console import (
+    print_section, print_success, print_warning, print_error,
+    print_key_value, print_blank, format_solution_summary
+)
 
 
 class Statistics:
@@ -16,24 +20,20 @@ class Statistics:
             solution: The scheduling solution
             creneaux_restants: List of remaining unused slots
         """
-        print("\n" + "="*60)
-        print("📊 STATISTIQUES DE LA SOLUTION")
-        print("="*60)
-        
         # Basic stats
         total_matchs = len(solution.matchs_planifies) + len(solution.matchs_non_planifies)
-        taux = solution.taux_planification()
+        scheduled = len(solution.matchs_planifies)
+        unscheduled = len(solution.matchs_non_planifies)
+        score = getattr(solution, 'score', None)
         
-        print(f"\n✅ Matchs planifiés: {len(solution.matchs_planifies)}/{total_matchs} ({taux:.1f}%)")
+        # Calculate slots
+        slots_used = scheduled  # Approximation
+        slots_available = slots_used + len(creneaux_restants)
         
-        if solution.matchs_non_planifies:
-            print(f"❌ Matchs non planifiés: {len(solution.matchs_non_planifies)}")
-        
-        # Slot usage
-        print(f"\n🏟️  Créneaux restants disponibles: {len(creneaux_restants)}")
-        
-        # Score if available
-        if hasattr(solution, 'score') and solution.score is not None:
-            print(f"\n🎯 Score de la solution: {solution.score}")
-        
-        print("="*60 + "\n")
+        format_solution_summary(
+            scheduled=scheduled,
+            unscheduled=unscheduled,
+            score=score,
+            slots_used=slots_used,
+            slots_available=slots_available
+        )

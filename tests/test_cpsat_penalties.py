@@ -266,6 +266,7 @@ class TestAllerRetourPenalties:
     def test_high_penalty_discourages_consecutive_weeks(self, minimal_config, match_builder,
                                                          creneau_builder, gymnase_builder):
         minimal_config.aller_retour_espacement_actif = True
+        minimal_config.cpsat_enable_aller_retour = True  # Activer la contrainte de performance
         minimal_config.aller_retour_penalites_par_ecart = [0, 1_000_000, 0, 0]
         minimal_config.compaction_temporelle_actif = True
         minimal_config.compaction_penalites_par_semaine = [0, 0, 500, 1000]
@@ -292,6 +293,7 @@ class TestAllerRetourPenalties:
     def test_fixed_aller_still_penalizes_close_retour(self, minimal_config, match_builder,
                                                       creneau_builder, gymnase_builder):
         minimal_config.aller_retour_espacement_actif = True
+        minimal_config.cpsat_enable_aller_retour = True  # Activer la contrainte de performance
         minimal_config.aller_retour_penalites_par_ecart = [0, 1_000_000, 0, 0]
         minimal_config.compaction_temporelle_actif = True
         minimal_config.compaction_penalites_par_semaine = [0, 1_000, 2_000, 3_000, 4_000]
@@ -381,18 +383,17 @@ class TestCalculationFunctions:
         minimal_config.penalite_apres_horaire_min = 10
         minimal_config.penalite_horaire_diviseur = 60
         
-        solver = CPSATSolver(minimal_config)
-        
         from pycalendar.core.models import Match, Creneau
+        from pycalendar.core.penalties import compute_time_preference_penalty
         
         equipe1 = equipe_builder.create(horaires_preferes=["18:00"])
         equipe2 = equipe_builder.create(horaires_preferes=["18:00"])
         match = Match(equipe1, equipe2, "A1")
         creneau = Creneau(semaine=1, horaire="18:00", gymnase="Gym1")
         
-        penalty = solver._calculate_time_preference_penalty(match, creneau)
+        result = compute_time_preference_penalty(match, creneau, minimal_config)
         
-        assert penalty == 0.0, "Horaire exact devrait donner pénalité = 0"
+        assert result.penalty == 0.0, "Horaire exact devrait donner pénalité = 0"
     
     def test_calculate_time_preference_penalty_after(self, minimal_config, equipe_builder):
         """Test pénalité après horaire préféré."""
@@ -400,9 +401,8 @@ class TestCalculationFunctions:
         minimal_config.penalite_apres_horaire_min = 10
         minimal_config.penalite_horaire_diviseur = 60
         
-        solver = CPSATSolver(minimal_config)
-        
         from pycalendar.core.models import Match, Creneau
+        from pycalendar.core.penalties import compute_time_preference_penalty
         
         # Préfèrent 18:00, match à 20:00 (+2h = 120 min)
         equipe1 = equipe_builder.create(horaires_preferes=["18:00"])
@@ -410,13 +410,13 @@ class TestCalculationFunctions:
         match = Match(equipe1, equipe2, "A1")
         creneau = Creneau(semaine=1, horaire="20:00", gymnase="Gym1")
         
-        penalty = solver._calculate_time_preference_penalty(match, creneau)
+        result = compute_time_preference_penalty(match, creneau, minimal_config)
         
         # Calcul attendu : 10 × ((120/60)²) × 2 équipes = 10 × 4 × 2 = 80
         expected = 10 * ((120 / 60) ** 2) * 2
         
-        assert abs(penalty - expected) < 0.01, \
-            f"Pénalité = {penalty}, attendu ≈ {expected}"
+        assert abs(result.penalty - expected) < 0.01, \
+            f"Pénalité = {result.penalty}, attendu ≈ {expected}"
     
     def test_progressive_bonus_calculation(self, minimal_config):
         """Test de la formule de bonus progressif."""
@@ -426,9 +426,9 @@ class TestCalculationFunctions:
         
         solver = CPSATSolver(minimal_config)
         
-        bonus_0 = solver._calcul_bonus_progressif(0, est_entente=False)
-        bonus_1 = solver._calcul_bonus_progressif(1, est_entente=False)
-        bonus_2 = solver._calcul_bonus_progressif(2, est_entente=False)
+        bonus_0 = solver._calcul_bonus_progressif(0)
+        bonus_1 = solver._calcul_bonus_progressif(1)
+        bonus_2 = solver._calcul_bonus_progressif(2)
         
         # Vérifications
         assert bonus_0 == 100000, "1er match devrait avoir bonus_base"

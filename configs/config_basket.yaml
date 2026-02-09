@@ -1,0 +1,36 @@
+# Configuration PyCalendar - Basketball
+# ====================================
+# Seules les valeurs différentes des défauts sont spécifiées
+
+# Fichiers
+fichiers:
+  donnees: "data/basketball/config_basket.xlsx"
+  sortie: "data/basketball/calendrier_basket.xlsx"
+
+# Paramètres de planification (seulement valeurs différentes des défauts)
+planification:
+  semaine_min: 1     # Première semaine où le planificateur peut poser de nouveaux matchs
+  nb_semaines: 13    # Nombre total de semaines de compétition (calendrier: semaine 1 à 10)
+
+
+
+# Configuration CP-SAT (OR-Tools)
+cpsat:
+  temps_max_secondes: 120    # Défaut: 300 - Limite temps pour tests rapides
+  warm_start: false
+  warm_start_file: "basketball"  # Solutions spécifiques au basketball
+
+
+contraintes:
+  compaction_penalites_par_semaine: [0, 1, 2, 3, 0, 4, 5, 6, 7, 8]
+  
+
+calendrier:
+  actif: true
+  date_debut: "2025-10-13"  # Date de début de saison (premier jour possible pour les matchs)
+  jour_match: "jeudi"  # Jour de la semaine où se déroulent les matchs
+  semaines_banalisees: [3, 10, 11, 12]  # Liste des numéros de semaines banalisées (vacances, périodes sans match)
+
+# Configuration du sport
+sport:
+  type: "basketball"                # Charge automatiquement les paramètres du basketball

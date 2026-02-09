@@ -1,0 +1,307 @@
+# Configuration des présets de sport pour PyCalendar
+# ===================================================
+# Ce fichier définit les paramètres par défaut pour chaque sport supporté.
+# Les valeurs ici servent de base et peuvent être surchargées dans les configs spécifiques.
+#
+# Format du code de poule: {PREFIX}{GENRE}{NIVEAU}{POULE}
+# Exemples:
+#   - VBFA1PA = Volleyball Féminin A1 Poule A
+#   - HBMA2PB = Handball Masculin A2 Poule B
+#   - BBMA3PC = Basketball Masculin A3 Poule C
+
+# ============================================================================
+# DÉFINITIONS DES SPORTS
+# ============================================================================
+
+sports:
+  # ------------------------------------------------------------------------
+  # VOLLEYBALL
+  # ------------------------------------------------------------------------
+  volleyball:
+    # Identifiants
+    type: "volleyball"
+    prefix: "VB"                           # Préfixe dans les codes de poule
+    name: "Volleyball"
+    name_short: "Volley"
+    emoji: "🏐"
+    
+    # Durées et timing
+    duree_match_minutes: 120               # Un match de volley = 2h
+    duree_entre_matchs_minutes: 15         # Temps entre deux matchs
+    temps_echauffement_minutes: 15         # Temps d'échauffement avant match
+    
+    # Format du sport
+    nb_sets_max: 5                         # Maximum de sets
+    points_par_set: 25                     # Points pour gagner un set (sauf tie-break)
+    points_tie_break: 15                   # Points au tie-break
+    
+    # Configuration par défaut
+    niveaux: ["A1", "A2", "A3", "A4"]      # Niveaux disponibles
+    genres: ["M", "F"]                     # Genres: M(asculin), F(éminin)
+    types_championnat: ["Acad", "CFE", "CFU"]  # Types de compétition
+    
+    # Format des scores
+    score_format: "sets"                   # "sets" ou "points"
+    score_separator: "-"                   # Séparateur de score (ex: 3-1)
+    
+    # Couleurs UI (pour l'interface)
+    color_primary: "#F97316"               # Orange
+    color_light: "rgba(249, 115, 22, 0.12)"
+    color_dark: "#E85A24"
+    
+  # ------------------------------------------------------------------------
+  # HANDBALL
+  # ------------------------------------------------------------------------
+  handball:
+    # Identifiants
+    type: "handball"
+    prefix: "HB"
+    name: "Handball"
+    name_short: "Hand"
+    emoji: "🤾"
+    
+    # Durées et timing
+    duree_match_minutes: 90                # Un match de hand = 1h30
+    duree_entre_matchs_minutes: 10
+    temps_echauffement_minutes: 10
+    
+    # Format du sport
+    nb_mi_temps: 2                         # 2 mi-temps
+    duree_mi_temps_minutes: 30             # 30 min par mi-temps
+    
+    # Configuration par défaut
+    niveaux: ["A1", "A2", "A3", "A4"]
+    genres: ["M", "F"]
+    types_championnat: ["Acad", "CFE", "CFU"]
+    
+    # Format des scores
+    score_format: "points"
+    score_separator: "-"
+    
+    # Couleurs UI
+    color_primary: "#14B8A6"               # Teal
+    color_light: "rgba(20, 184, 166, 0.12)"
+    color_dark: "#0F9488"
+
+  # ------------------------------------------------------------------------
+  # BASKETBALL
+  # ------------------------------------------------------------------------
+  basketball:
+    # Identifiants
+    type: "basketball"
+    prefix: "BB"
+    name: "Basketball"
+    name_short: "Basket"
+    emoji: "🏀"
+    
+    # Durées et timing
+    duree_match_minutes: 100               # Un match de basket = ~1h40
+    duree_entre_matchs_minutes: 15
+    temps_echauffement_minutes: 15
+    
+    # Format du sport
+    nb_quarts_temps: 4                     # 4 quart-temps
+    duree_quart_temps_minutes: 10          # 10 min par QT (FFSU)
+    
+    # Configuration par défaut
+    niveaux: ["A1", "A2", "A3", "A4"]
+    genres: ["M", "F"]
+    types_championnat: ["Acad", "CFE", "CFU"]
+    
+    # Format des scores
+    score_format: "points"
+    score_separator: "-"
+    
+    # Couleurs UI
+    color_primary: "#F97316"               # Orange foncé
+    color_light: "rgba(249, 115, 22, 0.12)"
+    color_dark: "#EA580C"
+
+  # ------------------------------------------------------------------------
+  # FOOTBALL
+  # ------------------------------------------------------------------------
+  football:
+    # Identifiants
+    type: "football"
+    prefix: "FB"
+    name: "Football"
+    name_short: "Foot"
+    emoji: "⚽"
+    
+    # Durées et timing
+    duree_match_minutes: 90                # Un match de foot = 1h30
+    duree_entre_matchs_minutes: 15
+    temps_echauffement_minutes: 15
+    
+    # Format du sport
+    nb_mi_temps: 2
+    duree_mi_temps_minutes: 45
+    
+    # Configuration par défaut
+    niveaux: ["A1", "A2", "A3", "A4"]
+    genres: ["M", "F"]
+    types_championnat: ["Acad", "CFE", "CFU"]
+    
+    # Format des scores
+    score_format: "points"
+    score_separator: "-"
+    
+    # Couleurs UI
+    color_primary: "#10B981"               # Vert
+    color_light: "rgba(16, 185, 129, 0.12)"
+    color_dark: "#059669"
+
+  # ------------------------------------------------------------------------
+  # FUTSAL
+  # ------------------------------------------------------------------------
+  futsal:
+    # Identifiants
+    type: "futsal"
+    prefix: "FS"
+    name: "Futsal"
+    name_short: "Futsal"
+    emoji: "⚽"
+    
+    # Durées et timing
+    duree_match_minutes: 50                # Un match de futsal = 50 min
+    duree_entre_matchs_minutes: 10
+    temps_echauffement_minutes: 10
+    
+    # Format du sport
+    nb_mi_temps: 2
+    duree_mi_temps_minutes: 20             # 20 min par mi-temps (FFSU)
+    
+    # Configuration par défaut
+    niveaux: ["A1", "A2", "A3", "A4"]
+    genres: ["M", "F"]
+    types_championnat: ["Acad", "CFE", "CFU"]
+    
+    # Format des scores
+    score_format: "points"
+    score_separator: "-"
+    
+    # Couleurs UI
+    color_primary: "#10B981"
+    color_light: "rgba(16, 185, 129, 0.12)"
+    color_dark: "#059669"
+
+  # ------------------------------------------------------------------------
+  # RUGBY
+  # ------------------------------------------------------------------------
+  rugby:
+    # Identifiants
+    type: "rugby"
+    prefix: "RG"
+    name: "Rugby"
+    name_short: "Rugby"
+    emoji: "🏉"
+    
+    # Durées et timing
+    duree_match_minutes: 80                # Un match de rugby à 7 = ~40 min
+    duree_entre_matchs_minutes: 15
+    temps_echauffement_minutes: 15
+    
+    # Format du sport
+    nb_mi_temps: 2
+    duree_mi_temps_minutes: 35             # Version à 7 ou universitaire
+    
+    # Configuration par défaut
+    niveaux: ["A1", "A2", "A3", "A4"]
+    genres: ["M", "F"]
+    types_championnat: ["Acad", "CFE", "CFU"]
+    
+    # Format des scores
+    score_format: "points"
+    score_separator: "-"
+    
+    # Couleurs UI
+    color_primary: "#8B5CF6"               # Violet
+    color_light: "rgba(139, 92, 246, 0.12)"
+    color_dark: "#7C3AED"
+
+  # ------------------------------------------------------------------------
+  # BADMINTON
+  # ------------------------------------------------------------------------
+  badminton:
+    # Identifiants
+    type: "badminton"
+    prefix: "BD"
+    name: "Badminton"
+    name_short: "Bad"
+    emoji: "🏸"
+    
+    # Durées et timing
+    duree_match_minutes: 45                # Un match de bad (simple) = ~45 min
+    duree_entre_matchs_minutes: 10
+    temps_echauffement_minutes: 5
+    
+    # Format du sport
+    nb_sets_max: 3
+    points_par_set: 21
+    
+    # Configuration par défaut
+    niveaux: ["A1", "A2", "A3", "A4"]
+    genres: ["M", "F", "X"]                # X = Mixte
+    types_championnat: ["Acad", "CFE", "CFU"]
+    
+    # Format des scores
+    score_format: "sets"
+    score_separator: "-"
+    
+    # Couleurs UI
+    color_primary: "#EC4899"               # Rose
+    color_light: "rgba(236, 72, 153, 0.12)"
+    color_dark: "#DB2777"
+
+  # ------------------------------------------------------------------------
+  # TENNIS DE TABLE
+  # ------------------------------------------------------------------------
+  tennis_table:
+    # Identifiants
+    type: "tennis_table"
+    prefix: "TT"
+    name: "Tennis de Table"
+    name_short: "Ping"
+    emoji: "🏓"
+    
+    # Durées et timing
+    duree_match_minutes: 30                # Un match = ~30 min
+    duree_entre_matchs_minutes: 5
+    temps_echauffement_minutes: 5
+    
+    # Format du sport
+    nb_sets_max: 5
+    points_par_set: 11
+    
+    # Configuration par défaut
+    niveaux: ["A1", "A2", "A3", "A4"]
+    genres: ["M", "F", "X"]
+    types_championnat: ["Acad", "CFE", "CFU"]
+    
+    # Format des scores
+    score_format: "sets"
+    score_separator: "-"
+    
+    # Couleurs UI
+    color_primary: "#EF4444"               # Rouge
+    color_light: "rgba(239, 68, 68, 0.12)"
+    color_dark: "#DC2626"
+
+# ============================================================================
+# ALIAS POUR COMPATIBILITÉ
+# ============================================================================
+# Permet d'utiliser des noms alternatifs
+aliases:
+  volley: volleyball
+  VB: volleyball
+  hand: handball
+  HB: handball
+  basket: basketball
+  BB: basketball
+  foot: football
+  FB: football
+  FS: futsal
+  RG: rugby
+  BD: badminton
+  TT: tennis_table
+  ping: tennis_table

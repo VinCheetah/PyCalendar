@@ -19,12 +19,19 @@ class PoolsView {
         this.selectedFilters = {};
         this.activeMatchTabs = {}; // Onglet actif par poule (played/upcoming/all)
         
-        // Options d'affichage
+        // Options d'affichage enrichies
         this.displayOptions = {
             format: 'cards', // 'cards', 'compact', 'list'
-            showTeams: false,
+            showTeams: true,
             showLevelSeparators: true,
-            showPreferences: false
+            showPreferences: false,
+            // Nouvelles options
+            showStats: true,
+            showStandings: true,
+            showMatches: true,
+            showGlobalSummary: true,
+            autoExpandPools: false,
+            compactCards: false
         };
         
         // Subscribe to data changes
@@ -160,12 +167,108 @@ class PoolsView {
     
     /**
      * Retourne la configuration des options d'affichage pour cette vue.
-     * Options simplifiées - format 'cards' uniquement.
+     * Options enrichies pour personnaliser l'affichage des poules.
      */
     getDisplayOptions() {
         return {
             title: "Options - Vue Poules",
-            options: []
+            options: [
+                // Contenu des cartes de poule
+                {
+                    type: 'checkbox',
+                    id: 'pools-show-stats',
+                    label: '📊 Afficher statistiques',
+                    default: this.displayOptions.showStats,
+                    action: (checked) => {
+                        this.displayOptions.showStats = checked;
+                        this.render();
+                    }
+                },
+                {
+                    type: 'checkbox',
+                    id: 'pools-show-standings',
+                    label: '🏆 Afficher classement',
+                    default: this.displayOptions.showStandings,
+                    action: (checked) => {
+                        this.displayOptions.showStandings = checked;
+                        this.render();
+                    }
+                },
+                {
+                    type: 'checkbox',
+                    id: 'pools-show-matches',
+                    label: '🏐 Afficher matchs',
+                    default: this.displayOptions.showMatches,
+                    action: (checked) => {
+                        this.displayOptions.showMatches = checked;
+                        this.render();
+                    }
+                },
+                {
+                    type: 'checkbox',
+                    id: 'pools-show-teams',
+                    label: '👥 Afficher équipes',
+                    default: this.displayOptions.showTeams,
+                    action: (checked) => {
+                        this.displayOptions.showTeams = checked;
+                        this.render();
+                    }
+                },
+                
+                // Options de mise en page
+                {
+                    type: 'checkbox',
+                    id: 'pools-show-summary',
+                    label: '📋 Afficher résumé global',
+                    default: this.displayOptions.showGlobalSummary,
+                    action: (checked) => {
+                        this.displayOptions.showGlobalSummary = checked;
+                        this.render();
+                    }
+                },
+                {
+                    type: 'checkbox',
+                    id: 'pools-level-separators',
+                    label: '📈 Afficher séparateurs de niveau',
+                    default: this.displayOptions.showLevelSeparators,
+                    action: (checked) => {
+                        this.displayOptions.showLevelSeparators = checked;
+                        this.render();
+                    }
+                },
+                {
+                    type: 'checkbox',
+                    id: 'pools-compact',
+                    label: '📦 Mode compact',
+                    default: this.displayOptions.compactCards,
+                    action: (checked) => {
+                        this.displayOptions.compactCards = checked;
+                        this.render();
+                    }
+                },
+                {
+                    type: 'checkbox',
+                    id: 'pools-auto-expand',
+                    label: '🔓 Déplier toutes les poules',
+                    default: this.displayOptions.autoExpandPools,
+                    action: (checked) => {
+                        this.displayOptions.autoExpandPools = checked;
+                        if (checked) {
+                            // Expand all pools
+                            const data = this.dataManager.getData();
+                            if (data?.entities?.poules) {
+                                data.entities.poules.forEach(pool => {
+                                    this.expandedPools.add(pool.id);
+                                });
+                            }
+                        } else {
+                            // Collapse all
+                            this.expandedPools.clear();
+                        }
+                        this.render();
+                    }
+                }
+            ]
         };
     }
     
@@ -202,10 +305,10 @@ class PoolsView {
      */
     renderEmpty() {
         this.container.innerHTML = `
-            <div class="empty-state" style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 4rem 2rem; text-align: center;">
-                <div class="empty-state-icon" style="font-size: 5rem; margin-bottom: 1.5rem; opacity: 0.5;">🎯</div>
-                <h3 class="empty-state-title" style="font-size: 1.5rem; font-weight: 700; color: #333; margin: 0 0 0.75rem 0; font-family: 'Inter', 'Roboto', sans-serif;">Aucune poule</h3>
-                <p class="empty-state-message" style="font-size: 1rem; color: #666; margin: 0; font-family: 'Roboto', sans-serif;">Les poules apparaîtront ici une fois configurées.</p>
+            <div class="empty-state">
+                <div class="empty-state__icon">🎯</div>
+                <h3 class="empty-state__title">Aucune poule</h3>
+                <p class="empty-state__message">Les poules apparaîtront ici une fois configurées.</p>
             </div>
         `;
     }
@@ -215,10 +318,10 @@ class PoolsView {
      */
     renderNoResults() {
         this.container.innerHTML = `
-            <div class="empty-state" style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 4rem 2rem; text-align: center;">
-                <div class="empty-state-icon" style="font-size: 5rem; margin-bottom: 1.5rem; opacity: 0.5;">🔍</div>
-                <h3 class="empty-state-title" style="font-size: 1.5rem; font-weight: 700; color: #333; margin: 0 0 0.75rem 0; font-family: 'Inter', 'Roboto', sans-serif;">Aucune poule correspondante</h3>
-                <p class="empty-state-message" style="font-size: 1rem; color: #666; margin: 0; font-family: 'Roboto', sans-serif;">Aucune poule ne correspond aux filtres sélectionnés.</p>
+            <div class="empty-state">
+                <div class="empty-state__icon">🔍</div>
+                <h3 class="empty-state__title">Aucune poule correspondante</h3>
+                <p class="empty-state__message">Aucune poule ne correspond aux filtres sélectionnés.</p>
             </div>
         `;
     }
@@ -280,10 +383,13 @@ class PoolsView {
      * Génère le HTML de la vue - Organisation par genre
      */
     _generateHTML(pools, data) {
-        let html = '<div class="pools-view">';
+        const compactClass = this.displayOptions.compactCards ? 'pools-view--compact' : '';
+        let html = `<div class="pools-view ${compactClass}">`;
         
-        // En-tête avec résumé global
-        html += this._generateGlobalSummary(pools, data);
+        // En-tête avec résumé global (optionnel)
+        if (this.displayOptions.showGlobalSummary) {
+            html += this._generateGlobalSummary(pools, data);
+        }
         
         // Organisation par genre
         html += this._generatePoolsByGender(pools, data);
@@ -303,34 +409,73 @@ class PoolsView {
      */
     _generateGlobalSummary(pools, data) {
         const totalTeams = pools.reduce((sum, p) => sum + (p.nb_equipes || 0), 0);
-        const totalMatches = pools.reduce((sum, p) => 
+        const poolMatches = pools.reduce((sum, p) => 
             sum + (p.nb_matchs_planifies || 0) + (p.nb_matchs_non_planifies || 0), 0);
-        const scheduledMatches = pools.reduce((sum, p) => 
+        const scheduledPoolMatches = pools.reduce((sum, p) => 
             sum + (p.nb_matchs_planifies || 0), 0);
-        const unscheduledMatches = pools.reduce((sum, p) => 
+        const unscheduledPoolMatches = pools.reduce((sum, p) => 
             sum + (p.nb_matchs_non_planifies || 0), 0);
         
+        // Comptabiliser aussi les matchs sans poule (CFE/CFU)
+        let noPoolMatches = 0;
+        let noPoolScheduled = 0;
+        if (data && data.matches) {
+            const allMatches = [
+                ...(data.matches.scheduled || []),
+                ...(data.matches.unscheduled || [])
+            ];
+            const noPool = allMatches.filter(m => !m.poule || m.poule === '');
+            noPoolMatches = noPool.length;
+            noPoolScheduled = noPool.filter(m => m.semaine).length;
+        }
+        
+        // Totaux incluant les matchs sans poule
+        const totalMatches = poolMatches + noPoolMatches;
+        const scheduledMatches = scheduledPoolMatches + noPoolScheduled;
+        const unscheduledMatches = totalMatches - scheduledMatches;
+        
+        // Utiliser SportUtils pour l'emoji et le nom du sport
+        const sportEmoji = window.sportUtils?.getEmoji() || '🏐';
+        const sportName = window.sportUtils?.getName() || 'Sport';
+        const completionRate = totalMatches > 0 ? Math.round((scheduledMatches / totalMatches) * 100) : 0;
+        
+        // Info sur les matchs hors poules
+        const noPoolInfo = noPoolMatches > 0 ? ` + ${noPoolMatches} CFE/CFU` : '';
+        
         return `
-            <div class="pools-summary" style="display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; padding: 1rem; background: linear-gradient(135deg, rgba(0, 85, 164, 0.05) 0%, rgba(0, 85, 164, 0.02) 100%); border-radius: 12px;">
-                <div class="summary-card" style="flex: 1; min-width: 140px; padding: 1rem; background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1); border: 1px solid rgba(0, 85, 164, 0.1); text-align: center;">
-                    <div class="summary-value" style="font-size: 2rem; font-weight: 900; color: #0055A4; font-family: 'Roboto Mono', monospace; margin-bottom: 0.5rem;">${pools.length}</div>
-                    <div class="summary-label" style="font-size: 0.75rem; font-weight: 700; color: #666; text-transform: uppercase; letter-spacing: 0.08em; font-family: 'Roboto', sans-serif;">Poules</div>
+            <div class="pools-summary">
+                <div class="pools-summary__header">
+                    <span class="pools-summary__icon">${sportEmoji}</span>
+                    <div>
+                        <h2 class="pools-summary__title">Vue Poules - ${sportName}</h2>
+                        <p class="pools-summary__subtitle">${pools.length} poules • ${totalTeams} équipes${noPoolInfo} • ${completionRate}% de complétion</p>
+                    </div>
                 </div>
-                <div class="summary-card" style="flex: 1; min-width: 140px; padding: 1rem; background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1); border: 1px solid rgba(0, 85, 164, 0.1); text-align: center;">
-                    <div class="summary-value" style="font-size: 2rem; font-weight: 900; color: #0055A4; font-family: 'Roboto Mono', monospace; margin-bottom: 0.5rem;">${totalTeams}</div>
-                    <div class="summary-label" style="font-size: 0.75rem; font-weight: 700; color: #666; text-transform: uppercase; letter-spacing: 0.08em; font-family: 'Roboto', sans-serif;">Équipes</div>
-                </div>
-                <div class="summary-card" style="flex: 1; min-width: 140px; padding: 1rem; background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1); border: 1px solid rgba(0, 85, 164, 0.1); text-align: center;">
-                    <div class="summary-value" style="font-size: 2rem; font-weight: 900; color: #0055A4; font-family: 'Roboto Mono', monospace; margin-bottom: 0.5rem;">${totalMatches}</div>
-                    <div class="summary-label" style="font-size: 0.75rem; font-weight: 700; color: #666; text-transform: uppercase; letter-spacing: 0.08em; font-family: 'Roboto', sans-serif;">Matchs Total</div>
-                </div>
-                <div class="summary-card" style="flex: 1; min-width: 140px; padding: 1rem; background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1); border: 1px solid rgba(0, 85, 164, 0.1); text-align: center;">
-                    <div class="summary-value" style="font-size: 2rem; font-weight: 900; color: #27AE60; font-family: 'Roboto Mono', monospace; margin-bottom: 0.5rem;">${scheduledMatches}</div>
-                    <div class="summary-label" style="font-size: 0.75rem; font-weight: 700; color: #666; text-transform: uppercase; letter-spacing: 0.08em; font-family: 'Roboto', sans-serif;">Planifiés</div>
-                </div>
-                <div class="summary-card" style="flex: 1; min-width: 140px; padding: 1rem; background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1); border: 1px solid rgba(239, 65, 53, 0.1); text-align: center;">
-                    <div class="summary-value" style="font-size: 2rem; font-weight: 900; color: #EF4135; font-family: 'Roboto Mono', monospace; margin-bottom: 0.5rem;">${unscheduledMatches}</div>
-                    <div class="summary-label" style="font-size: 0.75rem; font-weight: 700; color: #666; text-transform: uppercase; letter-spacing: 0.08em; font-family: 'Roboto', sans-serif;">Non Planifiés</div>
+                <div class="pools-summary__cards">
+                    <div class="summary-card">
+                        <div class="summary-card__value summary-card__value--primary">${pools.length}</div>
+                        <div class="summary-card__label">Poules</div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="summary-card__value summary-card__value--primary">${totalTeams}</div>
+                        <div class="summary-card__label">Équipes</div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="summary-card__value summary-card__value--primary">${totalMatches}</div>
+                        <div class="summary-card__label">Matchs</div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="summary-card__value summary-card__value--success">${scheduledMatches}</div>
+                        <div class="summary-card__label">Planifiés</div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="summary-card__value summary-card__value--danger">${unscheduledMatches}</div>
+                        <div class="summary-card__label">Non Planifiés</div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="summary-card__value summary-card__value--info">${completionRate}%</div>
+                        <div class="summary-card__label">Complétion</div>
+                    </div>
                 </div>
             </div>
         `;
@@ -355,7 +500,115 @@ class PoolsView {
             html += this._generateGenderSection('M', byGender.M, data);
         }
         
+        // Section spéciale pour les matchs sans poule (CFE/CFU)
+        html += this._generateNoPoolSection(data);
+        
         html += '</div>';
+        
+        return html;
+    }
+    
+    /**
+     * Génère une section pour les matchs sans poule (CFE/CFU interrégionaux)
+     */
+    _generateNoPoolSection(data) {
+        if (!data || !data.matches) return '';
+        
+        // Récupérer les matchs sans poule
+        const allMatches = [
+            ...(data.matches.scheduled || []),
+            ...(data.matches.unscheduled || [])
+        ];
+        
+        const noPoolMatches = allMatches.filter(m => !m.poule || m.poule === '');
+        
+        if (noPoolMatches.length === 0) return '';
+        
+        // Grouper par type de championnat
+        const byType = {
+            CFU: noPoolMatches.filter(m => m.championship_type === 'CFU'),
+            CFE: noPoolMatches.filter(m => m.championship_type === 'CFE'),
+            Other: noPoolMatches.filter(m => m.championship_type !== 'CFU' && m.championship_type !== 'CFE')
+        };
+        
+        let html = '';
+        
+        // Section CFU
+        if (byType.CFU.length > 0) {
+            html += this._generateChampionshipSection('CFU', byType.CFU, data);
+        }
+        
+        // Section CFE
+        if (byType.CFE.length > 0) {
+            html += this._generateChampionshipSection('CFE', byType.CFE, data);
+        }
+        
+        // Autres matchs sans poule
+        if (byType.Other.length > 0) {
+            html += this._generateChampionshipSection('Interrégionaux', byType.Other, data);
+        }
+        
+        return html;
+    }
+    
+    /**
+     * Génère une section pour un type de championnat (CFU, CFE)
+     */
+    _generateChampionshipSection(type, matches, data) {
+        const typeLabel = type === 'CFU' ? 'Championnat de France Universitaire' :
+                         type === 'CFE' ? 'Championnat de France des Écoles' :
+                         'Matchs Interrégionaux';
+        const typeIcon = type === 'CFU' ? '🏆' : type === 'CFE' ? '🎓' : '🌐';
+        
+        // Grouper par genre
+        const byGender = {
+            F: matches.filter(m => (m.genre || m.equipe1_genre || m.equipe2_genre) === 'F'),
+            M: matches.filter(m => (m.genre || m.equipe1_genre || m.equipe2_genre) === 'M')
+        };
+        
+        const scheduledCount = matches.filter(m => m.semaine).length;
+        const unscheduledCount = matches.length - scheduledCount;
+        
+        let html = `
+            <div class="championship-section">
+                <div class="championship-separator">
+                    <div class="championship-separator__content">
+                        <div class="championship-separator__line championship-separator__line--left"></div>
+                        <div class="championship-separator__badge">
+                            <span class="championship-separator__icon">${typeIcon}</span>
+                            <div class="championship-separator__info">
+                                <span class="championship-separator__title">${typeLabel}</span>
+                                <span class="championship-separator__stats">${matches.length} match${matches.length > 1 ? 's' : ''} • ${scheduledCount} planifié${scheduledCount > 1 ? 's' : ''} • ${unscheduledCount} non planifié${unscheduledCount > 1 ? 's' : ''}</span>
+                            </div>
+                        </div>
+                        <div class="championship-separator__line championship-separator__line--right"></div>
+                    </div>
+                </div>
+                <div class="championship-matches">
+        `;
+        
+        // Afficher les matchs par genre
+        if (byGender.F.length > 0) {
+            html += `<div class="championship-gender-section championship-gender-section--female">
+                <h4 class="championship-gender-title">♀️ Féminin (${byGender.F.length})</h4>
+                <div class="championship-matches-grid">`;
+            byGender.F.forEach(match => {
+                html += this._generateMatchCardNew(match, data, type);
+            });
+            html += '</div></div>';
+        }
+        
+        if (byGender.M.length > 0) {
+            html += `<div class="championship-gender-section championship-gender-section--male">
+                <h4 class="championship-gender-title">♂️ Masculin (${byGender.M.length})</h4>
+                <div class="championship-matches-grid">`;
+            byGender.M.forEach(match => {
+                html += this._generateMatchCardNew(match, data, type);
+            });
+            html += '</div></div>';
+        }
+        
+        html += '</div></div>';
         
         return html;
     }
@@ -465,26 +718,25 @@ class PoolsView {
     }
     
     /**
-     * Génère un séparateur de genre avec styles inline
+     * Génère un séparateur de genre avec classes CSS
      */
     _generateGenderSeparator(gender, pools, totalTeams, totalMatches) {
         const genderLabel = gender === 'F' ? 'Féminin' : 'Masculin';
         const genderIcon = gender === 'F' ? '♀️' : '♂️';
-        const genderColor = gender === 'F' ? '#E91E63' : '#2196F3';
-        const genderColorLight = gender === 'F' ? 'rgba(233, 30, 99, 0.1)' : 'rgba(33, 150, 243, 0.1)';
+        const genderClass = gender === 'F' ? 'female' : 'male';
         
         return `
-            <div style="margin: 2.5rem 0 2rem; padding: 0;">
-                <div style="display: flex; align-items: center; gap: 1.5rem; margin-bottom: 1rem;">
-                    <div style="flex: 1; height: 3px; background: linear-gradient(to right, transparent, ${genderColor}40, transparent);"></div>
-                    <div style="display: flex; align-items: center; gap: 1rem; padding: 0.75rem 2rem; background: linear-gradient(135deg, ${genderColorLight} 0%, white 100%); border-radius: 12px; border: 2px solid ${genderColor}; box-shadow: 0 4px 12px ${genderColor}20;">
-                        <span style="font-size: 2rem;">${genderIcon}</span>
-                        <div style="display: flex; flex-direction: column; gap: 0.25rem;">
-                            <span style="font-size: 1.3rem; font-weight: 700; color: ${genderColor}; font-family: 'Inter', 'Roboto', sans-serif;">${genderLabel}</span>
-                            <span style="font-size: 0.85rem; color: #666; font-weight: 500; font-family: 'Roboto', sans-serif;">${pools.length} poule${pools.length > 1 ? 's' : ''} • ${totalTeams} équipe${totalTeams > 1 ? 's' : ''} • ${totalMatches} match${totalMatches > 1 ? 's' : ''}</span>
+            <div class="gender-separator gender-separator--${genderClass}">
+                <div class="gender-separator__content">
+                    <div class="gender-separator__line gender-separator__line--left"></div>
+                    <div class="gender-separator__badge">
+                        <span class="gender-separator__icon">${genderIcon}</span>
+                        <div class="gender-separator__info">
+                            <span class="gender-separator__title">${genderLabel}</span>
+                            <span class="gender-separator__stats">${pools.length} poule${pools.length > 1 ? 's' : ''} • ${totalTeams} équipe${totalTeams > 1 ? 's' : ''} • ${totalMatches} match${totalMatches > 1 ? 's' : ''}</span>
                         </div>
                     </div>
-                    <div style="flex: 1; height: 3px; background: linear-gradient(to left, transparent, ${genderColor}40, transparent);"></div>
+                    <div class="gender-separator__line gender-separator__line--right"></div>
                 </div>
             </div>
         `;
@@ -508,19 +760,19 @@ class PoolsView {
     }
     
     /**
-     * Génère un séparateur de niveau avec styles inline
+     * Génère un séparateur de niveau avec classes CSS
      */
     _generateLevelSeparator(level, pools, data) {
         const totalTeams = pools.reduce((sum, p) => sum + (p.nb_equipes || 0), 0);
         
         return `
-            <div style="display: flex; align-items: center; gap: 1rem; margin: 2rem 0 1.5rem; padding: 0 1rem;">
-                <div style="flex: 1; height: 2px; background: linear-gradient(to right, transparent, #ddd, transparent);"></div>
-                <div style="display: flex; flex-direction: column; align-items: center; gap: 0.25rem; padding: 0.5rem 1.5rem; background: #f8f9fa; border-radius: 8px; border: 1px solid #e0e0e0;">
-                    <span style="font-size: 1.1rem; font-weight: 600; color: #2c3e50;"">Niveau ${level}</span>
-                    <span style="font-size: 0.85rem; color: #7f8c8d;">${pools.length} poule${pools.length > 1 ? 's' : ''} • ${totalTeams} équipe${totalTeams > 1 ? 's' : ''}</span>
+            <div class="level-separator">
+                <div class="level-separator__line"></div>
+                <div class="level-separator__badge">
+                    <span class="level-separator__title">Niveau ${level}</span>
+                    <span class="level-separator__stats">${pools.length} poule${pools.length > 1 ? 's' : ''} • ${totalTeams} équipe${totalTeams > 1 ? 's' : ''}</span>
                 </div>
-                <div style="flex: 1; height: 2px; background: linear-gradient(to left, transparent, #ddd, transparent);"></div>
+                <div class="level-separator__line"></div>
             </div>
         `;
     }
@@ -539,8 +791,6 @@ class PoolsView {
         const isExpanded = this.expandedPools.has(pool.id);
         const genderClass = gender === 'F' ? 'female' : 'male';
         const genderIcon = gender === 'F' ? '♀️' : '♂️';
-        const genderColor = gender === 'F' ? '#E91E63' : '#2196F3';
-        const genderColorLight = gender === 'F' ? 'rgba(233, 30, 99, 0.05)' : 'rgba(33, 150, 243, 0.05)';
         
         // Échapper le nom de la poule pour prévenir XSS
         const poolNom = this._escapeHtml(pool.nom);
@@ -561,20 +811,20 @@ class PoolsView {
         const completionRate = poolMatches.length > 0 ? (scheduledMatches.length / poolMatches.length) * 100 : 0;
         
         let html = `
-            <div class="pool-card ${genderClass} ${isExpanded ? 'expanded' : ''}" data-pool-id="${pool.id}" style="background: white; border: 2px solid ${genderColor}30; border-radius: 16px; overflow: hidden; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08); margin-bottom: 1.5rem; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); position: relative;">
-                <div class="pool-header" data-toggle-pool="${pool.id}" style="padding: 1.5rem; background: linear-gradient(135deg, ${genderColor} 0%, ${genderColor}dd 100%); color: white; cursor: pointer; position: relative; border-bottom: 3px solid rgba(255, 255, 255, 0.2); box-shadow: 0 2px 8px ${genderColor}40;">
-                    <div style="position: absolute; top: 0; right: 0; font-size: 6rem; opacity: 0.08; line-height: 1; pointer-events: none;">${genderIcon}</div>
-                    <div class="pool-title" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem; position: relative; z-index: 1;">
-                        <h3 style="margin: 0; font-size: 1.35rem; font-weight: 800; color: white; font-family: 'Inter', 'Roboto', sans-serif; letter-spacing: 0.02em; text-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);">${poolNom}</h3>
-                        <button class="expand-btn ${isExpanded ? 'expanded' : ''}" aria-label="Développer" style="background: rgba(255, 255, 255, 0.25); border: 1px solid rgba(255, 255, 255, 0.4); color: white; font-size: 1rem; font-weight: 700; padding: 0.5rem 1rem; border-radius: 8px; cursor: pointer; transition: all 0.2s ease; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15); backdrop-filter: blur(8px);">
+            <div class="pool-card pool-card--${genderClass} ${isExpanded ? 'expanded' : ''}" data-pool-id="${pool.id}">
+                <div class="pool-header pool-header--${genderClass}" data-toggle-pool="${pool.id}">
+                    <div class="pool-header__watermark">${genderIcon}</div>
+                    <div class="pool-header__top">
+                        <h3 class="pool-header__title">${poolNom}</h3>
+                        <button class="pool-header__expand-btn ${isExpanded ? 'expanded' : ''}" aria-label="Développer">
                             ${isExpanded ? '▼' : '▶'}
                         </button>
                     </div>
-                    <div class="pool-info" style="display: flex; gap: 1.5rem; flex-wrap: wrap; align-items: center; position: relative; z-index: 1;">
-                        <span class="pool-level" style="font-size: 0.8rem; font-weight: 800; padding: 0.4rem 0.8rem; background: rgba(255, 255, 255, 0.3); border-radius: 8px; text-transform: uppercase; letter-spacing: 0.1em; font-family: 'Roboto', sans-serif; border: 1px solid rgba(255, 255, 255, 0.3); box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2); backdrop-filter: blur(4px);">📊 ${poolNiveau}</span>
-                        <span class="pool-teams" style="font-size: 0.9rem; font-weight: 600; color: rgba(255, 255, 255, 0.95); display: inline-flex; align-items: center; gap: 0.5rem;">👥 <strong>${pool.nb_equipes}</strong> équipes</span>
-                        <span class="pool-matches" style="font-size: 0.9rem; font-weight: 600; color: rgba(255, 255, 255, 0.95); display: inline-flex; align-items: center; gap: 0.5rem;">⚽ <strong>${poolMatches.length}</strong> matchs</span>
-                        <span class="pool-completion" style="font-size: 0.85rem; font-weight: 600; color: rgba(255, 255, 255, 0.9); display: inline-flex; align-items: center; gap: 0.5rem;">✓ ${completionRate.toFixed(0)}% planifié</span>
+                    <div class="pool-header__info">
+                        <span class="pool-header__chip">📊 ${poolNiveau}</span>
+                        <span class="pool-header__stat">👥 <strong>${pool.nb_equipes}</strong> équipes</span>
+                        <span class="pool-header__stat">⚽ <strong>${poolMatches.length}</strong> matchs</span>
+                        <span class="pool-header__stat">✓ ${completionRate.toFixed(0)}% planifié</span>
                     </div>
                 </div>
         `;
@@ -591,6 +841,7 @@ class PoolsView {
     /**
      * Génère le contenu détaillé (développé) pour une poule.
      * Ce contenu est partagé par tous les formats d'affichage.
+     * Respecte les options d'affichage pour montrer/cacher les sections.
      */
     _generateExpandedContent(pool, data) {
         const poolMatches = this.dataManager.getMatchesByPool(pool.id);
@@ -604,35 +855,44 @@ class PoolsView {
         
         const unscheduledMatches = poolMatches.filter(m => !m.semaine);
 
-        let html = '<div class="pool-content" style="padding: 1.5rem; background: rgba(0, 85, 164, 0.02);">';
+        let html = '<div class="pool-content">';
             
         // Afficher les équipes si l'option est activée
         if (this.displayOptions.showTeams) {
             html += this._generateTeamsList(pool, data);
         }
         
-        // Conteneur flex pour stats et classement
-        html += '<div class="pool-details-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; margin-bottom: 1.5rem;">';
+        // Conteneur flex pour stats et classement (si au moins l'un des deux est affiché)
+        if (this.displayOptions.showStats || this.displayOptions.showStandings) {
+            html += '<div class="pool-details-grid">';
 
-        // Statistiques détaillées
-        html += '<div class="pool-content-section" style="background: white; border-radius: 10px; padding: 1.25rem; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06); border: 1px solid rgba(0, 85, 164, 0.1);">';
-        html += '<h4 class="pool-content-section-title" style="margin: 0 0 1rem 0; font-size: 1rem; font-weight: 800; color: #0055A4; display: flex; align-items: center; gap: 0.5rem; font-family: \'Inter\', \'Roboto\', sans-serif; border-bottom: 2px solid rgba(0, 85, 164, 0.1); padding-bottom: 0.75rem;">📊 Statistiques</h4>';
-        html += this._generatePoolStats(pool, playedMatches, upcomingMatches, unscheduledMatches);
-        html += '</div>';
-        
-        // Classement
-        html += '<div class="pool-content-section" style="background: white; border-radius: 10px; padding: 1.25rem; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06); border: 1px solid rgba(0, 85, 164, 0.1);">';
-        html += '<h4 class="pool-content-section-title" style="margin: 0 0 1rem 0; font-size: 1rem; font-weight: 800; color: #0055A4; display: flex; align-items: center; gap: 0.5rem; font-family: \'Inter\', \'Roboto\', sans-serif; border-bottom: 2px solid rgba(0, 85, 164, 0.1); padding-bottom: 0.75rem;">🏆 Classement</h4>';
-        html += this._generateStandings(pool, data, playedMatches);
-        html += '</div>';
+            // Statistiques détaillées
+            if (this.displayOptions.showStats) {
+                html += '<div class="pool-content-section">';
+                html += '<h4 class="pool-content-section__title">📊 Statistiques</h4>';
+                html += this._generatePoolStats(pool, playedMatches, upcomingMatches, unscheduledMatches);
+                html += '</div>';
+            }
+            
+            // Classement
+            if (this.displayOptions.showStandings) {
+                html += '<div class="pool-content-section">';
+                html += '<h4 class="pool-content-section__title">🏆 Classement</h4>';
+                // Passer tous les matchs de la poule pour calculer les stats correctement
+                html += this._generateStandings(pool, data, poolMatches);
+                html += '</div>';
+            }
 
-        html += '</div>'; // Fin de pool-details-grid
+            html += '</div>'; // Fin de pool-details-grid
+        }
         
         // Matchs avec onglets
-        html += '<div class="pool-content-section" style="background: white; border-radius: 10px; padding: 1.25rem; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06); border: 1px solid rgba(0, 85, 164, 0.1);">';
-        html += '<h4 class="pool-content-section-title" style="margin: 0 0 1rem 0; font-size: 1rem; font-weight: 800; color: #0055A4; display: flex; align-items: center; gap: 0.5rem; font-family: \'Inter\', \'Roboto\', sans-serif; border-bottom: 2px solid rgba(0, 85, 164, 0.1); padding-bottom: 0.75rem;">⚽ Matchs</h4>';
-        html += this._generatePoolMatchesWithTabs(pool.id, playedMatches, upcomingMatches, data);
-        html += '</div>';
+        if (this.displayOptions.showMatches) {
+            html += '<div class="pool-content-section">';
+            html += '<h4 class="pool-content-section__title">⚽ Matchs</h4>';
+            html += this._generatePoolMatchesWithTabs(pool.id, playedMatches, upcomingMatches, data);
+            html += '</div>';
+        }
         
         html += '</div>'; // Fin de pool-content
 
@@ -661,10 +921,11 @@ class PoolsView {
         
         teams.forEach(team => {
             const teamNom = this._escapeHtml(team.nom);
+            const sportEmoji = window.sportUtils?.getEmoji() || '🏐';
             
             html += `
                 <div class="team-item">
-                    <div class="team-item-icon">🏐</div>
+                    <div class="team-item-icon">${sportEmoji}</div>
                     <div class="team-item-content">
                         <div class="team-item-name">${teamNom}</div>
             `;
@@ -744,86 +1005,120 @@ class PoolsView {
         const ententeMatches = [...playedMatches, ...upcomingMatches].filter(m => m.is_entente);
         
         return `
-            <div class="pool-stats" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 1rem;">
-                <div class="stat-item" style="text-align: center; padding: 0.75rem; background: rgba(39, 174, 96, 0.08); border-radius: 8px; border: 1px solid rgba(39, 174, 96, 0.2);">
-                    <div class="stat-item-value" style="font-size: 1.5rem; font-weight: 900; color: #27AE60; font-family: 'Roboto Mono', monospace; margin-bottom: 0.25rem;">${playedMatches.length}</div>
-                    <div class="stat-item-label" style="font-size: 0.7rem; font-weight: 700; color: #666; text-transform: uppercase; letter-spacing: 0.05em; font-family: 'Roboto', sans-serif;">Joués</div>
-                    <div class="stat-item-detail" style="font-size: 0.65rem; color: #999; margin-top: 0.25rem;">${playedRate}% du total</div>
+            <div class="pool-stats">
+                <div class="stat-item stat-item--success">
+                    <div class="stat-item__value stat-item__value--success">${playedMatches.length}</div>
+                    <div class="stat-item__label">Joués</div>
+                    <div class="stat-item__detail">${playedRate}% du total</div>
                 </div>
-                <div class="stat-item" style="text-align: center; padding: 0.75rem; background: rgba(0, 123, 255, 0.08); border-radius: 8px; border: 1px solid rgba(0, 123, 255, 0.2);">
-                    <div class="stat-item-value" style="font-size: 1.5rem; font-weight: 900; color: #007BFF; font-family: 'Roboto Mono', monospace; margin-bottom: 0.25rem;">${upcomingMatches.length}</div>
-                    <div class="stat-item-label" style="font-size: 0.7rem; font-weight: 700; color: #666; text-transform: uppercase; letter-spacing: 0.05em; font-family: 'Roboto', sans-serif;">À venir</div>
+                <div class="stat-item stat-item--info">
+                    <div class="stat-item__value stat-item__value--info">${upcomingMatches.length}</div>
+                    <div class="stat-item__label">À venir</div>
                 </div>
-                <div class="stat-item" style="text-align: center; padding: 0.75rem; background: rgba(239, 65, 53, 0.08); border-radius: 8px; border: 1px solid rgba(239, 65, 53, 0.2);">
-                    <div class="stat-item-value" style="font-size: 1.5rem; font-weight: 900; color: #EF4135; font-family: 'Roboto Mono', monospace; margin-bottom: 0.25rem;">${unscheduledMatches.length}</div>
-                    <div class="stat-item-label" style="font-size: 0.7rem; font-weight: 700; color: #666; text-transform: uppercase; letter-spacing: 0.05em; font-family: 'Roboto', sans-serif;">Non planifiés</div>
+                <div class="stat-item stat-item--danger">
+                    <div class="stat-item__value stat-item__value--danger">${unscheduledMatches.length}</div>
+                    <div class="stat-item__label">Non planifiés</div>
                 </div>
                 ${ententeMatches.length > 0 ? `
-                <div class="stat-item" style="text-align: center; padding: 0.75rem; background: rgba(255, 193, 7, 0.08); border-radius: 8px; border: 1px solid rgba(255, 193, 7, 0.2);">
-                    <div class="stat-item-value" style="font-size: 1.5rem; font-weight: 900; color: #FFC107; font-family: 'Roboto Mono', monospace; margin-bottom: 0.25rem;">${ententeMatches.length}</div>
-                    <div class="stat-item-label" style="font-size: 0.7rem; font-weight: 700; color: #666; text-transform: uppercase; letter-spacing: 0.05em; font-family: 'Roboto', sans-serif;">Entente</div>
+                <div class="stat-item stat-item--warning">
+                    <div class="stat-item__value stat-item__value--warning">${ententeMatches.length}</div>
+                    <div class="stat-item__label">Entente</div>
                 </div>
                 ` : ''}
-                <div class="stat-item" style="text-align: center; padding: 0.75rem; background: rgba(0, 85, 164, 0.08); border-radius: 8px; border: 1px solid rgba(0, 85, 164, 0.2);">
-                    <div class="stat-item-value" style="font-size: 1.5rem; font-weight: 900; color: #0055A4; font-family: 'Roboto Mono', monospace; margin-bottom: 0.25rem;">${completionRate}%</div>
-                    <div class="stat-item-label" style="font-size: 0.7rem; font-weight: 700; color: #666; text-transform: uppercase; letter-spacing: 0.05em; font-family: 'Roboto', sans-serif;">Planifiés</div>
-                    <div class="stat-item-detail" style="font-size: 0.65rem; color: #999; margin-top: 0.25rem;">${scheduledMatches}/${totalMatches}</div>
+                <div class="stat-item stat-item--primary">
+                    <div class="stat-item__value stat-item__value--primary">${completionRate}%</div>
+                    <div class="stat-item__label">Planifiés</div>
+                    <div class="stat-item__detail">${scheduledMatches}/${totalMatches}</div>
                 </div>
             </div>
         `;
     }
     
     /**
-     * Génère le classement d'une poule avec données améliorées
+     * Génère le classement d'une poule avec données améliorées.
+     * Affiche différentes colonnes selon le sport:
+     * - Volleyball: J (joués), ? (sans score), V (victoires), D (défaites), Pts
+     * - Autres sports: J (joués), V, N (nuls), D, Pts
+     * 
+     * @param {Object} pool - La poule
+     * @param {Object} data - Données complètes
+     * @param {Array} allPoolMatches - Tous les matchs de la poule (avec ou sans score)
      */
-    _generateStandings(pool, data, playedMatches) {
+    _generateStandings(pool, data, allPoolMatches) {
         // Récupérer les équipes de la poule
         const teams = this._getPoolTeams(pool.id, data);
         
         if (teams.length === 0) {
-            return '<div class="no-matches" style="text-align: center; padding: 2rem; color: #999; font-size: 0.9rem; font-family: \'Roboto\', sans-serif;">Aucune équipe dans cette poule</div>';
+            return '<div class="standings-empty">Aucune équipe dans cette poule</div>';
         }
         
-        // Calculer les stats des équipes basées sur les matchs joués
-        const standings = this._calculateDetailedStandings(teams, playedMatches);
+        // Calculer les stats des équipes basées sur tous les matchs de la poule
+        const standings = this._calculateDetailedStandings(teams, allPoolMatches);
+        
+        const sportType = window.sportUtils?.getType() || 'volleyball';
+        const isVolleyball = sportType === 'volleyball';
         
         let html = `
-            <div class="pool-standings" style="overflow-x: auto;">
-                <table class="standings-table" style="width: 100%; border-collapse: collapse; font-size: 0.85rem; font-family: 'Roboto', sans-serif;">
+            <div class="pool-standings">
+                <table class="standings-table">
                     <thead>
-                        <tr style="background: rgba(0, 85, 164, 0.08); border-bottom: 2px solid rgba(0, 85, 164, 0.2);">
-                            <th style="padding: 0.6rem 0.5rem; text-align: center; font-size: 0.7rem; font-weight: 800; color: #666; text-transform: uppercase; letter-spacing: 0.05em;">#</th>
-                            <th style="padding: 0.6rem 0.75rem; text-align: left; font-size: 0.7rem; font-weight: 800; color: #666; text-transform: uppercase; letter-spacing: 0.05em;">Équipe</th>
-                            <th style="padding: 0.6rem 0.5rem; text-align: center; font-size: 0.7rem; font-weight: 800; color: #666; text-transform: uppercase; letter-spacing: 0.05em;" title="Matchs Joués">J</th>
-                            <th style="padding: 0.6rem 0.5rem; text-align: center; font-size: 0.7rem; font-weight: 800; color: #666; text-transform: uppercase; letter-spacing: 0.05em;" title="Victoires">G</th>
-                            <th style="padding: 0.6rem 0.5rem; text-align: center; font-size: 0.7rem; font-weight: 800; color: #666; text-transform: uppercase; letter-spacing: 0.05em;" title="Nuls">N</th>
-                            <th style="padding: 0.6rem 0.5rem; text-align: center; font-size: 0.7rem; font-weight: 800; color: #666; text-transform: uppercase; letter-spacing: 0.05em;" title="Défaites">P</th>
-                            <th style="padding: 0.6rem 0.5rem; text-align: center; font-size: 0.7rem; font-weight: 800; color: #0055A4; text-transform: uppercase; letter-spacing: 0.05em;" title="Points">Pts</th>
+                        <tr class="standings-table__header-row">
+                            <th class="standings-table__th standings-table__th--rank">#</th>
+                            <th class="standings-table__th standings-table__th--team">Équipe</th>
+                            <th class="standings-table__th standings-table__th--stat" title="Matchs Joués">J</th>
+                            <th class="standings-table__th standings-table__th--stat" title="Matchs sans score">?</th>
+                            <th class="standings-table__th standings-table__th--stat" title="Victoires">V</th>
+                            ${!isVolleyball ? '<th class="standings-table__th standings-table__th--stat" title="Nuls">N</th>' : ''}
+                            <th class="standings-table__th standings-table__th--stat" title="Défaites">D</th>
+                            <th class="standings-table__th standings-table__th--stat" title="Différence de ${isVolleyball ? 'sets' : 'buts'}">+/-</th>
+                            <th class="standings-table__th standings-table__th--points" title="Points">Pts</th>
                         </tr>
                     </thead>
                     <tbody>
         `;
         
         standings.forEach((team, index) => {
-            const positionClass = index < 3 ? `position-${index + 1}` : '';
-            let rowStyle = 'border-bottom: 1px solid rgba(0, 85, 164, 0.1);';
-            if (index === 0) rowStyle += ' background: rgba(255, 215, 0, 0.1);'; // Or pour 1er
-            else if (index === 1) rowStyle += ' background: rgba(192, 192, 192, 0.1);'; // Argent pour 2e
-            else if (index === 2) rowStyle += ' background: rgba(205, 127, 50, 0.1);'; // Bronze pour 3e
+            const positionClass = index < 3 ? `standings-table__row--position-${index + 1}` : '';
             
             // Échapper les noms d'équipes
             const teamNom = this._escapeHtml(team.nom);
             const teamNomComplet = this._escapeHtml(team.nom_complet || team.nom);
             
+            // Calculer la différence de sets/buts
+            const diff = team.setsFor - team.setsAgainst;
+            const diffDisplay = diff > 0 ? `+${diff}` : diff.toString();
+            const diffClass = diff > 0 ? 'standings-table__td--positive' : (diff < 0 ? 'standings-table__td--negative' : '');
+            
+            // Formater les victoires/défaites pour le volleyball (avec détail tie-break)
+            let wonDisplay, lostDisplay;
+            if (isVolleyball && (team.wonTieBreak > 0 || team.lostTieBreak > 0)) {
+                // Afficher le détail si au moins un tie-break
+                wonDisplay = team.won;
+                lostDisplay = team.lost;
+            } else {
+                wonDisplay = team.won;
+                lostDisplay = team.lost;
+            }
+            
+            // Tooltip détaillé pour le volleyball
+            const wonTooltip = isVolleyball 
+                ? `Victoires: ${team.wonClassic} classiques (3-0/3-1) + ${team.wonTieBreak} tie-breaks (3-2)`
+                : `${team.won} victoire(s)`;
+            const lostTooltip = isVolleyball
+                ? `Défaites: ${team.lostClassic} classiques (0-3/1-3) + ${team.lostTieBreak} tie-breaks (2-3)`
+                : `${team.lost} défaite(s)`;
+            
             html += `
-                <tr class="${positionClass}" style="${rowStyle}">
-                    <td style="padding: 0.6rem 0.5rem; text-align: center; font-weight: 700; color: ${index < 3 ? '#0055A4' : '#666'}; font-family: 'Roboto Mono', monospace;">${index + 1}</td>
-                    <td class="team-name" title="${teamNomComplet}" style="padding: 0.6rem 0.75rem; font-weight: 600; color: #333;">${teamNom}</td>
-                    <td style="padding: 0.6rem 0.5rem; text-align: center; font-weight: 600; color: #666; font-family: 'Roboto Mono', monospace;">${team.played}</td>
-                    <td style="padding: 0.6rem 0.5rem; text-align: center; font-weight: 600; color: #27AE60; font-family: 'Roboto Mono', monospace;">${team.won}</td>
-                    <td style="padding: 0.6rem 0.5rem; text-align: center; font-weight: 600; color: #FF9500; font-family: 'Roboto Mono', monospace;">${team.drawn}</td>
-                    <td style="padding: 0.6rem 0.5rem; text-align: center; font-weight: 600; color: #EF4135; font-family: 'Roboto Mono', monospace;">${team.lost}</td>
-                    <td class="points" style="padding: 0.6rem 0.5rem; text-align: center; font-weight: 900; font-size: 1rem; color: #0055A4; font-family: 'Roboto Mono', monospace;">${team.points}</td>
+                <tr class="standings-table__row ${positionClass}">
+                    <td class="standings-table__td standings-table__td--rank ${index < 3 ? 'standings-table__td--top3' : ''}">${index + 1}</td>
+                    <td class="standings-table__td standings-table__td--team" title="${teamNomComplet}">${teamNom}</td>
+                    <td class="standings-table__td standings-table__td--played">${team.played}</td>
+                    <td class="standings-table__td standings-table__td--noscore ${team.noScore > 0 ? 'standings-table__td--warning' : ''}" title="Matchs planifiés sans score">${team.noScore}</td>
+                    <td class="standings-table__td standings-table__td--won" title="${wonTooltip}">${wonDisplay}</td>
+                    ${!isVolleyball ? `<td class="standings-table__td standings-table__td--drawn">${team.drawn}</td>` : ''}
+                    <td class="standings-table__td standings-table__td--lost" title="${lostTooltip}">${lostDisplay}</td>
+                    <td class="standings-table__td standings-table__td--diff ${diffClass}" title="${team.setsFor} - ${team.setsAgainst}">${diffDisplay}</td>
+                    <td class="standings-table__td standings-table__td--points">${team.points}</td>
                 </tr>
             `;
         });
@@ -833,6 +1128,19 @@ class PoolsView {
                 </table>
             </div>
         `;
+        
+        // Légende pour le volleyball
+        if (isVolleyball) {
+            html += `
+                <div class="standings-legend">
+                    <small class="standings-legend__text">
+                        <span title="Victoire classique (3-0 ou 3-1): 3 pts">V: 3 ou 2 pts</span> · 
+                        <span title="Défaite tie-break (2-3): 1 pt">D(tb): 1 pt</span> · 
+                        <span title="Défaite classique (0-3 ou 1-3): 0 pt">D: 0 pt</span>
+                    </small>
+                </div>
+            `;
+        }
         
         return html;
     }
@@ -856,10 +1164,16 @@ class PoolsView {
     }
     
     /**
-     * Calcule le classement détaillé avec victoires/défaites basé sur les scores réels
+     * Calcule le classement détaillé avec victoires/défaites basé sur les scores réels.
+     * Supporte différents systèmes de points selon le sport:
+     * - Volleyball: 3pts victoire classique (3-0/3-1), 2pts victoire tie-break (3-2),
+     *               1pt défaite tie-break (2-3), 0pts défaite classique (0-3/1-3)
+     * - Autres sports: 3pts victoire, 1pt nul, 0pts défaite
      */
     _calculateDetailedStandings(teams, matches) {
         const stats = {};
+        const sportType = window.sportUtils?.getType() || 'volleyball';
+        const isVolleyball = sportType === 'volleyball';
         
         // Initialiser les stats
         teams.forEach(team => {
@@ -867,14 +1181,30 @@ class PoolsView {
                 id: team.id,
                 nom: team.nom,
                 nom_complet: team.nom_complet,
-                played: 0,
-                won: 0,
-                drawn: 0,
-                lost: 0,
+                played: 0,           // Matchs joués (avec score)
+                noScore: 0,          // Matchs sans score (assignés à cette équipe mais pas de score)
+                won: 0,              // Total victoires
+                wonClassic: 0,       // Victoires classiques (3-0, 3-1) - volley
+                wonTieBreak: 0,      // Victoires tie-break (3-2) - volley
+                drawn: 0,            // Match nul (autres sports)
+                lost: 0,             // Total défaites
+                lostTieBreak: 0,     // Défaites tie-break (2-3) - volley
+                lostClassic: 0,      // Défaites classiques (0-3, 1-3) - volley
                 points: 0,
-                goalsFor: 0,
-                goalsAgainst: 0
+                setsFor: 0,          // Sets gagnés (volley) / Buts marqués (autres)
+                setsAgainst: 0       // Sets perdus (volley) / Buts encaissés (autres)
             };
+        });
+        
+        // Compter les matchs sans score pour chaque équipe
+        // Les matchs sont passés en paramètre (inclut matchs planifiés + non planifiés)
+        // Un match sans score = match planifié (has_score: false ou is_fixed: true sans score)
+        matches.forEach(match => {
+            if (!this._hasValidScore(match)) {
+                // Match sans score valide
+                if (stats[match.equipe1_id]) stats[match.equipe1_id].noScore++;
+                if (stats[match.equipe2_id]) stats[match.equipe2_id].noScore++;
+            }
         });
         
         // Analyser les matchs avec scores
@@ -894,48 +1224,124 @@ class PoolsView {
             stats[team1Id].played++;
             stats[team2Id].played++;
             
-            // Enregistrer les buts
-            stats[team1Id].goalsFor += score1;
-            stats[team1Id].goalsAgainst += score2;
-            stats[team2Id].goalsFor += score2;
-            stats[team2Id].goalsAgainst += score1;
+            // Enregistrer les sets/buts
+            stats[team1Id].setsFor += score1;
+            stats[team1Id].setsAgainst += score2;
+            stats[team2Id].setsFor += score2;
+            stats[team2Id].setsAgainst += score1;
             
-            // Déterminer le résultat et attribuer les points
-            if (score1 > score2) {
-                // Victoire équipe 1
-                stats[team1Id].won++;
-                stats[team1Id].points += 3;
-                stats[team2Id].lost++;
-            } else if (score2 > score1) {
-                // Victoire équipe 2
-                stats[team2Id].won++;
-                stats[team2Id].points += 3;
-                stats[team1Id].lost++;
+            // Déterminer le résultat et attribuer les points selon le sport
+            if (isVolleyball) {
+                // Système de points volleyball
+                this._applyVolleyballPoints(stats, team1Id, team2Id, score1, score2);
             } else {
-                // Match nul
-                stats[team1Id].drawn++;
-                stats[team1Id].points += 1;
-                stats[team2Id].drawn++;
-                stats[team2Id].points += 1;
+                // Système de points classique (autres sports)
+                this._applyClassicPoints(stats, team1Id, team2Id, score1, score2);
             }
         });
         
-        // Trier par points, puis goal average, puis buts marqués, puis nom
+        // Trier par points, puis sets/goal average, puis sets/buts marqués, puis nom
         return Object.values(stats).sort((a, b) => {
             // D'abord par points
             if (b.points !== a.points) return b.points - a.points;
             
-            // Puis par goal average (différence de buts)
-            const diffA = a.goalsFor - a.goalsAgainst;
-            const diffB = b.goalsFor - b.goalsAgainst;
+            // Puis par différence de sets/buts
+            const diffA = a.setsFor - a.setsAgainst;
+            const diffB = b.setsFor - b.setsAgainst;
             if (diffB !== diffA) return diffB - diffA;
             
-            // Puis par buts marqués
-            if (b.goalsFor !== a.goalsFor) return b.goalsFor - a.goalsFor;
+            // Puis par sets/buts marqués
+            if (b.setsFor !== a.setsFor) return b.setsFor - a.setsFor;
+            
+            // Puis par nombre de victoires
+            if (b.won !== a.won) return b.won - a.won;
             
             // Enfin par nom
             return a.nom.localeCompare(b.nom);
         });
+    }
+    
+    /**
+     * Applique le système de points volleyball:
+     * - Victoire 3-0 ou 3-1: 3 points pour le gagnant, 0 pour le perdant
+     * - Victoire 3-2 (tie-break): 2 points pour le gagnant, 1 pour le perdant
+     * - Si le score n'est pas classique (ex: gagnant < 3 sets), considéré comme sans tie-break
+     */
+    _applyVolleyballPoints(stats, team1Id, team2Id, score1, score2) {
+        const maxScore = Math.max(score1, score2);
+        const minScore = Math.min(score1, score2);
+        
+        // Déterminer si c'est un tie-break (3-2)
+        // Un tie-break valide est exactement 3-2
+        // Si le score n'est pas classique (gagnant != 3), on considère pas de tie-break
+        const isTieBreak = (maxScore === 3 && minScore === 2);
+        
+        if (score1 > score2) {
+            // Victoire équipe 1
+            stats[team1Id].won++;
+            stats[team2Id].lost++;
+            
+            if (isTieBreak) {
+                // Victoire au tie-break: 2pts gagnant, 1pt perdant
+                stats[team1Id].wonTieBreak++;
+                stats[team1Id].points += 2;
+                stats[team2Id].lostTieBreak++;
+                stats[team2Id].points += 1;
+            } else {
+                // Victoire classique: 3pts gagnant, 0pt perdant
+                stats[team1Id].wonClassic++;
+                stats[team1Id].points += 3;
+                stats[team2Id].lostClassic++;
+            }
+        } else if (score2 > score1) {
+            // Victoire équipe 2
+            stats[team2Id].won++;
+            stats[team1Id].lost++;
+            
+            if (isTieBreak) {
+                // Victoire au tie-break: 2pts gagnant, 1pt perdant
+                stats[team2Id].wonTieBreak++;
+                stats[team2Id].points += 2;
+                stats[team1Id].lostTieBreak++;
+                stats[team1Id].points += 1;
+            } else {
+                // Victoire classique: 3pts gagnant, 0pt perdant
+                stats[team2Id].wonClassic++;
+                stats[team2Id].points += 3;
+                stats[team1Id].lostClassic++;
+            }
+        }
+        // Pas de match nul en volleyball
+    }
+    
+    /**
+     * Applique le système de points classique (football, handball, basket...):
+     * - Victoire: 3 points
+     * - Nul: 1 point
+     * - Défaite: 0 point
+     */
+    _applyClassicPoints(stats, team1Id, team2Id, score1, score2) {
+        if (score1 > score2) {
+            // Victoire équipe 1
+            stats[team1Id].won++;
+            stats[team1Id].wonClassic++;
+            stats[team1Id].points += 3;
+            stats[team2Id].lost++;
+            stats[team2Id].lostClassic++;
+        } else if (score2 > score1) {
+            // Victoire équipe 2
+            stats[team2Id].won++;
+            stats[team2Id].wonClassic++;
+            stats[team2Id].points += 3;
+            stats[team1Id].lost++;
+            stats[team1Id].lostClassic++;
+        } else {
+            // Match nul
+            stats[team1Id].drawn++;
+            stats[team1Id].points += 1;
+            stats[team2Id].drawn++;
+            stats[team2Id].points += 1;
+        }
     }
     
     /**
@@ -952,58 +1358,50 @@ class PoolsView {
         let html = `
             <div class="pool-matches">
                 
-                <div class="matches-tabs" style="display: flex; gap: 0.5rem; margin-bottom: 1rem; border-bottom: 2px solid rgba(0, 85, 164, 0.1); padding-bottom: 0.5rem;">
-                    <button class="match-tab ${activeTab === 'upcoming' ? 'active' : ''}" 
-                            data-tab="upcoming" data-pool="${poolId}"
-                            style="flex: 1; padding: 0.6rem 1rem; background: ${activeTab === 'upcoming' ? 'linear-gradient(135deg, #0055A4 0%, rgba(0, 85, 164, 0.9) 100%)' : 'rgba(0, 85, 164, 0.05)'}; color: ${activeTab === 'upcoming' ? 'white' : '#0055A4'}; border: 1px solid ${activeTab === 'upcoming' ? '#0055A4' : 'rgba(0, 85, 164, 0.2)'}; border-radius: 8px; font-weight: 700; font-size: 0.85rem; cursor: pointer; transition: all 0.2s ease; font-family: 'Roboto', sans-serif; display: flex; align-items: center; justify-content: center; gap: 0.5rem; box-shadow: ${activeTab === 'upcoming' ? '0 2px 6px rgba(0, 85, 164, 0.3)' : 'none'};">
+                <div class="matches-tabs">
+                    <button class="match-tab ${activeTab === 'upcoming' ? 'match-tab--active' : ''}" 
+                            data-tab="upcoming" data-pool="${poolId}">
                         À venir
-                        <span class="match-tab-count" style="display: inline-flex; align-items: center; justify-content: center; min-width: 24px; height: 24px; background: ${activeTab === 'upcoming' ? 'rgba(255, 255, 255, 0.25)' : 'rgba(0, 85, 164, 0.15)'}; border-radius: 50%; font-size: 0.75rem; font-weight: 900; font-family: 'Roboto Mono', monospace; padding: 0 0.3rem;">${upcomingMatches.length}</span>
+                        <span class="match-tab__count">${upcomingMatches.length}</span>
                     </button>
-                    <button class="match-tab ${activeTab === 'played' ? 'active' : ''}" 
-                            data-tab="played" data-pool="${poolId}"
-                            style="flex: 1; padding: 0.6rem 1rem; background: ${activeTab === 'played' ? 'linear-gradient(135deg, #0055A4 0%, rgba(0, 85, 164, 0.9) 100%)' : 'rgba(0, 85, 164, 0.05)'}; color: ${activeTab === 'played' ? 'white' : '#0055A4'}; border: 1px solid ${activeTab === 'played' ? '#0055A4' : 'rgba(0, 85, 164, 0.2)'}; border-radius: 8px; font-weight: 700; font-size: 0.85rem; cursor: pointer; transition: all 0.2s ease; font-family: 'Roboto', sans-serif; display: flex; align-items: center; justify-content: center; gap: 0.5rem; box-shadow: ${activeTab === 'played' ? '0 2px 6px rgba(0, 85, 164, 0.3)' : 'none'};">
+                    <button class="match-tab ${activeTab === 'played' ? 'match-tab--active' : ''}" 
+                            data-tab="played" data-pool="${poolId}">
                         Joués
-                        <span class="match-tab-count" style="display: inline-flex; align-items: center; justify-content: center; min-width: 24px; height: 24px; background: ${activeTab === 'played' ? 'rgba(255, 255, 255, 0.25)' : 'rgba(0, 85, 164, 0.15)'}; border-radius: 50%; font-size: 0.75rem; font-weight: 900; font-family: 'Roboto Mono', monospace; padding: 0 0.3rem;">${playedMatches.length}</span>
+                        <span class="match-tab__count">${playedMatches.length}</span>
                     </button>
                     ${unscheduledMatches.length > 0 ? `
-                    <button class="match-tab ${activeTab === 'unscheduled' ? 'active' : ''}" 
-                            data-tab="unscheduled" data-pool="${poolId}"
-                            style="flex: 1; padding: 0.6rem 1rem; background: ${activeTab === 'unscheduled' ? 'linear-gradient(135deg, #EF4135 0%, rgba(239, 65, 53, 0.9) 100%)' : 'rgba(239, 65, 53, 0.05)'}; color: ${activeTab === 'unscheduled' ? 'white' : '#EF4135'}; border: 1px solid ${activeTab === 'unscheduled' ? '#EF4135' : 'rgba(239, 65, 53, 0.2)'}; border-radius: 8px; font-weight: 700; font-size: 0.85rem; cursor: pointer; transition: all 0.2s ease; font-family: 'Roboto', sans-serif; display: flex; align-items: center; justify-content: center; gap: 0.5rem; box-shadow: ${activeTab === 'unscheduled' ? '0 2px 6px rgba(239, 65, 53, 0.3)' : 'none'};">
+                    <button class="match-tab match-tab--unscheduled ${activeTab === 'unscheduled' ? 'match-tab--active' : ''}" 
+                            data-tab="unscheduled" data-pool="${poolId}">
                         Non planifiés
-                        <span class="match-tab-count" style="display: inline-flex; align-items: center; justify-content: center; min-width: 24px; height: 24px; background: ${activeTab === 'unscheduled' ? 'rgba(255, 255, 255, 0.25)' : 'rgba(239, 65, 53, 0.15)'}; border-radius: 50%; font-size: 0.75rem; font-weight: 900; font-family: 'Roboto Mono', monospace; padding: 0 0.3rem;">${unscheduledMatches.length}</span>
+                        <span class="match-tab__count">${unscheduledMatches.length}</span>
                     </button>
                     ` : ''}
-                    <button class="match-tab ${activeTab === 'all' ? 'active' : ''}" 
-                            data-tab="all" data-pool="${poolId}"
-                            style="flex: 1; padding: 0.6rem 1rem; background: ${activeTab === 'all' ? 'linear-gradient(135deg, #0055A4 0%, rgba(0, 85, 164, 0.9) 100%)' : 'rgba(0, 85, 164, 0.05)'}; color: ${activeTab === 'all' ? 'white' : '#0055A4'}; border: 1px solid ${activeTab === 'all' ? '#0055A4' : 'rgba(0, 85, 164, 0.2)'}; border-radius: 8px; font-weight: 700; font-size: 0.85rem; cursor: pointer; transition: all 0.2s ease; font-family: 'Roboto', sans-serif; display: flex; align-items: center; justify-content: center; gap: 0.5rem; box-shadow: ${activeTab === 'all' ? '0 2px 6px rgba(0, 85, 164, 0.3)' : 'none'};">
+                    <button class="match-tab ${activeTab === 'all' ? 'match-tab--active' : ''}" 
+                            data-tab="all" data-pool="${poolId}">
                         Tous
-                        <span class="match-tab-count" style="display: inline-flex; align-items: center; justify-content: center; min-width: 24px; height: 24px; background: ${activeTab === 'all' ? 'rgba(255, 255, 255, 0.25)' : 'rgba(0, 85, 164, 0.15)'}; border-radius: 50%; font-size: 0.75rem; font-weight: 900; font-family: 'Roboto Mono', monospace; padding: 0 0.3rem;">${allMatches.length}</span>
+                        <span class="match-tab__count">${allMatches.length}</span>
                     </button>
                 </div>
                 
-                <div class="matches-content ${activeTab === 'upcoming' ? 'active' : ''}" 
-                     data-content="upcoming" data-pool="${poolId}"
-                     style="display: ${activeTab === 'upcoming' ? 'block' : 'none'};">
+                <div class="matches-content ${activeTab === 'upcoming' ? 'matches-content--active' : ''}" 
+                     data-content="upcoming" data-pool="${poolId}">
                     ${this._generateMatchesList(upcomingMatches, data, 'upcoming')}
                 </div>
                 
-                <div class="matches-content ${activeTab === 'played' ? 'active' : ''}" 
-                     data-content="played" data-pool="${poolId}"
-                     style="display: ${activeTab === 'played' ? 'block' : 'none'};">
+                <div class="matches-content ${activeTab === 'played' ? 'matches-content--active' : ''}" 
+                     data-content="played" data-pool="${poolId}">
                     ${this._generateMatchesList(playedMatches, data, 'played')}
                 </div>
                 
                 ${unscheduledMatches.length > 0 ? `
-                <div class="matches-content ${activeTab === 'unscheduled' ? 'active' : ''}" 
-                     data-content="unscheduled" data-pool="${poolId}"
-                     style="display: ${activeTab === 'unscheduled' ? 'block' : 'none'};">
+                <div class="matches-content ${activeTab === 'unscheduled' ? 'matches-content--active' : ''}" 
+                     data-content="unscheduled" data-pool="${poolId}">
                     ${this._generateMatchesList(unscheduledMatches, data, 'unscheduled')}
                 </div>
                 ` : ''}
                 
-                <div class="matches-content ${activeTab === 'all' ? 'active' : ''}" 
-                     data-content="all" data-pool="${poolId}"
-                     style="display: ${activeTab === 'all' ? 'block' : 'none'};">
+                <div class="matches-content ${activeTab === 'all' ? 'matches-content--active' : ''}" 
+                     data-content="all" data-pool="${poolId}">
                     ${this._generateMatchesList(allMatches, data, 'all')}
                 </div>
             </div>
@@ -1020,7 +1418,7 @@ class PoolsView {
             const emptyMessage = type === 'upcoming' ? 'Aucun match à venir' :
                                type === 'played' ? 'Aucun match joué' :
                                'Aucun match';
-            return `<div class="no-matches" style="text-align: center; padding: 3rem 2rem; color: #999; font-size: 0.95rem; font-weight: 600; background: rgba(0, 85, 164, 0.03); border-radius: 8px; border: 1px dashed rgba(0, 85, 164, 0.2); font-family: 'Roboto', sans-serif;">${emptyMessage}</div>`;
+            return `<div class="matches-empty">${emptyMessage}</div>`;
         }
         
         // Grouper par semaine
@@ -1045,9 +1443,9 @@ class PoolsView {
         sortedWeeks.forEach(week => {
             const weekMatches = byWeek.get(week);
             
-            html += `<div class="week-group" style="margin-bottom: 1.5rem;">`;
-            html += `<h5 style="font-size: 0.9rem; font-weight: 800; color: #0055A4; margin: 0 0 0.75rem 0; padding: 0.5rem 0.75rem; background: rgba(0, 85, 164, 0.08); border-left: 4px solid #0055A4; border-radius: 6px; font-family: 'Roboto', sans-serif; display: flex; align-items: center; gap: 0.5rem;">📅 Semaine ${week}</h5>`;
-            html += `<div class="matches-grid" style="display: grid; gap: 0.75rem;">`;
+            html += `<div class="week-group">`;
+            html += `<h5 class="week-group__title">📅 Semaine ${week}</h5>`;
+            html += `<div class="matches-grid">`;
             
             weekMatches.forEach(match => {
                 html += this._generateMatchCardNew(match, data, type); // Utilisation du nouveau design
@@ -1071,9 +1469,15 @@ class PoolsView {
         
         const gymnase = this.dataManager?.getGymnaseById(match.gymnase);
         
-        // Échapper les noms pour prévenir XSS
-        const equipe1Nom = this._escapeHtml(match.equipe1_nom_complet || match.equipe1_nom || 'Équipe 1');
-        const equipe2Nom = this._escapeHtml(match.equipe2_nom_complet || match.equipe2_nom || 'Équipe 2');
+        // Échapper les noms pour prévenir XSS - éviter d'afficher "EXTERNE" pour les équipes hors championnat
+        const equipe1NomRaw = (match.equipe1_nom_complet && match.equipe1_nom_complet !== 'EXTERNE') 
+            ? match.equipe1_nom_complet 
+            : (match.equipe1_nom || 'Équipe 1');
+        const equipe2NomRaw = (match.equipe2_nom_complet && match.equipe2_nom_complet !== 'EXTERNE') 
+            ? match.equipe2_nom_complet 
+            : (match.equipe2_nom || 'Équipe 2');
+        const equipe1Nom = this._escapeHtml(equipe1NomRaw);
+        const equipe2Nom = this._escapeHtml(equipe2NomRaw);
         const equipe1Num = match.equipe1_num ? `#${this._escapeHtml(String(match.equipe1_num))}` : '';
         const equipe2Num = match.equipe2_num ? `#${this._escapeHtml(String(match.equipe2_num))}` : '';
         const gymnaseNom = this._escapeHtml(gymnase?.nom || 'Non défini');
@@ -1087,9 +1491,6 @@ class PoolsView {
         const statusClass = hasScore ? 'played' : (isScheduled ? 'upcoming' : 'unscheduled');
         const statusLabel = hasScore ? 'Terminé' : (isScheduled ? 'À venir' : 'Non planifié');
         const statusIcon = hasScore ? '✅' : (isScheduled ? '⏳' : '❌');
-        const statusBg = hasScore ? 'rgba(39, 174, 96, 0.1)' : (isScheduled ? 'rgba(0, 123, 255, 0.1)' : 'rgba(239, 65, 53, 0.1)');
-        const statusBorder = hasScore ? 'rgba(39, 174, 96, 0.25)' : (isScheduled ? 'rgba(0, 123, 255, 0.25)' : 'rgba(239, 65, 53, 0.25)');
-        const statusColor = hasScore ? '#27AE60' : (isScheduled ? '#007BFF' : '#EF4135');
         
         // Déterminer le gagnant si le match a un score
         let team1Winner = false;
@@ -1105,8 +1506,8 @@ class PoolsView {
         // Badge entente
         const isEntente = match.is_entente === true;
         const ententeBadge = isEntente ? `
-            <div class="match-badge-entente" style="display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.2rem 0.5rem; background: rgba(255, 193, 7, 0.15); border: 1px solid rgba(255, 193, 7, 0.4); border-radius: 6px; font-size: 0.65rem; font-weight: 800; color: #F57C00; font-family: 'Roboto', sans-serif; text-transform: uppercase; letter-spacing: 0.05em;">
-                <span style="font-size: 0.8rem;">🤝</span>
+            <div class="match-badge match-badge--entente">
+                <span class="match-badge__icon">🤝</span>
                 Entente
             </div>
         ` : '';
@@ -1114,108 +1515,92 @@ class PoolsView {
         // Déterminer la catégorie du match (CFU, CFE, A1, etc.)
         const category = this._extractCategory(match);
         
-        // Badge CFU (styles inline complets)
-        const cfuBadge = category === 'CFU' ? `
-            <div class="match-badge badge-cfu" style="display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.25rem 0.6rem; border-radius: 6px; font-size: 0.7rem; font-weight: 700; font-family: 'Roboto', sans-serif; text-transform: uppercase; letter-spacing: 0.08em; background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%); color: #000; border: 2px solid #FFB700; box-shadow: 0 2px 8px rgba(255, 215, 0, 0.5), 0 0 15px rgba(255, 215, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.5); text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);">
-                CFU
-            </div>
-        ` : '';
+        // Badge CFU
+        const cfuBadge = category === 'CFU' ? `<div class="match-badge match-badge--cfu">CFU</div>` : '';
         
-        // Badge CFE (styles inline complets)
-        const cfeBadge = category === 'CFE' ? `
-            <div class="match-badge badge-cfe" style="display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.25rem 0.6rem; border-radius: 6px; font-size: 0.7rem; font-weight: 700; font-family: 'Roboto', sans-serif; text-transform: uppercase; letter-spacing: 0.08em; background: linear-gradient(135deg, #4A90E2 0%, #357ABD 100%); color: #FFF; border: 2px solid #2E5F8D; box-shadow: 0 2px 8px rgba(74, 144, 226, 0.5), 0 0 15px rgba(74, 144, 226, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.3); text-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);">
-                CFE
-            </div>
-        ` : '';
+        // Badge CFE
+        const cfeBadge = category === 'CFE' ? `<div class="match-badge match-badge--cfe">CFE</div>` : '';
         
-        // Déterminer la couleur de fond selon le genre
-        const genre = match.equipe1_genre || match.equipe2_genre;
-        let bgGradient = 'linear-gradient(135deg, rgba(0, 85, 164, 0.08) 0%, rgba(0, 85, 164, 0.03) 100%)';
-        if (genre === 'M') {
-            bgGradient = 'linear-gradient(135deg, rgba(0, 123, 255, 0.08) 0%, rgba(0, 123, 255, 0.03) 100%)';
-        } else if (genre === 'F') {
-            bgGradient = 'linear-gradient(135deg, rgba(255, 20, 147, 0.08) 0%, rgba(255, 20, 147, 0.03) 100%)';
-        }
+        // Déterminer le genre pour les classes CSS - utiliser match.genre en priorité
+        const genre = match.genre || match.equipe1_genre || match.equipe2_genre;
+        const genreClass = genre === 'M' ? 'match-card--male' : genre === 'F' ? 'match-card--female' : '';
 
-        const totalPenalties = Object.values(match.penalties || {}).reduce((sum, p) => sum + p, 0);
-        const penaltyColor = totalPenalties > 10 ? '#EF4135' : totalPenalties > 5 ? '#FF9500' : '#27AE60';
+        // Use total field directly, or sum only numeric values (ignore nested objects)
+        const penalties = match.penalties || {};
+        const totalPenalties = typeof penalties.total === 'number' 
+            ? penalties.total 
+            : Object.values(penalties).reduce((sum, p) => typeof p === 'number' ? sum + p : sum, 0);
+        const penaltyClass = totalPenalties > 10 ? 'match-penalty--high' : totalPenalties > 5 ? 'match-penalty--medium' : 'match-penalty--low';
         
-        // Classes CSS pour CFU/CFE au lieu de styles inline
-        let cardClasses = `match-card-new ${statusClass}`;
-        if (category === 'CFU') {
-            cardClasses += ' match-cfu';
-        } else if (category === 'CFE') {
-            cardClasses += ' match-cfe';
-        }
-        
-        // Bordure gauche pour les matchs non planifiés (sauf CFU/CFE qui ont déjà une bordure spéciale)
-        let extraBorderStyle = '';
-        if (!isScheduled && category !== 'CFU' && category !== 'CFE') {
-            extraBorderStyle = 'border-left: 4px solid #EF4135;';
-        }
+        // Classes CSS pour la carte
+        let cardClasses = ['match-card', `match-card--${statusClass}`, genreClass];
+        if (category === 'CFU') cardClasses.push('match-card--cfu');
+        if (category === 'CFE') cardClasses.push('match-card--cfe');
+        if (!isScheduled) cardClasses.push('match-card--unscheduled');
 
         return `
-            <div class="${cardClasses}" data-match-id="${match.match_id}" style="background: white; border-radius: 10px; padding: 1rem; margin-bottom: 0.75rem; transition: all 0.2s ease; ${extraBorderStyle}">
-                <div class="match-card-new-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; padding-bottom: 0.5rem; border-bottom: 1px solid rgba(0, 85, 164, 0.1);">
-                    <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
-                        <div class="match-card-new-status" style="display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.25rem 0.6rem; background: ${statusBg}; border-radius: 6px; border: 1px solid ${statusBorder};">
-                            <span class="status-icon" style="font-size: 0.9rem;">${statusIcon}</span>
-                            <span class="status-label" style="font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: ${statusColor}; font-family: 'Roboto', sans-serif;">${statusLabel}</span>
+            <div class="${cardClasses.join(' ')}" data-match-id="${match.match_id}">
+                <div class="match-card__header">
+                    <div class="match-card__badges">
+                        <div class="match-card__status match-card__status--${statusClass}">
+                            <span class="match-card__status-icon">${statusIcon}</span>
+                            <span class="match-card__status-label">${statusLabel}</span>
                         </div>
                         ${cfuBadge}
                         ${cfeBadge}
                         ${ententeBadge}
                     </div>
-                    <div class="match-card-new-week" style="font-size: 0.75rem; font-weight: 800; color: #666; font-family: 'Roboto Mono', monospace; padding: 0.25rem 0.6rem; background: rgba(0, 85, 164, 0.08); border-radius: 6px; border: 1px solid rgba(0, 85, 164, 0.15);">
+                    <div class="match-card__week">
                         ${isScheduled ? `Semaine ${match.semaine}` : 'À planifier'}
                     </div>
                 </div>
 
-                <div class="match-card-new-body" style="display: flex; align-items: center; gap: 1rem; margin-bottom: 0.75rem; background: ${bgGradient}; padding: 0.75rem; border-radius: 8px;">
-                    <div class="team-info" style="flex: 1; display: flex; flex-direction: column; align-items: flex-start; ${team1Winner ? 'background: rgba(255, 215, 0, 0.15); padding: 0.5rem; border-radius: 6px; border: 2px solid rgba(255, 215, 0, 0.4);' : ''}">
-                        <div style="display: flex; align-items: center; gap: 0.4rem; width: 100%; justify-content: space-between;">
-                            <div style="display: flex; align-items: center; gap: 0.4rem;">
-                                ${equipe1Num ? `<span style="font-size: 0.65rem; font-weight: 800; background: rgba(0, 85, 164, 0.15); padding: 0.15rem 0.4rem; border-radius: 4px; font-family: 'Roboto Mono', monospace; color: #0055A4;">${equipe1Num}</span>` : ''}
-                                <span class="team-name" style="font-size: 0.85rem; font-weight: ${team1Winner ? '900' : '700'}; color: ${team1Winner ? '#0055A4' : '#333'}; font-family: 'Inter', 'Roboto', sans-serif; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);">${equipe1Nom}</span>
+                <div class="match-card__body">
+                    <div class="match-card__team match-card__team--left ${team1Winner ? 'match-card__team--winner' : ''}">
+                        <div class="match-card__team-info">
+                            <div class="match-card__team-details">
+                                ${equipe1Num ? `<span class="match-card__team-num">${equipe1Num}</span>` : ''}
+                                <span class="match-card__team-name ${team1Winner ? 'match-card__team-name--winner' : ''}">${equipe1Nom}</span>
                             </div>
-                            ${hasScore ? `<span style="font-size: 1.1rem; font-weight: 900; color: ${team1Winner ? '#FFD700' : '#333'}; font-family: 'Roboto Mono', monospace; min-width: 30px; text-align: center;">${match.score.equipe1}</span>` : ''}
-                            ${team1Winner ? '<span style="font-size: 1.2rem; margin-left: 0.3rem;">🏆</span>' : ''}
+                            ${hasScore ? `<span class="match-card__score ${team1Winner ? 'match-card__score--winner' : ''}">${match.score.equipe1}</span>` : ''}
+                            ${team1Winner ? '<span class="match-card__trophy">🏆</span>' : ''}
                         </div>
                     </div>
-                    <div class="match-center" style="display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-                        <span class="vs-circle" style="display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; background: white; border: 2px solid rgba(0, 85, 164, 0.2); border-radius: 50%; font-size: 0.65rem; font-weight: 900; color: #0055A4; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1); font-family: 'Roboto', sans-serif;">VS</span>
+                    <div class="match-card__versus">
+                        <span class="match-card__vs">VS</span>
                     </div>
-                    <div class="team-info team-info-right" style="flex: 1; display: flex; flex-direction: column; align-items: flex-end; ${team2Winner ? 'background: rgba(255, 215, 0, 0.15); padding: 0.5rem; border-radius: 6px; border: 2px solid rgba(255, 215, 0, 0.4);' : ''}">
-                        <div style="display: flex; align-items: center; gap: 0.4rem; width: 100%; justify-content: space-between; flex-direction: row-reverse;">
-                            <div style="display: flex; align-items: center; gap: 0.4rem;">
-                                <span class="team-name" style="font-size: 0.85rem; font-weight: ${team2Winner ? '900' : '700'}; color: ${team2Winner ? '#0055A4' : '#333'}; font-family: 'Inter', 'Roboto', sans-serif; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);">${equipe2Nom}</span>
-                                ${equipe2Num ? `<span style="font-size: 0.65rem; font-weight: 800; background: rgba(0, 85, 164, 0.15); padding: 0.15rem 0.4rem; border-radius: 4px; font-family: 'Roboto Mono', monospace; color: #0055A4;">${equipe2Num}</span>` : ''}
+                    <div class="match-card__team match-card__team--right ${team2Winner ? 'match-card__team--winner' : ''}">
+                        <div class="match-card__team-info match-card__team-info--reverse">
+                            ${team2Winner ? '<span class="match-card__trophy">🏆</span>' : ''}
+                            ${hasScore ? `<span class="match-card__score ${team2Winner ? 'match-card__score--winner' : ''}">${match.score.equipe2}</span>` : ''}
+                            <div class="match-card__team-details">
+                                <span class="match-card__team-name ${team2Winner ? 'match-card__team-name--winner' : ''}">${equipe2Nom}</span>
+                                ${equipe2Num ? `<span class="match-card__team-num">${equipe2Num}</span>` : ''}
                             </div>
-                            ${hasScore ? `<span style="font-size: 1.1rem; font-weight: 900; color: ${team2Winner ? '#FFD700' : '#333'}; font-family: 'Roboto Mono', monospace; min-width: 30px; text-align: center;">${match.score.equipe2}</span>` : ''}
-                            ${team2Winner ? '<span style="font-size: 1.2rem; margin-right: 0.3rem;">🏆</span>' : ''}
                         </div>
                     </div>
                 </div>
 
-                <div class="match-card-new-footer" style="display: flex; gap: 1rem; flex-wrap: wrap; font-size: 0.75rem;">
+                <div class="match-card__footer">
                     ${isScheduled ? `
-                    <div class="footer-info location" style="display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.25rem 0.5rem; background: rgba(0, 85, 164, 0.06); border-radius: 6px; border: 1px solid rgba(0, 85, 164, 0.1);">
-                        <span class="footer-icon" style="font-size: 0.85rem;">📍</span>
-                        <span style="font-weight: 600; color: #555; font-family: 'Roboto', sans-serif;">${gymnaseNom}</span>
+                    <div class="match-card__info match-card__info--location">
+                        <span class="match-card__info-icon">📍</span>
+                        <span class="match-card__info-text">${gymnaseNom}</span>
                     </div>
-                    <div class="footer-info time" style="display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.25rem 0.5rem; background: rgba(0, 85, 164, 0.06); border-radius: 6px; border: 1px solid rgba(0, 85, 164, 0.1);">
-                        <span class="footer-icon" style="font-size: 0.85rem;">🕒</span>
-                        <span style="font-weight: 800; color: #555; font-family: 'Roboto Mono', monospace;">${this._escapeHtml(match.jour || '')} ${this._escapeHtml(match.horaire || '')}</span>
+                    <div class="match-card__info match-card__info--time">
+                        <span class="match-card__info-icon">🕒</span>
+                        <span class="match-card__info-text match-card__info-text--mono">${this._escapeHtml(match.jour || '')} ${this._escapeHtml(match.horaire || '')}</span>
                     </div>
                     ` : `
-                    <div class="footer-info unscheduled-note" style="display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.25rem 0.5rem; background: rgba(239, 65, 53, 0.1); border-radius: 6px; border: 1px solid rgba(239, 65, 53, 0.25);">
-                        <span class="footer-icon" style="font-size: 0.85rem;">⚠️</span>
-                        <span style="font-weight: 700; color: #EF4135; font-family: 'Roboto', sans-serif; font-size: 0.7rem; text-transform: uppercase;">Ce match nécessite une planification</span>
+                    <div class="match-card__info match-card__info--warning">
+                        <span class="match-card__info-icon">⚠️</span>
+                        <span class="match-card__info-text">Ce match nécessite une planification</span>
                     </div>
                     `}
-                    ${totalPenalties > 0 ? `<div class="footer-info penalty" style="display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.25rem 0.5rem; background: rgba(${totalPenalties > 10 ? '239, 65, 53' : totalPenalties > 5 ? '255, 149, 0' : '39, 174, 96'}, 0.1); border-radius: 6px; border: 1px solid rgba(${totalPenalties > 10 ? '239, 65, 53' : totalPenalties > 5 ? '255, 149, 0' : '39, 174, 96'}, 0.25);" title="Pénalités: ${totalPenalties.toFixed(1)}">
-                        <span class="footer-icon" style="font-size: 0.85rem;">⚠️</span>
-                        <span style="font-weight: 900; color: ${penaltyColor}; font-family: 'Roboto Mono', monospace;">${totalPenalties.toFixed(1)}</span>
+                    ${totalPenalties > 0 ? `
+                    <div class="match-card__info match-card__info--penalty ${penaltyClass}" title="Pénalités: ${totalPenalties.toFixed(1)}">
+                        <span class="match-card__info-icon">⚠️</span>
+                        <span class="match-card__info-text match-card__info-text--mono">${totalPenalties.toFixed(1)}</span>
                     </div>` : ''}
                 </div>
             </div>

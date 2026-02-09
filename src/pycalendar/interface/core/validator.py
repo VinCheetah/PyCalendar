@@ -597,57 +597,59 @@ class SolutionValidator:
         
         Args:
             issues: List of validation issues
+            verbose: If False, only show errors and warnings (skip INFO)
             
         Returns:
             Formatted report string
         """
         if not issues:
-            return "✅ Aucun problème détecté"
+            return "✅ Validation réussie"
         
-        # Group by severity and category
+        # Count INFO issues
+        nb_info = sum(1 for i in issues if i.severity == Severity.INFO)
+        
+        # Filter issues - always skip INFO in report (too verbose)
+        display_issues = [i for i in issues if i.severity != Severity.INFO]
+        
+        if not display_issues:
+            return f"✅ Validation réussie ({nb_info} info(s) de cohérence)"
+        
+        # Group by severity
         by_severity = defaultdict(list)
-        by_category = defaultdict(list)
-        
-        for issue in issues:
+        for issue in display_issues:
             by_severity[issue.severity].append(issue)
-            by_category[issue.category].append(issue)
         
         lines = []
-        lines.append("=" * 80)
-        lines.append("RAPPORT DE VALIDATION")
-        lines.append("=" * 80)
         
-        # Summary
-        lines.append(f"\n📊 RÉSUMÉ")
-        lines.append(f"   Total: {len(issues)} problème(s)")
-        lines.append(f"   Erreurs: {len(by_severity[Severity.ERROR])}")
-        lines.append(f"   Avertissements: {len(by_severity[Severity.WARNING])}")
-        lines.append(f"   Informations: {len(by_severity[Severity.INFO])}")
+        # Compact summary
+        errors = len(by_severity[Severity.ERROR])
+        warnings = len(by_severity[Severity.WARNING])
         
-        # By category
-        lines.append(f"\n📁 PAR CATÉGORIE")
-        for category, cat_issues in sorted(by_category.items()):
-            lines.append(f"   {category}: {len(cat_issues)}")
+        if errors > 0:
+            lines.append(f"  ✗ Validation: {errors} erreur(s), {warnings} avertissement(s)")
+        elif warnings > 0:
+            lines.append(f"  ⚠ Validation: {warnings} avertissement(s)")
         
-        # Detailed issues
-        for severity in [Severity.ERROR, Severity.WARNING, Severity.INFO]:
+        # Details (compact, grouped by category)
+        for severity in [Severity.ERROR, Severity.WARNING]:
             severity_issues = by_severity[severity]
             if not severity_issues:
                 continue
             
-            icon = "❌" if severity == Severity.ERROR else "⚠️" if severity == Severity.WARNING else "ℹ️"
-            lines.append(f"\n{icon} {severity.value}S ({len(severity_issues)})")
-            lines.append("-" * 80)
-            
+            # Group by category
+            by_cat = defaultdict(list)
             for issue in severity_issues:
-                lines.append(f"\n  {issue.category}: {issue.message}")
-                if issue.location:
-                    lines.append(f"  └─ {issue.location}")
-                if issue.details:
-                    for key, value in issue.details.items():
-                        lines.append(f"     • {key}: {value}")
-        
-        lines.append("\n" + "=" * 80)
+                by_cat[issue.category].append(issue)
+            
+            for cat, cat_issues in by_cat.items():
+                if len(cat_issues) == 1:
+                    lines.append(f"    {cat}: {cat_issues[0].message}")
+                else:
+                    lines.append(f"    {cat}: {len(cat_issues)} problème(s)")
+                    for issue in cat_issues[:3]:  # Limiter à 3
+                        lines.append(f"      • {issue.message}")
+                    if len(cat_issues) > 3:
+                        lines.append(f"      ... et {len(cat_issues) - 3} autres")
         
         return "\n".join(lines)
     

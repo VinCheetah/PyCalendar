@@ -1,0 +1,35 @@
+# Configuration PyCalendar - Handball avec CP-SAT
+# ====================================
+# Seules les valeurs différentes des défauts sont spécifiées
+
+# Fichiers
+fichiers:
+  donnees: "data/volleyball/config_volleyP2.xlsx"
+  sortie: "data/volleyball/calendrier_volleyP2.xlsx"
+
+# Paramètres de planification (seulement valeurs différentes des défauts)
+planification:
+  semaine_min: 4     # Première semaine où le planificateur peut poser de nouveaux matchs
+  nb_semaines: 14    # Nombre total de semaines de compétition (calendrier: semaine 1 à 10)
+
+
+
+# Configuration CP-SAT (OR-Tools)
+cpsat:
+  temps_max_secondes: 3000    # Minimum ~45-60s needed to find feasible solution for 267 matches
+  warm_start: false  # Disabled: causes issues with solver status
+  warm_start_file: "volley"  # Solutions spécifiques au volley
+
+contraintes:
+  compaction_penalites_par_semaine: [0, 1, 2, 3, 0, 4, 5, 6, 7, 8, 9, 10000000, 0, 10000000] 
+  
+
+calendrier:
+  actif: true
+  date_debut: "2026-01-22"  # Date de début de saison (premier jour possible pour les matchs)
+  jour_match: "jeudi"  # Jour de la semaine où se déroulent les matchs
+  semaines_banalisees: [5, 12, 13, 14]  # Liste des numéros de semaines banalisées (vacances, périodes sans match)
+
+# Paramètres spécifiques au volley
+sport:
+  type: "volleyball"

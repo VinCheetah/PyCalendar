@@ -67,11 +67,19 @@ class InterfaceGenerator:
             
             print(f"     Loaded v2.0 solution from: {solution_path.name}")
             
+            # Enrich penalties with per-team breakdown if config available
+            if config:
+                solution_data = self._enrich_penalties(solution_data, config)
+            
         elif isinstance(solution, dict):
             # Direct dict (already v2.0 format)
             if solution.get('version') != '2.0':
                 raise ValueError(f"Solution dict must be in v2.0 format (found: {solution.get('version')})")
             solution_data = solution
+            
+            # Enrich penalties with per-team breakdown if config available
+            if config:
+                solution_data = self._enrich_penalties(solution_data, config)
             
         elif isinstance(solution, Solution):
             # Legacy Solution object - format it
@@ -84,6 +92,16 @@ class InterfaceGenerator:
         if not solution_data:
             print("  ⚠️  Warning: Solution data is empty. Proceeding with an empty dataset.")
             solution_data = {}
+        
+        # Enrich solution data with calendar config if available and missing
+        if config and 'config' in solution_data:
+            if 'calendrier' not in solution_data['config']:
+                solution_data['config']['calendrier'] = {
+                    'date_debut': getattr(config, 'calendrier_date_debut', '2025-10-13'),
+                    'jour_match': getattr(config, 'calendrier_jour_match', 'jeudi'),
+                    'semaines_banalisees': getattr(config, 'calendrier_semaines_banalisees', []),
+                }
+                print(f"     Enriched solution with calendar config: date_debut={solution_data['config']['calendrier']['date_debut']}")
         
         # Step 2: Load HTML template
         print("  📄 Loading HTML template...")
@@ -113,6 +131,110 @@ class InterfaceGenerator:
         
         return str(output_file.absolute())
     
+    def _enrich_penalties(self, solution_data: Dict, config: Config) -> Dict:
+        """
+        Enrich penalty data with per-team breakdown.
+        
+        When loading a v2.0 JSON solution, the penalties may not include
+        per-team breakdown (equipe1/equipe2 keys). This method recalculates
+        penalties with the detailed breakdown.
+        
+        Args:
+            solution_data: The solution data dict (v2.0 format)
+            config: Configuration object for penalty calculation
+            
+        Returns:
+            Updated solution_data with enriched penalties
+        """
+        from pycalendar.core.penalty_calculator import PenaltyCalculator
+        from pycalendar.core.models import Match, Equipe, Creneau
+        
+        # Check if enrichment is needed (first match doesn't have equipe1/equipe2 in penalties)
+        # Note: v2.0 format uses 'matches' key (English) not 'matchs' (French)
+        scheduled = solution_data.get('matches', {}).get('scheduled', [])
+        if not scheduled:
+            # Fallback to 'matchs' for compatibility
+            scheduled = solution_data.get('matchs', {}).get('scheduled', [])
+        if not scheduled:
+            return solution_data
+            
+        first_penalties = scheduled[0].get('penalties', {})
+        if 'equipe1' in first_penalties and 'equipe2' in first_penalties:
+            # Already enriched
+            return solution_data
+            
+        print("     Enriching penalties with per-team breakdown...")
+        
+        # Get metadata for niveaux_gymnases
+        metadata = solution_data.get('metadata', {})
+        niveaux_gymnases = metadata.get('niveaux_gymnases', {})
+        priorites_genre = metadata.get('priorites_genre_gymnases', {})
+        
+        # Build list of matches for context
+        all_match_data = scheduled  # Use raw match data
+        
+        # Process each scheduled match
+        for i, match_data in enumerate(scheduled):
+            if 'penalties' not in match_data:
+                continue
+                
+            # Create mock Match object for penalty calculation
+            try:
+                equipe1 = Equipe(
+                    nom=match_data.get('equipe1_nom', 'Unknown'),
+                    institution=match_data.get('equipe1_institution', ''),
+                    poule=match_data.get('poule', ''),
+                    genre=match_data.get('equipe1_genre', ''),
+                    horaires_preferes=match_data.get('equipe1_horaires_preferes', []),
+                    lieux_preferes=match_data.get('equipe1_lieux_preferes', []),
+                )
+                
+                equipe2 = Equipe(
+                    nom=match_data.get('equipe2_nom', 'Unknown'),
+                    institution=match_data.get('equipe2_institution', ''),
+                    poule=match_data.get('poule', ''),
+                    genre=match_data.get('equipe2_genre', ''),
+                    horaires_preferes=match_data.get('equipe2_horaires_preferes', []),
+                    lieux_preferes=match_data.get('equipe2_lieux_preferes', []),
+                )
+                
+                creneau = Creneau(
+                    semaine=match_data.get('semaine', 1),
+                    horaire=match_data.get('horaire', '14:00'),
+                    gymnase=match_data.get('gymnase', ''),
+                )
+                
+                mock_match = Match(
+                    equipe1=equipe1,
+                    equipe2=equipe2,
+                    poule=match_data.get('poule', ''),
+                    creneau=creneau,
+                )
+                
+                # Create calculator with single match (simplified)
+                calculator = PenaltyCalculator(
+                    config,
+                    [mock_match],
+                    niveaux_gymnases=niveaux_gymnases,
+                    priorites_genre_gymnases=priorites_genre,
+                )
+                
+                # Get detailed penalties
+                detailed = calculator.calculate_match_penalties_detailed(mock_match)
+                
+                # Update penalties with per-team breakdown
+                if 'equipe1' in detailed:
+                    match_data['penalties']['equipe1'] = detailed['equipe1']
+                if 'equipe2' in detailed:
+                    match_data['penalties']['equipe2'] = detailed['equipe2']
+                    
+            except Exception as e:
+                # Skip this match if there's an error
+                print(f"     ⚠️  Could not enrich penalties for match {i}: {e}")
+                continue
+        
+        return solution_data
+    
     def _load_template(self) -> str:
         """Load main HTML template."""
         template_path = self.templates_dir / 'index.html'
@@ -125,34 +247,14 @@ class InterfaceGenerator:
     
     def _load_all_css(self) -> str:
         """Load and combine all CSS modules in correct order."""
-        css_files = [
-            # Base styles (order matters!)
-            'styles/00-variables.css',
-            'styles/01-reset.css',
-            'styles/02-base.css',
-            'styles/03-layout.css',
-            'styles/04-enhancements.css',  # Visual enhancements & animations
-            'styles/05-backgrounds-france.css',  # Theme decorations
-            
-            # Component styles
-            'styles/components/match-card.css',
-            'styles/components/filters.css',
-            'styles/components/modals.css',
-            'styles/components/loading.css',
-            'styles/components/tabs.css',
-            'styles/components/views.css',
-            'styles/components/view-options.css',
-            
-            # View styles
-            'styles/views/agenda-view.css',
-            'styles/views/pools-view.css',
-            'styles/views/penalties-view.css',
-            
-            # Themes (last)
-            'styles/themes/default-light.css',
-            'styles/themes/dark.css',
-        ]
-        
+        manifest_path = self.assets_dir / 'styles' / 'manifest.json'
+        if not manifest_path.exists():
+            raise FileNotFoundError("CSS manifest missing. Create 'assets/styles/manifest.json' to declare styles order.")
+
+        css_files = self._load_css_from_manifest(manifest_path)
+        if not css_files:
+            raise ValueError("CSS manifest produced no CSS files. Ensure sections declare at least one file.")
+
         combined_css = []
         
         for css_file in css_files:
@@ -166,11 +268,49 @@ class InterfaceGenerator:
                 print(f"  ⚠️  CSS file not found: {css_file}")
         
         return '\n'.join(combined_css)
+
+    def _load_css_from_manifest(self, manifest_path: Path) -> List[str]:
+        """Resolve CSS file order from manifest.json (supports glob patterns)."""
+        with open(manifest_path, 'r', encoding='utf-8') as manifest_file:
+            manifest = json.load(manifest_file)
+
+        if not isinstance(manifest, list):
+            raise ValueError("CSS manifest must be a list of sections")
+
+        styles_root = self.assets_dir / 'styles'
+        seen = set()
+        ordered_files: List[str] = []
+
+        for section in manifest:
+            files = section.get('files', []) if isinstance(section, dict) else []
+            for entry in files:
+                for rel_path in self._resolve_manifest_entry(entry, styles_root):
+                    if rel_path not in seen:
+                        seen.add(rel_path)
+                        ordered_files.append(rel_path)
+
+        return ordered_files
+
+    def _resolve_manifest_entry(self, entry: str, styles_root: Path) -> List[str]:
+        """Return resolved asset-relative paths for a manifest entry (supports globs)."""
+        if not entry or not isinstance(entry, str):
+            return []
+
+        entry = entry.strip()
+        has_glob = any(char in entry for char in ['*', '?', '['])
+
+        if has_glob:
+            matches = sorted(styles_root.glob(entry))
+            return [match.relative_to(self.assets_dir).as_posix() for match in matches if match.is_file()]
+        
+        return [(Path('styles') / entry).as_posix()]
+
     
     def _load_all_js(self) -> str:
         """Load and combine all JavaScript modules in correct order."""
         js_files = [
             # Utilities (loaded first, no dependencies)
+            'utils/sport-utils.js',  # Utilitaires sport (doit être chargé en premier)
             'utils/formatters.js',
             'utils/validators.js',
             'utils/slot-manager.js',
@@ -195,8 +335,9 @@ class InterfaceGenerator:
             
             # Components (depend on core & utils)
             'components/ui/match-card.js',
-            'components/filters/filter-panel.js',
             'components/edit/edit-modal.js',
+            'app/modals.js',
+            'app/ui-controls.js',
             
             # Views (depend on everything else)
             'views/agenda-grid.js',

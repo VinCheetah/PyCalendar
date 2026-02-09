@@ -6,6 +6,16 @@
 
 ---
 
+> **Mise à jour – 9 décembre 2025**
+>
+> - Le dossier `assets/styles/legacy/` a été supprimé : toutes les feuilles CSS doivent désormais être référencées dans `assets/styles/manifest.json`.
+> - `generator.py` interrompt la génération si le manifest est absent ou vide.
+> - Le composant `FilterPanel` (scripts/components/filters) a été retiré au profit du système de filtres amélioré.
+> - La vue historique `cards-view.js` a été supprimée (non utilisée dans le template ni chargée par le générateur).
+> - Les sections ci-dessous reflètent l'état d'octobre 2025 et ne sont conservées qu'à titre d'archive.
+
+---
+
 ## 📊 Résumé Exécutif
 
 ### ✅ Points Positifs

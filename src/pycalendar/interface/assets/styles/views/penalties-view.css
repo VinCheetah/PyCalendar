@@ -8,6 +8,12 @@
     padding: var(--spacing-lg);
     display: flex;
     justify-content: center;
+    background: linear-gradient(135deg, var(--page-background) 0%, var(--surface-muted) 100%);
+    color: var(--text-primary);
+}
+
+[data-theme="dark"] .penalties-view {
+    background: linear-gradient(135deg, var(--page-background) 0%, rgba(15, 23, 42, 0.95) 45%, rgba(6, 11, 25, 1) 100%);
 }
 
 .penalties-shell {

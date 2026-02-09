@@ -29,8 +29,8 @@ class MatchesView {
         
         // Options d'affichage
         this.sortBy = 'week'; // 'week', 'penalties', 'pool'
-        this.showPenalties = true;
-        this.showPoolInfo = true;
+        this.showPenalties = false; // Par défaut désactivé
+        this.showPoolInfo = true; // Toujours afficher les infos de poule
         
         // Subscribe to data changes
         this.dataManager.subscribe('matches', () => this.render());
@@ -44,11 +44,19 @@ class MatchesView {
     }
     
     /**
-     * Met à jour les filtres
+     * Définit les filtres actifs (compatible avec EnhancedFilterSystem)
+     * Alias pour updateFilters pour cohérence avec les autres vues
      */
-    updateFilters(filters) {
+    setFilters(filters) {
         this.activeFilters = { ...this.activeFilters, ...filters };
         this.render();
+    }
+    
+    /**
+     * Met à jour les filtres (alias pour setFilters pour rétrocompatibilité)
+     */
+    updateFilters(filters) {
+        this.setFilters(filters);
     }
     
     /**
@@ -114,16 +122,6 @@ class MatchesView {
                         this.showPenalties = checked;
                         this.render();
                     }
-                },
-                {
-                    type: 'checkbox',
-                    id: 'matches-show-pool-info',
-                    label: 'Afficher les informations de poule',
-                    default: this.showPoolInfo,
-                    action: (checked) => {
-                        this.showPoolInfo = checked;
-                        this.render();
-                    }
                 }
             ]
         };
@@ -170,9 +168,10 @@ class MatchesView {
      * Affiche l'état vide
      */
     renderEmpty() {
+        const sportEmoji = window.sportUtils?.getEmoji() || '🏐';
         this.container.innerHTML = `
             <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 60vh; text-align: center; padding: 2rem;">
-                <div style="font-size: 5rem; margin-bottom: 1.5rem; opacity: 0.5;">🏐</div>
+                <div style="font-size: 5rem; margin-bottom: 1.5rem; opacity: 0.5;">${sportEmoji}</div>
                 <h3 style="font-size: 1.5rem; font-weight: 700; color: #333; margin-bottom: 0.75rem; font-family: 'Inter', 'Roboto', sans-serif;">Aucun match</h3>
                 <p style="font-size: 1rem; color: #666; font-family: 'Roboto', sans-serif;">Les matchs apparaîtront ici une fois planifiés.</p>
             </div>
@@ -230,23 +229,25 @@ class MatchesView {
     
     /**
      * Détermine le statut d'un match
-     * CORRECTION: Une entente AVEC CRÉNEAU est considérée comme PLANIFIÉE
+     * CORRECTION: Une entente est prioritaire sur is_fixed
+     * Un match avec créneau est considéré comme PLANIFIÉ
      */
     _determineMatchStatus(match) {
-        // Vérifier si c'est un match fixé avant planification
+        // PRIORITÉ 1: Les ententes sont identifiées comme telles
+        // Une entente avec is_entente=true OU entente_status != 'not_entente'
+        if (match.is_entente === true || 
+            (match.entente_status && match.entente_status !== 'not_entente')) {
+            return 'entente';
+        }
+        
+        // PRIORITÉ 2: Vérifier si c'est un match fixé avant planification
         if (match.is_fixed === true || match.fixed === true) {
             return 'fixed';
         }
         
-        // CORRECTION: Un match avec créneau est PLANIFIÉ (même s'il est entente)
+        // PRIORITÉ 3: Un match avec créneau complet est PLANIFIÉ
         if (match.gymnase && match.horaire && match.semaine) {
             return 'scheduled';
-        }
-        
-        // Si le match n'est pas planifié, vérifier si c'est une entente
-        // Une entente SANS CRÉNEAU = non planifiée mais identifiée comme entente
-        if (match.is_entente || (match.penalties && match.penalties.entente !== undefined)) {
-            return 'entente';
         }
         
         // Sinon non planifié normal
@@ -264,10 +265,11 @@ class MatchesView {
             filtered = filtered.filter(m => m.status === this.activeFilters.status);
         }
         
-        // Filtre par genre
+        // Filtre par genre - utiliser m.genre qui est déterminé par le serveur
+        // Fallback sur equipe1_genre/equipe2_genre si m.genre n'est pas défini
         if (this.activeFilters.gender) {
             filtered = filtered.filter(m => {
-                const genre = m.equipe1_genre || m.equipe2_genre;
+                const genre = m.genre || m.equipe1_genre || m.equipe2_genre;
                 return genre === this.activeFilters.gender;
             });
         }
@@ -290,21 +292,21 @@ class MatchesView {
             filtered = filtered.filter(m => m.gymnase === this.activeFilters.venue);
         }
 
-        // Filtre par plage horaire (chevauchement)
+        // Filtre par plage horaire (basé sur l'heure de DÉBUT du match uniquement)
         if (this.activeFilters.horaireStart && this.activeFilters.horaireEnd) {
             const [startHours, startMinutes] = this.activeFilters.horaireStart.split(':').map(Number);
             const [endHours, endMinutes] = this.activeFilters.horaireEnd.split(':').map(Number);
             const rangeStart = startHours * 60 + startMinutes;
             const rangeEnd = endHours * 60 + endMinutes;
-            const matchDuration = 90;
             filtered = filtered.filter(match => {
+                // Les matchs sans horaire passent toujours le filtre
                 if (!match.horaire) {
                     return true;
                 }
                 const [hours, minutes] = match.horaire.split(':').map(Number);
                 const matchStart = hours * 60 + minutes;
-                const matchEnd = matchStart + matchDuration;
-                return matchStart < rangeEnd && matchEnd > rangeStart;
+                // Un match passe si son heure de DÉBUT est >= rangeStart ET <= rangeEnd
+                return matchStart >= rangeStart && matchStart <= rangeEnd;
             });
         }
         
@@ -393,7 +395,13 @@ class MatchesView {
             
             switch (this.groupBy) {
                 case 'week':
-                    groupKey = match.semaine ? `Semaine ${match.semaine}` : 'Non planifiés';
+                    if (match.semaine) {
+                        // Ajouter la date du jeudi correspondant
+                        const dateStr = this.dataManager.getWeekDateFormatted(match.semaine, 'medium');
+                        groupKey = dateStr ? `Semaine ${match.semaine} — ${dateStr}` : `Semaine ${match.semaine}`;
+                    } else {
+                        groupKey = 'Non planifiés';
+                    }
                     break;
                     
                 case 'venue':
@@ -405,7 +413,8 @@ class MatchesView {
                     break;
                     
                 case 'gender':
-                    const genre = match.equipe1_genre || match.equipe2_genre;
+                    // Utiliser match.genre en priorité (déterminé par le serveur)
+                    const genre = match.genre || match.equipe1_genre || match.equipe2_genre;
                     groupKey = genre === 'M' ? 'Masculin' : genre === 'F' ? 'Féminin' : 'Non défini';
                     break;
                     
@@ -436,7 +445,13 @@ class MatchesView {
      */
     _getTotalPenalties(match) {
         if (!match.penalties) return 0;
-        return Object.values(match.penalties).reduce((sum, p) => sum + (p || 0), 0);
+        // Use the total field directly if available
+        if (typeof match.penalties.total === 'number') {
+            return match.penalties.total;
+        }
+        // Fallback: sum only numeric values (ignore nested objects like equipe1/equipe2)
+        return Object.values(match.penalties).reduce((sum, p) => 
+            typeof p === 'number' ? sum + p : sum, 0);
     }
     
     /**
@@ -563,17 +578,22 @@ class MatchesView {
         const gymnase = match.gymnase ? this.dataManager.getGymnaseById(match.gymnase) : null;
         const poule = match.poule ? this.dataManager.getPouleById(match.poule) : null;
         
-        // Informations d'équipes
-        const equipe1Nom = match.equipe1_nom_complet || match.equipe1_nom || 'Équipe 1';
-        const equipe2Nom = match.equipe2_nom_complet || match.equipe2_nom || 'Équipe 2';
+        // Informations d'équipes - éviter d'afficher "EXTERNE" pour les équipes hors championnat
+        const equipe1Nom = (match.equipe1_nom_complet && match.equipe1_nom_complet !== 'EXTERNE') 
+            ? match.equipe1_nom_complet 
+            : (match.equipe1_nom || 'Équipe 1');
+        const equipe2Nom = (match.equipe2_nom_complet && match.equipe2_nom_complet !== 'EXTERNE') 
+            ? match.equipe2_nom_complet 
+            : (match.equipe2_nom || 'Équipe 2');
         const equipe1Num = match.equipe1_num ? `#${match.equipe1_num}` : '';
         const equipe2Num = match.equipe2_num ? `#${match.equipe2_num}` : '';
         
         // Statut et couleurs
         const statusInfo = this._getStatusInfo(match);
         
-        // Genre
-        const genre = match.equipe1_genre || match.equipe2_genre || 'M';
+        // Genre - utiliser match.genre en priorité (déterminé par le serveur)
+        // Fallback sur equipe1_genre/equipe2_genre, puis 'X' pour mixte si indéterminé
+        const genre = match.genre || match.equipe1_genre || match.equipe2_genre || 'X';
         const genreIcon = genre === 'M' ? '♂️' : '♀️';
         const genreBg = genre === 'M' ? 
             'linear-gradient(135deg, rgba(0, 123, 255, 0.08) 0%, rgba(0, 123, 255, 0.03) 100%)' :
@@ -601,7 +621,7 @@ class MatchesView {
         }
         
         return `
-            <div class="match-card-detailed" data-match-id="${match.match_id}" style="background: white; border: 2px solid ${statusInfo.borderColor}; border-radius: 12px; padding: 1.25rem; box-shadow: 0 3px 10px rgba(0, 0, 0, 0.08); transition: all 0.2s ease; cursor: pointer; position: relative; overflow: hidden;">
+            <div class="match-card-detailed" data-match-id="${match.match_id}" style="border: 2px solid ${statusInfo.borderColor}; border-radius: 12px; padding: 1.25rem; box-shadow: 0 3px 10px rgba(0, 0, 0, 0.08); transition: all 0.2s ease; cursor: pointer; position: relative; overflow: hidden;">
                 
                 <!-- Badge de statut -->
                 <div style="position: absolute; top: 0; right: 0; padding: 0.4rem 0.8rem; background: ${statusInfo.bgColor}; color: white; font-size: 0.7rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; border-bottom-left-radius: 8px; font-family: 'Roboto', sans-serif; box-shadow: -2px 2px 6px rgba(0, 0, 0, 0.1);">
@@ -616,7 +636,7 @@ class MatchesView {
                             SEMAINE ${match.semaine}
                         </div>
                         ` : ''}
-                        ${this.showPoolInfo && poule ? `
+                        ${poule ? `
                         <div style="font-size: 0.75rem; color: #666; font-family: 'Roboto', sans-serif; margin-top: 0.25rem;">
                             <span style="font-weight: 700;">${poule.nom}</span>
                             ${poule.niveau ? ` • Niveau ${poule.niveau}` : ''}
@@ -652,7 +672,7 @@ class MatchesView {
                         
                         <!-- VS -->
                         <div style="flex-shrink: 0;">
-                            <div style="display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; background: white; border: 2px solid rgba(0, 85, 164, 0.2); border-radius: 50%; font-size: 0.7rem; font-weight: 900; color: #0055A4; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1); font-family: 'Roboto', sans-serif;">
+                            <div class="match-vs-circle" style="display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; border: 2px solid rgba(0, 85, 164, 0.2); border-radius: 50%; font-size: 0.7rem; font-weight: 900; color: #0055A4; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1); font-family: 'Roboto', sans-serif;">
                                 VS
                             </div>
                         </div>
@@ -837,7 +857,7 @@ class MatchesView {
         items.forEach(([type, value]) => {
             const label = this._getPenaltyLabel(type);
             html += `
-                <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem; padding: 0.25rem 0.5rem; background: white; border-radius: 4px;">
+                <div class="penalty-detail-row" style="display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem; padding: 0.25rem 0.5rem; border-radius: 4px;">
                     <span style="color: #666; font-family: 'Roboto', sans-serif;">${label}</span>
                     <span style="font-weight: 900; color: #FF9500; font-family: 'Roboto Mono', monospace;">${value.toFixed(1)}</span>
                 </div>

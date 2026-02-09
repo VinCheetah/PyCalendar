@@ -320,11 +320,11 @@ def test_exemple_fonction_calcul(minimal_config, equipe_builder):
     creneau = Creneau(semaine=1, horaire="20:00", gymnase="Gym1")
     
     # -------------------------------------------------------------------------
-    # 3. CALCUL : Appeler directement la fonction
+    # 3. CALCUL : Appeler directement la fonction helper
     # -------------------------------------------------------------------------
     
-    solver = CPSATSolver(minimal_config)
-    penalty = solver._calculate_time_preference_penalty(match, creneau)
+    from pycalendar.core.penalties import compute_time_preference_penalty
+    result = compute_time_preference_penalty(match, creneau, minimal_config)
     
     # -------------------------------------------------------------------------
     # 4. VÉRIFICATION : Comparer avec formule attendue
@@ -338,8 +338,8 @@ def test_exemple_fonction_calcul(minimal_config, equipe_builder):
     
     expected = 10 * ((120 / 60) ** 2) * 2  # = 10 × 4 × 2 = 80
     
-    assert abs(penalty - expected) < 0.01, \
-        f"Pénalité calculée = {penalty}, attendue = {expected}"
+    assert abs(result.penalty - expected) < 0.01, \
+        f"Pénalité calculée = {result.penalty}, attendue = {expected}"
 
 
 # =============================================================================

@@ -6,11 +6,21 @@ Ce script permet d'importer des matchs déjà joués ou planifiés depuis un
 tableau Excel partagé (Google Sheets, OneDrive, SharePoint, etc.) vers la feuille
 Matchs_Fixes d'une configuration PyCalendar.
 
+Sports supportés:
+    VB - Volleyball 🏐
+    HB - Handball 🤾
+    BB - Basketball 🏀
+    FB - Football ⚽
+    FS - Futsal ⚽
+    RG - Rugby 🏉
+    BD - Badminton 🏸
+    TT - Tennis de Table 🏓
+
 Utilisation:
     python src/pycalendar/cli/external_importer.py --config CONFIG_YAML --url URL [OPTIONS]
 
 Exemples:
-    # Importer tous les matchs avec score de la journée 3
+    # Importer des matchs de volleyball
     python src/pycalendar/cli/external_importer.py \\
         --config configs/config_volley.yaml \\
         --url "https://docs.google.com/spreadsheets/d/.../export?format=xlsx" \\
@@ -18,11 +28,11 @@ Exemples:
         --journee 3 \\
         --avec-score
 
-    # Importer depuis SharePoint avec authentification
+    # Importer des matchs de handball
     python src/pycalendar/cli/external_importer.py \\
-        --config configs/config_volley.yaml \\
-        --url "https://tenant.sharepoint.com/:x:/g/personal/user_domain_com/...xe=..." \\
-        --sport VB
+        --config configs/config_hand.yaml \\
+        --url "https://..." \\
+        --sport HB
 
     # Importer depuis un fichier local
     python src/pycalendar/cli/external_importer.py \\
@@ -87,7 +97,8 @@ class ImporteurMatchsExternes:
         sans_score: bool = False,
         tous: bool = False,
         dry_run: bool = False,
-        ignorer_annules: bool = True
+        ignorer_annules: bool = True,
+        doublon_priorite: str = "ancien"
     ):
         """
         Initialise l'importeur.
@@ -104,8 +115,10 @@ class ImporteurMatchsExternes:
             tous: Importer tous les matchs (défaut si rien spécifié)
             dry_run: Mode simulation (ne modifie pas le fichier)
             ignorer_annules: Ignorer les matchs avec 'annule' dans les remarques
+            doublon_priorite: "ancien" pour garder les matchs existants, "nouveau" pour remplacer par l'import
         """
         self.config_yaml_path = Path(config_path)
+        self._config_yaml_cache: Optional[dict] = None
         self.url_externe = url_externe
         self.fichier_local = Path(fichier_local) if fichier_local else None
         self.sport = sport.upper()
@@ -116,6 +129,9 @@ class ImporteurMatchsExternes:
         self.tous = tous or (not avec_score and not sans_score)
         self.dry_run = dry_run
         self.ignorer_annules = ignorer_annules
+        self.doublon_priorite = (doublon_priorite or "ancien").strip().lower()
+        if self.doublon_priorite not in {"ancien", "nouveau"}:
+            raise ValueError("doublon_priorite doit valoir 'ancien' ou 'nouveau'")
         
         # Paramètres SharePoint (à configurer via variables d'environnement)
         self.sharepoint_client_id = os.getenv("SHAREPOINT_CLIENT_ID", "")
@@ -124,6 +140,7 @@ class ImporteurMatchsExternes:
         
         # Charger le fichier Excel depuis le YAML
         self.config_excel_path = self._charger_chemin_excel()
+        self.calendrier_date_debut, self.calendrier_jour_match = self._charger_parametres_calendrier()
         
         # Validation
         if not url_externe and not fichier_local:
@@ -311,6 +328,7 @@ class ImporteurMatchsExternes:
         
         if config is None:
             raise ValueError(f"Impossible de lire le fichier YAML {self.config_yaml_path} avec les encodages testés: {encodings_to_try}")
+        self._config_yaml_cache = config if isinstance(config, dict) else None
         
         # Essayer plusieurs chemins possibles
         fichier_excel = None
@@ -331,6 +349,61 @@ class ImporteurMatchsExternes:
             chemin = racine_projet / fichier_excel
         
         return chemin
+    
+    def _charger_parametres_calendrier(self) -> Tuple[Optional[datetime], str]:
+        """Extrait date de début et jour officiel des matchs depuis le YAML."""
+
+        config = self._config_yaml_cache or {}
+        calendrier = config.get('calendrier') if isinstance(config, dict) else None
+        date_debut = None
+        jour_match = 'jeudi'
+
+        if isinstance(calendrier, dict):
+            jour_match = str(calendrier.get('jour_match', jour_match)).strip().lower() or 'jeudi'
+            brute = calendrier.get('date_debut')
+            if brute:
+                brute_str = str(brute).strip()
+                for fmt in ('%Y-%m-%d', '%d/%m/%Y', '%d/%m/%y'):
+                    try:
+                        date_debut = datetime.strptime(brute_str, fmt)
+                        break
+                    except ValueError:
+                        continue
+
+        return date_debut, jour_match
+
+    def _jour_match_weekday_index(self) -> Optional[int]:
+        """Retourne l'index weekday Python (0=lundi) pour le jour officiel."""
+
+        mapping = {
+            'lundi': 0,
+            'mardi': 1,
+            'mercredi': 2,
+            'jeudi': 3,
+            'vendredi': 4,
+            'samedi': 5,
+            'dimanche': 6,
+            'monday': 0,
+            'tuesday': 1,
+            'wednesday': 2,
+            'thursday': 3,
+            'friday': 4,
+            'saturday': 5,
+            'sunday': 6,
+        }
+
+        jour = (self.calendrier_jour_match or 'jeudi').strip().lower()
+        return mapping.get(jour)
+
+    def _calculer_semaine_depuis_timestamp(self, valeur: Optional[pd.Timestamp]) -> Optional[int]:
+        """Calcule la semaine relative à la date de début configurée."""
+
+        if valeur is None or pd.isna(valeur) or not self.calendrier_date_debut:
+            return None
+        delta = valeur.to_pydatetime().date() - self.calendrier_date_debut.date()
+        if delta.days < 0:
+            return None
+        return delta.days // 7 + 1
         
     def _parser_score(self, score_raw) -> str:
         """
@@ -693,7 +766,7 @@ class ImporteurMatchsExternes:
         - Date, Sport, Sexe, Poule, Equipe 1, Equipe 2, Hre Déb, Lieu, Commentaire, Arbitres, Résultats
         
         Format Matchs_Fixes:
-        - Equipe_1, Equipe_2, Poule, Semaine, Horaire, Gymnase, Score, Type_Competition, Remarques
+        - Equipe_1, Equipe_2, Poule, Semaine, Horaire, Gymnase, Score, Type_Competition, Remarques, Arbitres
         
         Returns:
             Dictionnaire de mapping {colonne_externe: colonne_config}
@@ -709,6 +782,7 @@ class ImporteurMatchsExternes:
             'Lieu': 'Gymnase',
             'Résultats': 'Score',
             'Commentaire': 'Remarques',
+            'Arbitres': 'Arbitres',
             # Format alternatif (underscores)
             'Résultat': 'Score',
             'Equipe_1': 'Equipe_1',
@@ -718,12 +792,17 @@ class ImporteurMatchsExternes:
             'Remarques': 'Remarques',
             'Gymnase': 'Gymnase',
             'Horaire': 'Horaire',
+            'Arbitre': 'Arbitres',  # Singulier aussi supporté
         }
         return mapping
     
     def filtrer_matchs(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Filtre les matchs selon les critères spécifiés.
+        Filtre les matchs selon les critères de base (sport, date, score).
+        
+        Note: Cette méthode n'est plus utilisée directement par executer(),
+        qui utilise maintenant identifier_matchs_fixes() et identifier_matchs_annules().
+        Elle est conservée pour compatibilité.
         
         Args:
             df: DataFrame source
@@ -740,31 +819,95 @@ class ImporteurMatchsExternes:
             df_filtre = df_filtre[df_filtre['Sport'].str.upper() == self.sport]
             print(f"   → Filtre sport '{self.sport}': {len(df_filtre)} matchs")
         
-        # Filtre par date (convertir en numéro de semaine)
-        if self.date_limite and 'Date' in df_filtre.columns:
-            df_filtre['_Date_parsed'] = pd.to_datetime(df_filtre['Date'], errors='coerce')
-            df_filtre = df_filtre[df_filtre['_Date_parsed'] <= self.date_limite]
-            df_filtre = df_filtre.drop(columns=['_Date_parsed'])
-            print(f"   → Filtre date ≤ {format_user_date(self.date_limite)}: {len(df_filtre)} matchs")
+        # Appliquer les filtres optionnels
+        df_filtre = self._appliquer_filtres_optionnels(df_filtre)
         
-        # Filtre par score (résultats)
-        if 'Résultats' in df_filtre.columns:
-            if self.avec_score:
-                df_filtre = df_filtre[df_filtre['Résultats'].notna() & (df_filtre['Résultats'].astype(str).str.strip() != '')]
-                print(f"   → Filtre avec score: {len(df_filtre)} matchs")
-            elif self.sans_score:
-                df_filtre = df_filtre[df_filtre['Résultats'].isna() | (df_filtre['Résultats'].astype(str).str.strip() == '')]
-                print(f"   → Filtre sans score: {len(df_filtre)} matchs")
-        
-        # Filtre des matchs annulés
-        if self.ignorer_annules and 'Remarques' in df_filtre.columns:
-            # Utiliser une regex pour détecter différents types d'annulation
-            pattern_annule = r'annul|report|forfait|blessure|maladie|erreur'
-            mask_annule = df_filtre['Remarques'].astype(str).str.contains(pattern_annule, case=False, na=False, regex=True)
-            df_filtre = df_filtre[~mask_annule]
-            print(f"   → Filtre annulations: {len(df_filtre)} matchs")
+        # Appliquer le tri fixes/annulés si demandé
+        if self.ignorer_annules:
+            df_filtre = self.identifier_matchs_fixes(df_filtre)
+            print(f"   → Après exclusion annulations: {len(df_filtre)} matchs")
         
         return df_filtre
+    
+    def identifier_matchs_annules(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Identifie les matchs annulés pour les stocker dans la feuille Matchs_Annules.
+        
+        Un match est considéré comme annulé s'il a une mention d'annulation
+        dans les remarques/commentaires ET qu'il n'a PAS de score.
+        Les forfaits avec score vont dans Matchs_Fixes.
+        
+        Args:
+            df: DataFrame source (déjà filtré par sport)
+            
+        Returns:
+            DataFrame contenant uniquement les matchs annulés sans score
+        """
+        df_copie = df.copy()
+        
+        # Vérifier si le match a un score
+        score_col = 'Résultats' if 'Résultats' in df_copie.columns else 'Score'
+        if score_col in df_copie.columns:
+            has_score = df_copie[score_col].notna() & (df_copie[score_col].astype(str).str.strip() != '')
+        else:
+            has_score = pd.Series([False] * len(df_copie), index=df_copie.index)
+        
+        # Identifier les mentions d'annulation dans les remarques
+        remarques_col = 'Remarques' if 'Remarques' in df_copie.columns else ('Commentaire' if 'Commentaire' in df_copie.columns else None)
+        
+        if remarques_col is None:
+            return pd.DataFrame()
+        
+        # Regex pour détecter différents types d'annulation
+        pattern_annule = r'annul|report|forfait|blessure|maladie|erreur'
+        mask_annule = df_copie[remarques_col].astype(str).str.contains(pattern_annule, case=False, na=False, regex=True)
+        
+        # Matchs_Annules = SANS score ET AVEC mention d'annulation
+        mask_matchs_annules = ~has_score & mask_annule
+        
+        return df_copie[mask_matchs_annules]
+    
+    def identifier_matchs_fixes(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Identifie les matchs qui vont dans Matchs_Fixes.
+        
+        Un match va dans Matchs_Fixes si :
+        - Il a un score (match joué, y compris forfait avec score)
+        - OU il n'a PAS de mention d'annulation dans les remarques
+        
+        Les forfaits AVEC score vont dans Matchs_Fixes.
+        Seuls les matchs SANS score ET AVEC annulation vont dans Matchs_Annules.
+        
+        Args:
+            df: DataFrame source (déjà filtré par sport)
+            
+        Returns:
+            DataFrame contenant les matchs pour Matchs_Fixes
+        """
+        df_copie = df.copy()
+        
+        # Déterminer quels matchs ont un score valide
+        score_col = 'Résultats' if 'Résultats' in df_copie.columns else 'Score'
+        if score_col in df_copie.columns:
+            has_score = df_copie[score_col].notna() & (df_copie[score_col].astype(str).str.strip() != '')
+        else:
+            has_score = pd.Series([False] * len(df_copie), index=df_copie.index)
+        
+        # Identifier les mentions d'annulation dans les remarques
+        remarques_col = 'Remarques' if 'Remarques' in df_copie.columns else ('Commentaire' if 'Commentaire' in df_copie.columns else None)
+        
+        if remarques_col is None:
+            # Pas de colonne remarques, tous les matchs vont dans Matchs_Fixes
+            return df_copie
+        
+        # Regex pour détecter différents types d'annulation
+        pattern_annule = r'annul|report|forfait|blessure|maladie|erreur'
+        mask_annule = df_copie[remarques_col].astype(str).str.contains(pattern_annule, case=False, na=False, regex=True)
+        
+        # Matchs_Fixes = matchs avec score OU matchs sans mention d'annulation
+        mask_fixes = has_score | ~mask_annule
+        
+        return df_copie[mask_fixes]
     
     def convertir_vers_format_config(self, df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -788,39 +931,43 @@ class ImporteurMatchsExternes:
             if col_externe in df.columns:
                 df_config[col_config] = df[col_externe]
         
-        # Traitement spécial pour la semaine (calculée depuis la date)
+        dates_parsed = None
         if 'Date' in df.columns:
-            # Convertir en datetime
-            df['_Date_parsed'] = pd.to_datetime(df['Date'], errors='coerce')
-            
-            # Calculer le numéro de semaine
-            # La semaine 1 commence le 16 octobre 2025
-            date_debut_saison = pd.to_datetime('2025-10-16')  # Début de la semaine 1
-            
-            def calculer_semaine(date):
-                if pd.isna(date):
-                    return ''
-                delta = (date - date_debut_saison).days
-                semaine = (delta // 7) + 1
-                return max(1, semaine)  # Au minimum semaine 1
-            
-            df_config['Semaine'] = df['_Date_parsed'].apply(calculer_semaine)
-            computed_weeks = df_config['Semaine'].copy()
+            dates_parsed = pd.to_datetime(df['Date'], errors='coerce', dayfirst=True)
+            df_config['Date'] = dates_parsed.dt.normalize()
         else:
-            df_config['Semaine'] = ''
+            df_config['Date'] = pd.Series([''] * len(df_config), dtype='object')
+
+        official_idx = self._jour_match_weekday_index()
+        is_official_day = pd.Series([False] * len(df_config), index=df_config.index)
+        week_from_dates = None
+        if dates_parsed is not None:
+            if official_idx is not None:
+                is_official_day = dates_parsed.dt.weekday.eq(official_idx).fillna(False)
+            week_from_dates = dates_parsed.apply(self._calculer_semaine_depuis_timestamp)
+
+        df_config['Semaine'] = ''
+        if week_from_dates is not None:
+            mask_valid = is_official_day & week_from_dates.notna()
+            if mask_valid.any():
+                df_config.loc[mask_valid, 'Semaine'] = week_from_dates[mask_valid].astype(int).astype(str)
 
         if self.journee is not None:
             journee_value = int(self.journee)
-            if computed_weeks is not None:
-                try:
-                    semaine_calculee = pd.to_numeric(computed_weeks, errors='coerce')
-                    mismatches = (semaine_calculee.notna()) & (semaine_calculee != journee_value)
-                    mismatches_count = int(mismatches.sum())
-                    if mismatches_count > 0:
-                        print(f"   ℹ️  {mismatches_count} match(s) hors jour de référence → semaine forcée à J{journee_value}")
-                except Exception:
-                    pass
-            df_config['Semaine'] = journee_value
+            mask_no_date = pd.Series([True] * len(df_config), index=df_config.index)
+            if dates_parsed is not None:
+                mask_no_date = dates_parsed.isna()
+
+            mask_missing_week = df_config['Semaine'].astype(str).str.strip() == ''
+            mask_apply = mask_no_date & mask_missing_week
+            if mask_apply.any():
+                df_config.loc[mask_apply, 'Semaine'] = str(journee_value)
+
+            if week_from_dates is not None:
+                mismatches = is_official_day & week_from_dates.notna() & (week_from_dates.astype(float) != journee_value)
+                mismatches_count = int(mismatches.sum())
+                if mismatches_count > 0:
+                    print(f"   ℹ️  {mismatches_count} match(s) datés hors de la journée J{journee_value} (semaine estimée conservée depuis la date)")
         
         # Traitement spécial pour l'horaire (convertir format time en HH:MM)
         if 'Horaire' in df_config.columns:
@@ -845,6 +992,13 @@ class ImporteurMatchsExternes:
             
             df_config['Horaire'] = df_config['Horaire'].apply(formater_horaire)
         
+        # Formater les dates en chaîne DD/MM/YY pour Matchs_Fixes
+        if 'Date' in df_config.columns:
+            dates_normalises = pd.to_datetime(df_config['Date'], errors='coerce')
+            df_config['Date'] = dates_normalises.apply(
+                lambda value: format_user_date(value.to_pydatetime()) if pd.notna(value) else ''
+            )
+
         # Nettoyer et normaliser les équipes
         def normaliser_nom_equipe(nom_equipe: str) -> str:
             """
@@ -948,10 +1102,11 @@ class ImporteurMatchsExternes:
             """
             Détermine le type de compétition depuis le code de poule.
             - CFE* ou CFU* -> CFE ou CFU
-            - Sinon -> Acad
+            - Poule valide Acad (format: SPORT+GENRE+NIVEAU+..., ex: VBFA1PA) -> Acad
+            - Sinon (poule vide ou format inconnu) -> Autre
             """
             if pd.isna(poule) or not str(poule).strip():
-                return 'Acad'
+                return 'Autre'
             
             poule_str = str(poule).strip().upper()
             
@@ -960,7 +1115,15 @@ class ImporteurMatchsExternes:
             elif poule_str.startswith('CFU'):
                 return 'CFU'
             else:
-                return 'Acad'
+                # Vérifier si c'est une poule Acad valide
+                # Format attendu: CODE_SPORT (2 cars) + GENRE (F/M) + autres chars
+                # Exemples: VBFA1PA, VBMA2PB, HBFA1, BBMA1
+                import re
+                # Pattern: 2 lettres (sport) + F ou M (genre) + au moins 1 char supplémentaire
+                if re.match(r'^[A-Z]{2}[FM].+$', poule_str):
+                    return 'Acad'
+                else:
+                    return 'Autre'
         
         if 'Poule' in df_config.columns:
             # D'abord déterminer le type de compétition depuis la poule originale
@@ -976,12 +1139,12 @@ class ImporteurMatchsExternes:
             
             df_config['Poule'] = df_config.apply(ajuster_poule, axis=1)
         else:
-            df_config['Type_Competition'] = 'Acad'
+            df_config['Type_Competition'] = 'Autre'
         
         # Ajouter les colonnes manquantes avec valeurs par défaut
         colonnes_requises = [
-            'Equipe_1', 'Equipe_2', 'Genre', 'Poule', 'Semaine', 'Horaire',
-            'Gymnase', 'Score', 'Type_Competition', 'Remarques'
+            'Equipe_1', 'Equipe_2', 'Genre', 'Poule', 'Semaine', 'Date', 'Horaire',
+            'Gymnase', 'Score', 'Type_Competition', 'Remarques', 'Arbitres'
         ]
         
         for col in colonnes_requises:
@@ -990,21 +1153,32 @@ class ImporteurMatchsExternes:
                     df_config[col] = import_tag
                 elif col == 'Genre':
                     df_config[col] = ''
+                elif col == 'Date':
+                    df_config[col] = ''
                 elif col == 'Type_Competition':
                     # Type_Competition devrait déjà être défini plus haut
-                    # Si ce n'est pas le cas, on met Acad par défaut
-                    df_config[col] = 'Acad'
+                    # Si ce n'est pas le cas, on met Autre par défaut
+                    df_config[col] = 'Autre'
+                elif col == 'Arbitres':
+                    df_config[col] = ''
                 else:
                     df_config[col] = ''
         
         # Filtrer les matchs annulés si demandé (après avoir ajouté les remarques par défaut)
+        # IMPORTANT: les matchs avec score (forfaits) ne sont PAS filtrés
         if self.ignorer_annules:
+            # Déterminer quels matchs ont un score valide
+            has_score = df_config['Score'].notna() & (df_config['Score'].astype(str).str.strip() != '')
+            
             # Recherche insensible à la casse pour 'annul' ou 'erreur' (annulé, annulé, erreur, etc.)
             remarques_annules = df_config['Remarques'].astype(str).str.lower().str.contains(r'annul|erreur', regex=True)
-            nb_annules = remarques_annules.sum()
+            
+            # On ne filtre QUE les matchs annulés SANS score
+            mask_vraiment_annule = remarques_annules & ~has_score
+            nb_annules = mask_vraiment_annule.sum()
             if nb_annules > 0:
-                print(f"   ⚠️  {nb_annules} match(s) annulé(s) ou avec erreur ignoré(s)")
-                df_config = df_config[~remarques_annules]
+                print(f"   ⚠️  {nb_annules} match(s) annulé(s) ou avec erreur (sans score) ignoré(s)")
+                df_config = df_config[~mask_vraiment_annule]
         
         # Compléter les remarques existantes
         if 'Remarques' in df_config.columns:
@@ -1034,7 +1208,7 @@ class ImporteurMatchsExternes:
             # Créer un DataFrame vide avec les bonnes colonnes
             return pd.DataFrame(columns=[
                 'Equipe_1', 'Equipe_2', 'Genre', 'Poule', 'Semaine', 'Horaire',
-                'Gymnase', 'Score', 'Type_Competition', 'Remarques'
+                'Gymnase', 'Score', 'Type_Competition', 'Remarques', 'Arbitres'
             ])
     
     def fusionner_matchs(self, df_nouveaux: pd.DataFrame, df_existants: pd.DataFrame) -> pd.DataFrame:
@@ -1053,12 +1227,17 @@ class ImporteurMatchsExternes:
         # IMPORTANT: Inclure le Genre et Type_Competition pour différencier les matchs
         # avec les mêmes équipes mais de genre ou compétition différents
         def creer_cle(df):
+            if 'Date' in df.columns:
+                date_component = pd.to_datetime(df['Date'], errors='coerce', dayfirst=True).dt.strftime('%Y-%m-%d').fillna('')
+            else:
+                date_component = pd.Series([''] * len(df), index=df.index)
             return (
                 df['Equipe_1'].astype(str) + '|' +
                 df['Equipe_2'].astype(str) + '|' +
                 (df['Genre'].astype(str) if 'Genre' in df.columns else '') + '|' +
                 (df['Type_Competition'].astype(str) if 'Type_Competition' in df.columns else '') + '|' +
-                (df['Semaine'].astype(str) if 'Semaine' in df.columns else '')
+                (df['Semaine'].astype(str) if 'Semaine' in df.columns else '') + '|' +
+                date_component
             )
         
         df_nouveaux['_cle'] = creer_cle(df_nouveaux)
@@ -1072,6 +1251,8 @@ class ImporteurMatchsExternes:
         print(f"   - Matchs à ajouter: {len(df_nouveaux)}")
         print(f"   - Doublons détectés: {len(doublons)}")
         print(f"   - Nouveaux matchs uniques: {len(nouveaux_uniques)}")
+        strategie_label = 'nouvelle version' if self.doublon_priorite == 'nouveau' else 'version existante'
+        print(f"   - Stratégie doublons: {strategie_label}")
         
         # Traiter les doublons pour gérer les scores
         df_doublons_traite = pd.DataFrame()
@@ -1080,47 +1261,41 @@ class ImporteurMatchsExternes:
         if not doublons.empty:
             print(f"   🔍 Analyse des {len(doublons)} doublon(s)...")
 
+            prefer_new = self.doublon_priorite == 'nouveau'
+
             for cle in doublons['_cle'].unique():
                 # Récupérer les versions nouveau et existant
                 nouveau = df_nouveaux[df_nouveaux['_cle'] == cle].iloc[0]
                 existant = df_existants[df_existants['_cle'] == cle].iloc[0]
 
+                gagnant = nouveau if prefer_new else existant
+                perdant = existant if prefer_new else nouveau
+
                 # Comparer les scores
-                score_nouveau = str(nouveau.get('Score', '')).strip()
-                score_existant = str(existant.get('Score', '')).strip()
+                score_gagnant = str(gagnant.get('Score', '')).strip()
+                score_perdant = str(perdant.get('Score', '')).strip()
 
                 # Considérer comme vide/invalide: '', 'nan', 'NaN', ou seulement des espaces
                 def score_est_valide(score):
                     return score and score.lower() not in ['nan', ''] and score.strip() != ''
 
-                score_nouveau_valide = score_est_valide(score_nouveau)
-                score_existant_valide = score_est_valide(score_existant)
+                score_gagnant_valide = score_est_valide(score_gagnant)
+                score_perdant_valide = score_est_valide(score_perdant)
 
-                match_final = existant.copy()  # Par défaut, garder l'existant
+                match_final = gagnant.copy()
 
-                if score_nouveau_valide and score_existant_valide:
-                    # Les deux ont un score valide
-                    if score_nouveau == score_existant:
-                        # Scores identiques - pas d'affichage
-                        pass
-                    else:
-                        print(f"   ⚠️  Doublon {cle.split('|')[0]} vs {cle.split('|')[1]}: scores différents!")
-                        print(f"      Existant: '{score_existant}' | Nouveau: '{score_nouveau}'")
-                        print(f"      → Garde le score existant: '{score_existant}'")
+                equipes = f"{cle.split('|')[0]} vs {cle.split('|')[1]}"
 
-                elif score_nouveau_valide and not score_existant_valide:
-                    # Nouveau a un score valide, existant n'en a pas ou est invalide → mettre à jour
-                    print(f"   📝 Doublon {cle.split('|')[0]} vs {cle.split('|')[1]}: ajout score '{score_nouveau}'")
-                    match_final['Score'] = score_nouveau
+                if score_gagnant_valide and score_perdant_valide:
+                    if score_gagnant != score_perdant:
+                        source = 'nouvelle version' if prefer_new else 'ancienne version'
+                        print(f"   ⚠️  Doublon {equipes}: scores différents!")
+                        print(f"      Version conservée ({source}): '{score_gagnant}' | Autre: '{score_perdant}'")
+                elif not score_gagnant_valide and score_perdant_valide:
+                    source = 'existant' if prefer_new else 'nouveau'
+                    print(f"   📝 Doublon {equipes}: ajout score depuis le {source} '{score_perdant}'")
+                    match_final['Score'] = score_perdant
                     changements_effectues += 1
-
-                elif not score_nouveau_valide and score_existant_valide:
-                    # Existant a un score valide, nouveau n'en a pas → garder existant (pas d'affichage)
-                    pass
-
-                else:
-                    # Aucun score valide (pas d'affichage)
-                    pass
 
                 df_doublons_traite = pd.concat([df_doublons_traite, match_final.to_frame().T], ignore_index=True)
 
@@ -1138,16 +1313,20 @@ class ImporteurMatchsExternes:
         
         return df_fusionne
     
-    def sauvegarder_configuration(self, df_matchs: pd.DataFrame):
+    def sauvegarder_configuration(self, df_matchs: pd.DataFrame, df_annules: Optional[pd.DataFrame] = None):
         """
         Sauvegarde les matchs dans la feuille Matchs_Fixes de la configuration.
+        Optionnellement sauvegarde aussi les matchs annulés dans Matchs_Annules.
         
         Args:
             df_matchs: DataFrame des matchs à sauvegarder
+            df_annules: DataFrame optionnel des matchs annulés (sans score)
         """
         if self.dry_run:
             print("\n🔍 MODE SIMULATION - Aucune modification effectuée")
-            print(f"   {len(df_matchs)} matchs seraient sauvegardés")
+            print(f"   {len(df_matchs)} matchs seraient sauvegardés dans Matchs_Fixes")
+            if df_annules is not None and len(df_annules) > 0:
+                print(f"   {len(df_annules)} matchs seraient sauvegardés dans Matchs_Annules")
             return
         
         print(f"\n💾 Sauvegarde dans {self.config_excel_path}...")
@@ -1167,13 +1346,52 @@ class ImporteurMatchsExternes:
             for r in dataframe_to_rows(df_matchs, index=False, header=True):
                 ws.append(r)
             
+            print(f"✓ {len(df_matchs)} matchs dans Matchs_Fixes")
+            
+            # Sauvegarder les matchs annulés si fournis
+            if df_annules is not None and len(df_annules) > 0:
+                # Supprimer la feuille Matchs_Annules si elle existe
+                if 'Matchs_Annules' in wb.sheetnames:
+                    del wb['Matchs_Annules']
+                
+                # Créer une nouvelle feuille pour les matchs annulés
+                ws_annules = wb.create_sheet('Matchs_Annules')
+                
+                # Écrire les données
+                for r in dataframe_to_rows(df_annules, index=False, header=True):
+                    ws_annules.append(r)
+                
+                print(f"✓ {len(df_annules)} matchs dans Matchs_Annules")
+            
             # Sauvegarder
             wb.save(self.config_excel_path)
             
-            print(f"✓ Configuration sauvegardée: {len(df_matchs)} matchs dans Matchs_Fixes")
+            print(f"✓ Configuration sauvegardée avec succès")
             
         except Exception as e:
             raise RuntimeError(f"Erreur lors de la sauvegarde: {e}")
+    
+    def charger_matchs_annules_existants(self) -> pd.DataFrame:
+        """
+        Charge les matchs annulés existants depuis la configuration.
+        
+        Returns:
+            DataFrame des matchs annulés existants
+        """
+        if not self.config_excel_path.exists():
+            return pd.DataFrame()
+        
+        try:
+            df = pd.read_excel(self.config_excel_path, sheet_name='Matchs_Annules')
+            print(f"✓ Matchs annulés existants chargés: {len(df)} matchs")
+            return df
+        except Exception as e:
+            print(f"   ℹ️  Aucun match annulé existant (feuille vide ou inexistante)")
+            # Créer un DataFrame vide avec les bonnes colonnes
+            return pd.DataFrame(columns=[
+                'Equipe_1', 'Equipe_2', 'Genre', 'Poule', 'Semaine', 'Date', 'Horaire',
+                'Gymnase', 'Score', 'Type_Competition', 'Remarques', 'Arbitres'
+            ])
     
     def executer(self):
         """Exécute le processus complet d'importation."""
@@ -1193,37 +1411,114 @@ class ImporteurMatchsExternes:
         if self.dry_run:
             print(f"   - Mode: SIMULATION (dry-run)")
         
-        # 1. Télécharger le fichier externe
-        self.df_externe = self.telecharger_fichier_externe()
+        # 1. Télécharger le fichier externe (ou réutiliser un DataFrame préchargé)
+        if self.df_externe is None:
+            self.df_externe = self.telecharger_fichier_externe()
+        else:
+            try:
+                nb_lignes = len(self.df_externe)
+            except Exception:
+                nb_lignes = 'N/A'
+            print(f"\n📂 Fichier externe déjà chargé (réutilisation, {nb_lignes} lignes)")
         
-        # 2. Explorer la structure (optionnel, pour debug)
-        # self.explorer_structure()
+        # 2. Pré-filtrer par sport pour avoir tous les matchs du sport
+        df_sport = self.df_externe.copy()
+        if 'Sport' in df_sport.columns:
+            df_sport = df_sport[df_sport['Sport'].str.upper() == self.sport]
+            print(f"\n📊 Matchs du sport '{self.sport}': {len(df_sport)} matchs au total")
         
-        # 3. Filtrer les matchs
-        print(f"\n🔍 Filtrage des matchs...")
-        df_filtre = self.filtrer_matchs(self.df_externe)
-        
-        if len(df_filtre) == 0:
-            print("⚠️  Aucun match ne correspond aux critères. Arrêt.")
+        if len(df_sport) == 0:
+            print("⚠️  Aucun match pour ce sport. Arrêt.")
             return
         
-        # 4. Convertir vers le format config
-        print(f"\n🔄 Conversion vers le format Matchs_Fixes...")
-        df_convertis = self.convertir_vers_format_config(df_filtre)
+        # 3. Séparer les matchs en deux catégories :
+        #    - Matchs_Fixes : avec score OU sans mention d'annulation
+        #    - Matchs_Annules : avec mention d'annulation dans les remarques
+        print(f"\n📋 Séparation des matchs...")
         
-        # 5. Charger les matchs existants
+        df_fixes_bruts = self.identifier_matchs_fixes(df_sport)
+        df_annules_bruts = self.identifier_matchs_annules(df_sport)
+        
+        print(f"   → {len(df_fixes_bruts)} match(s) pour Matchs_Fixes")
+        print(f"   → {len(df_annules_bruts)} match(s) pour Matchs_Annules")
+        
+        # 4. Appliquer les filtres supplémentaires (date_limite, avec_score, sans_score)
+        if self.date_limite or self.avec_score or self.sans_score:
+            print(f"\n🔍 Application des filtres supplémentaires...")
+            df_fixes_bruts = self._appliquer_filtres_optionnels(df_fixes_bruts)
+            print(f"   → {len(df_fixes_bruts)} match(s) après filtres pour Matchs_Fixes")
+        
+        # 5. Convertir vers le format config
+        df_convertis = pd.DataFrame()
+        if len(df_fixes_bruts) > 0:
+            print(f"\n🔄 Conversion vers le format Matchs_Fixes...")
+            df_convertis = self.convertir_vers_format_config(df_fixes_bruts.copy())
+        
+        df_annules_convertis = pd.DataFrame()
+        if len(df_annules_bruts) > 0:
+            print(f"\n🔄 Conversion vers le format Matchs_Annules...")
+            # Désactiver temporairement le filtrage des annulations pour la conversion
+            old_ignorer_annules = self.ignorer_annules
+            self.ignorer_annules = False
+            df_annules_convertis = self.convertir_vers_format_config(df_annules_bruts.copy())
+            self.ignorer_annules = old_ignorer_annules
+        
+        # 6. Charger les matchs existants
         print(f"\n📂 Chargement des matchs existants...")
         df_existants = self.charger_matchs_fixes_existants()
         
-        # 6. Fusionner
-        df_final = self.fusionner_matchs(df_convertis, df_existants)
+        # 7. Fusionner les matchs fixes
+        if len(df_convertis) > 0:
+            df_final = self.fusionner_matchs(df_convertis, df_existants)
+        else:
+            df_final = df_existants
         
-        # 7. Sauvegarder
-        self.sauvegarder_configuration(df_final)
+        # 8. Charger et fusionner les matchs annulés existants
+        df_annules_final = None
+        if len(df_annules_convertis) > 0:
+            df_annules_existants = self.charger_matchs_annules_existants()
+            if len(df_annules_existants) > 0:
+                df_annules_final = self.fusionner_matchs(df_annules_convertis, df_annules_existants)
+            else:
+                df_annules_final = df_annules_convertis
+        
+        # 9. Sauvegarder
+        self.sauvegarder_configuration(df_final, df_annules_final)
         
         print("\n" + "="*70)
         print("✅ IMPORTATION TERMINÉE")
         print("="*70)
+    
+    def _appliquer_filtres_optionnels(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Applique les filtres optionnels (date_limite, avec_score, sans_score).
+        
+        Args:
+            df: DataFrame source
+            
+        Returns:
+            DataFrame filtré
+        """
+        df_filtre = df.copy()
+        
+        # Filtre par date
+        if self.date_limite and 'Date' in df_filtre.columns:
+            df_filtre['_Date_parsed'] = pd.to_datetime(df_filtre['Date'], errors='coerce')
+            df_filtre = df_filtre[df_filtre['_Date_parsed'] <= self.date_limite]
+            df_filtre = df_filtre.drop(columns=['_Date_parsed'])
+            print(f"   → Filtre date ≤ {format_user_date(self.date_limite)}: {len(df_filtre)} matchs")
+        
+        # Filtre par score
+        score_col = 'Résultats' if 'Résultats' in df_filtre.columns else 'Score'
+        if score_col in df_filtre.columns:
+            if self.avec_score:
+                df_filtre = df_filtre[df_filtre[score_col].notna() & (df_filtre[score_col].astype(str).str.strip() != '')]
+                print(f"   → Filtre avec score: {len(df_filtre)} matchs")
+            elif self.sans_score:
+                df_filtre = df_filtre[df_filtre[score_col].isna() | (df_filtre[score_col].astype(str).str.strip() == '')]
+                print(f"   → Filtre sans score: {len(df_filtre)} matchs")
+        
+        return df_filtre
 
 
 def main():
@@ -1256,7 +1551,8 @@ def main():
     parser.add_argument(
         '--sport',
         default='VB',
-        help="Code du sport (défaut: VB pour Volley-Ball)"
+        choices=['VB', 'HB', 'BB', 'FB', 'FS', 'RG', 'BD', 'TT'],
+        help="Code du sport: VB (Volleyball), HB (Handball), BB (Basketball), FB (Football), FS (Futsal), RG (Rugby), BD (Badminton), TT (Tennis Table). Défaut: VB"
     )
     parser.add_argument(
         '--journee',
@@ -1309,6 +1605,12 @@ def main():
         dest='ignorer_annules',
         help="Garder les matchs avec 'annule' ou 'erreur' dans les remarques"
     )
+    parser.add_argument(
+        '--priorite-doublons',
+        choices=['ancien', 'nouveau'],
+        default='ancien',
+        help="Détermine quelle version garder en cas de doublon (défaut: ancien)"
+    )
     
     args = parser.parse_args()
     
@@ -1324,7 +1626,8 @@ def main():
             sans_score=args.sans_score,
             tous=args.tous,
             dry_run=args.dry_run,
-            ignorer_annules=args.ignorer_annules
+            ignorer_annules=args.ignorer_annules,
+            doublon_priorite=args.priorite_doublons
         )
         
         if args.explorer:

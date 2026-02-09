@@ -1,18 +1,11 @@
 """
 Module de vérification post-solution des contraintes.
-Vérifie qu'une solution générée respecte toute            # Usage des créneaux
-            key_creneau = (creneau.semaine, creneau.gymnase, creneau.horaire)
-            etat['creneaux_usage'][key_creneau] += 1
-            
-            # Équipes par créneau (semaine, horaire) pour détecter conflits
-            # IMPORTANT: Utiliser id_unique pour distinguer équipes de même nom mais genre différent
-            key_equipes = (creneau.semaine, creneau.horaire)
-            etat['equipes_par_creneau'][key_equipes].add(match.equipe1.id_unique)
-            etat['equipes_par_creneau'][key_equipes].add(match.equipe2.id_unique)
-            
-            # Matchs par équipe et semaine
-            etat['matchs_par_equipe_semaine'][(match.equipe1.id_unique, creneau.semaine)] += 1
-            etat['matchs_par_equipe_semaine'][(match.equipe2.id_unique, creneau.semaine)] += 1intes.
+
+Vérifie qu'une solution générée respecte toutes les contraintes définies :
+- Contraintes dures (bloquantes)
+- Contraintes souples (pénalités)
+
+Ce module est utilisé après la résolution pour valider la qualité de la solution.
 """
 
 from typing import List, Dict, Tuple, Set
@@ -27,11 +20,12 @@ from pycalendar.core.config import Config
 class ViolationDetail:
     """Détail d'une violation de contrainte."""
     type_contrainte: str
-    severite: str  # "DURE" ou "SOUPLE"
+    severite: str  # "DURE", "SOUPLE", ou "DURE_FIXE" (match fixe)
     description: str
     match_concerne: str = ""
     creneau_concerne: str = ""
     penalite: float = 0.0
+    est_match_fixe: bool = False  # True si la violation concerne un match fixé manuellement
 
 
 class SolutionValidator:
@@ -55,9 +49,12 @@ class SolutionValidator:
         """
         self.violations = []
         
+        # Cas spécial : aucun match planifié
         if not solution or not solution.matchs_planifies:
+            nb_non_planifies = len(solution.matchs_non_planifies) if solution else 0
             return False, {
                 'est_valide': False,
+                'aucun_match': True,  # Flag pour affichage spécial
                 'message': 'Aucun match planifié',
                 'violations': [],
                 'nb_violations_dures': 0,
@@ -65,7 +62,7 @@ class SolutionValidator:
                 'violations_dures': [],
                 'violations_souples': [],
                 'nb_matchs_planifies': 0,
-                'nb_matchs_non_planifies': len(solution.matchs_non_planifies) if solution else 0,
+                'nb_matchs_non_planifies': nb_non_planifies,
                 'taux_planification': 0.0,
                 'stats_compaction': None,
                 'stats_overlaps': None,
@@ -89,20 +86,41 @@ class SolutionValidator:
         stats_compaction = self._verifier_compaction_temporelle(solution.matchs_planifies)
         stats_overlaps = self._verifier_overlaps_institution(solution.matchs_planifies)
         
-        # Séparer violations dures et souples
+        # Séparer violations par catégorie:
+        # - DURE: violations graves sur matchs planifiés par le solver
+        # - DURE_FIXE: violations sur matchs importés manuellement (moins grave, hors contrôle solver)
+        # - SOUPLE: pénalités d'optimisation
         violations_dures = [v for v in self.violations if v.severite == "DURE"]
+        violations_dures_fixes = [v for v in self.violations if v.severite == "DURE_FIXE"]
         violations_souples = [v for v in self.violations if v.severite == "SOUPLE"]
         
+        # La solution est valide si pas de violations dures (hors matchs fixes)
+        # Les matchs fixes sont importés manuellement, leurs violations ne comptent pas
         est_valide = len(violations_dures) == 0
+        
+        # Statistiques sur les ententes
+        from pycalendar.core.models import EntenteStatus
+        nb_ententes = sum(1 for m in solution.matchs_planifies + solution.matchs_non_planifies 
+                         if m.is_entente)
+        ententes_par_status = {}
+        for status in EntenteStatus:
+            count = sum(1 for m in solution.matchs_planifies + solution.matchs_non_planifies 
+                       if m.entente_status == status)
+            if count > 0:
+                ententes_par_status[status.value] = count
         
         rapport = {
             'est_valide': est_valide,
             'nb_violations_dures': len(violations_dures),
+            'nb_violations_dures_fixes': len(violations_dures_fixes),
             'nb_violations_souples': len(violations_souples),
             'violations_dures': violations_dures,
+            'violations_dures_fixes': violations_dures_fixes,
             'violations_souples': violations_souples,
             'nb_matchs_planifies': len(solution.matchs_planifies),
             'nb_matchs_non_planifies': len(solution.matchs_non_planifies),
+            'nb_ententes': nb_ententes,
+            'ententes_par_status': ententes_par_status,
             'taux_planification': solution.taux_planification(),
             'stats_compaction': stats_compaction,
             'stats_overlaps': stats_overlaps,
@@ -147,6 +165,28 @@ class SolutionValidator:
         
         return etat
     
+    def _is_fixed_match(self, match: Match) -> bool:
+        """Vérifie si un match est fixé manuellement (importé, pas planifié par le solver)."""
+        return match.is_fixed  # Utilise la propriété du modèle Match
+    
+    def _is_entente_match(self, match: Match) -> bool:
+        """Vérifie si un match est une entente (joué hors calendrier)."""
+        return match.is_entente  # Utilise la propriété du modèle Match
+    
+    def _get_severity(self, match: Match, base_severity: str = "DURE") -> str:
+        """
+        Retourne la sévérité appropriée selon que le match est fixe ou non.
+        
+        Les matchs fixes ont été importés manuellement et leurs violations ne sont pas
+        la responsabilité du solver - on les signale mais avec une sévérité réduite.
+        
+        Les ententes ne sont pas validées de la même façon car elles sont jouées
+        hors calendrier officiel.
+        """
+        if self._is_fixed_match(match):
+            return "DURE_FIXE"  # Sera affiché séparément
+        return base_severity
+    
     def _verifier_disponibilite_equipes(self, matchs: List[Match]):
         """Vérifie que toutes les équipes sont disponibles."""
         for match in matchs:
@@ -155,25 +195,28 @@ class SolutionValidator:
             
             semaine = match.creneau.semaine
             horaire = match.creneau.horaire
+            is_fixed = self._is_fixed_match(match)
             
             if not match.equipe1.est_disponible(semaine, horaire):
                 self.violations.append(ViolationDetail(
                     type_contrainte="Disponibilité équipe",
-                    severite="DURE",
+                    severite=self._get_severity(match),
                     description=f"L'équipe {match.equipe1.nom} n'est pas disponible semaine {semaine} à {horaire}",
                     match_concerne=f"{match.equipe1.nom} vs {match.equipe2.nom}",
                     creneau_concerne=f"S{semaine} - {match.creneau.gymnase} - {horaire}",
-                    penalite=10000  # Hard constraint
+                    penalite=10000,
+                    est_match_fixe=is_fixed
                 ))
             
             if not match.equipe2.est_disponible(semaine, horaire):
                 self.violations.append(ViolationDetail(
                     type_contrainte="Disponibilité équipe",
-                    severite="DURE",
+                    severite=self._get_severity(match),
                     description=f"L'équipe {match.equipe2.nom} n'est pas disponible semaine {semaine} à {horaire}",
                     match_concerne=f"{match.equipe1.nom} vs {match.equipe2.nom}",
                     creneau_concerne=f"S{semaine} - {match.creneau.gymnase} - {horaire}",
-                    penalite=10000  # Hard constraint
+                    penalite=10000,
+                    est_match_fixe=is_fixed
                 ))
     
     def _verifier_disponibilite_gymnases(self, matchs: List[Match]):
@@ -184,26 +227,29 @@ class SolutionValidator:
             
             creneau = match.creneau
             gymnase = self.gymnases.get(creneau.gymnase)
+            is_fixed = self._is_fixed_match(match)
             
             if not gymnase:
                 self.violations.append(ViolationDetail(
                     type_contrainte="Gymnase inexistant",
-                    severite="DURE",
+                    severite=self._get_severity(match),
                     description=f"Le gymnase {creneau.gymnase} n'existe pas",
                     match_concerne=f"{match.equipe1.nom} vs {match.equipe2.nom}",
                     creneau_concerne=f"S{creneau.semaine} - {creneau.gymnase} - {creneau.horaire}",
-                    penalite=10000  # Hard constraint
+                    penalite=10000,
+                    est_match_fixe=is_fixed
                 ))
                 continue
             
             if not gymnase.est_disponible(creneau.semaine, creneau.horaire):
                 self.violations.append(ViolationDetail(
                     type_contrainte="Disponibilité gymnase",
-                    severite="DURE",
+                    severite=self._get_severity(match),
                     description=f"Le gymnase {creneau.gymnase} n'est pas disponible à {creneau.horaire}",
                     match_concerne=f"{match.equipe1.nom} vs {match.equipe2.nom}",
                     creneau_concerne=f"S{creneau.semaine} - {creneau.gymnase} - {creneau.horaire}",
-                    penalite=10000  # Hard constraint
+                    penalite=10000,
+                    est_match_fixe=is_fixed
                 ))
     
     def _verifier_capacite_gymnases(self, matchs: List[Match], etat: Dict):
@@ -212,18 +258,24 @@ class SolutionValidator:
         IMPORTANT: Cette vérification prend en compte la durée réelle des matchs (configurable).
         Un match à 15h occupe un terrain de 15h à 16h30 (handball) ou 17h (volley), donc il 
         réduit la capacité disponible des créneaux adjacents.
+        
+        NOTE: Les matchs en entente ne sont pas comptabilisés car ils sont joués hors calendrier.
         """
         from collections import defaultdict
         
         # Récupérer la durée d'un match depuis la config
         match_duration_minutes = self.config.duree_match_minutes
         
-        # Helper function: convertir horaire "14h00" en minutes depuis minuit
+        # Helper function: convertir horaire "14h00" ou "14:00" en minutes depuis minuit
         def horaire_to_minutes(horaire: str) -> int:
-            """Convertit '14h00' en 840 (14*60)"""
-            if not horaire or 'h' not in horaire:
+            """Convertit '14h00' ou '14:00' en 840 (14*60)"""
+            if not horaire:
                 return 0
-            parts = horaire.lower().split('h')
+            # Normaliser: remplacer 'h' par ':' si présent
+            horaire_norm = horaire.lower().replace('h', ':')
+            if ':' not in horaire_norm:
+                return 0
+            parts = horaire_norm.split(':')
             heures = int(parts[0])
             minutes = int(parts[1]) if len(parts) > 1 and parts[1] else 0
             return heures * 60 + minutes
@@ -245,6 +297,17 @@ class SolutionValidator:
         # Calculer l'occupation réelle par créneau en tenant compte des chevauchements
         # Format: {(semaine, gymnase, horaire): nb_terrains_occupes}
         occupation_reelle = defaultdict(int)
+        # Tracker les matchs par créneau pour déterminer si fixes ou non
+        matchs_par_creneau = defaultdict(list)
+        
+        for match in matchs:
+            if not match.creneau:
+                continue
+            # Ignorer les matchs en entente (joués hors calendrier)
+            if self._is_entente_match(match):
+                continue
+            key = (match.creneau.semaine, match.creneau.gymnase, match.creneau.horaire)
+            matchs_par_creneau[key].append(match)
         
         for key_match, count_match in etat['creneaux_usage'].items():
             semaine_match, gymnase_match, horaire_match = key_match
@@ -271,12 +334,18 @@ class SolutionValidator:
                 # Compter le nombre de matchs à cet horaire exact (pour le message)
                 nb_matchs_exact = etat['creneaux_usage'].get(key_creneau, 0)
                 
+                # Déterminer si la violation est due à des matchs fixes
+                matchs_creneau = matchs_par_creneau.get(key_creneau, [])
+                nb_fixes = sum(1 for m in matchs_creneau if self._is_fixed_match(m))
+                tous_fixes = nb_fixes == len(matchs_creneau) if matchs_creneau else False
+                
                 self.violations.append(ViolationDetail(
                     type_contrainte="Capacité gymnase",
-                    severite="DURE",
+                    severite="DURE_FIXE" if tous_fixes else "DURE",
                     description=f"Capacité dépassée: {nb_matchs_chevauchants}/{gymnase.capacite} matchs chevauchants au gymnase {gymnase_nom} (dont {nb_matchs_exact} à cet horaire exact)",
                     creneau_concerne=f"S{semaine} - {gymnase_nom} - {horaire}",
-                    penalite=500  # Hard constraint
+                    penalite=500,
+                    est_match_fixe=tous_fixes
                 ))
     
     def _verifier_unicite_equipes_par_creneau(self, matchs: List[Match], etat: Dict):
@@ -290,37 +359,58 @@ class SolutionValidator:
                             m.creneau.horaire == horaire]
             
             equipes_count = defaultdict(int)
+            equipes_matchs = defaultdict(list)  # Pour tracker les matchs par équipe
             for match in matchs_creneau:
                 equipes_count[match.equipe1.id_unique] += 1
                 equipes_count[match.equipe2.id_unique] += 1
+                equipes_matchs[match.equipe1.id_unique].append(match)
+                equipes_matchs[match.equipe2.id_unique].append(match)
             
             for equipe_id, count in equipes_count.items():
                 if count > 1:
+                    # Déterminer si tous les matchs impliqués sont fixes
+                    matchs_equipe = equipes_matchs[equipe_id]
+                    tous_fixes = all(self._is_fixed_match(m) for m in matchs_equipe)
+                    
                     # Afficher le nom complet avec le genre pour différencier les équipes
                     equipe_nom_complet = equipe_id.replace('|', ' ')
                     self.violations.append(ViolationDetail(
                         type_contrainte="Équipe joue plusieurs fois simultanément",
-                        severite="DURE",
+                        severite="DURE_FIXE" if tous_fixes else "DURE",
                         description=f"L'équipe {equipe_nom_complet} joue {count} fois au même créneau",
                         creneau_concerne=f"S{semaine} - {horaire}",
-                        penalite=1000.0
+                        penalite=1000.0,
+                        est_match_fixe=tous_fixes
                     ))
     
     def _verifier_max_matchs_par_semaine(self, matchs: List[Match], etat: Dict):
         """Vérifie que les équipes ne jouent pas trop de matchs par semaine."""
         max_matchs = self.config.max_matchs_par_equipe_par_semaine
         
+        # Construire un index des matchs par équipe et semaine
+        matchs_par_equipe_semaine = defaultdict(list)
+        for match in matchs:
+            if not match.creneau:
+                continue
+            matchs_par_equipe_semaine[(match.equipe1.id_unique, match.creneau.semaine)].append(match)
+            matchs_par_equipe_semaine[(match.equipe2.id_unique, match.creneau.semaine)].append(match)
+        
         for key, count in etat['matchs_par_equipe_semaine'].items():
             equipe_id, semaine = key
             
             if count > max_matchs:
+                # Déterminer si tous les matchs impliqués sont fixes
+                matchs_equipe = matchs_par_equipe_semaine.get(key, [])
+                tous_fixes = all(self._is_fixed_match(m) for m in matchs_equipe) if matchs_equipe else False
+                
                 # Afficher le nom complet avec le genre
                 equipe_nom_complet = equipe_id.replace('|', ' ')
                 self.violations.append(ViolationDetail(
                     type_contrainte="Trop de matchs par semaine",
-                    severite="DURE",
+                    severite="DURE_FIXE" if tous_fixes else "DURE",
                     description=f"L'équipe {equipe_nom_complet} joue {count} matchs semaine {semaine} (max: {max_matchs})",
-                    penalite=500.0
+                    penalite=500.0,
+                    est_match_fixe=tous_fixes
                 ))
     
     def _verifier_obligations_presence(self, matchs: List[Match]):
@@ -337,15 +427,17 @@ class SolutionValidator:
             
             inst1 = match.equipe1.institution
             inst2 = match.equipe2.institution
+            is_fixed = self._is_fixed_match(match)
             
             if institution_requise not in [inst1, inst2]:
                 self.violations.append(ViolationDetail(
                     type_contrainte="Obligation de présence",
-                    severite="DURE",
+                    severite=self._get_severity(match),
                     description=f"Match au gymnase {gymnase_nom} mais aucune équipe de {institution_requise}",
                     match_concerne=f"{match.equipe1.nom} ({inst1}) vs {match.equipe2.nom} ({inst2})",
                     creneau_concerne=f"S{match.creneau.semaine} - {gymnase_nom} - {match.creneau.horaire}",
-                    penalite=1000.0
+                    penalite=1000.0,
+                    est_match_fixe=is_fixed
                 ))
     
     def _parse_horaire(self, horaire_str: str) -> int:
@@ -722,102 +814,98 @@ class SolutionValidator:
 
 def afficher_rapport_validation(rapport: Dict) -> None:
     """Affiche un rapport de validation formaté."""
-    print("\n" + "="*60)
-    print("RAPPORT DE VALIDATION DES CONTRAINTES")
-    print("="*60)
+    from pycalendar.core.console import (
+        print_header, print_section, print_subsection,
+        print_success, print_error, print_warning, print_info,
+        print_key_value, print_detail, print_separator, print_blank
+    )
     
-    print(f"\n📊 Résumé:")
-    print(f"  • Matchs planifiés: {rapport['nb_matchs_planifies']}")
-    print(f"  • Matchs non planifiés: {rapport['nb_matchs_non_planifies']}")
-    print(f"  • Taux de planification: {rapport['taux_planification']:.1f}%")
+    print_section("Validation des contraintes", "🔍")
     
-    print(f"\n🔍 Contraintes:")
-    print(f"  • Violations DURES: {rapport['nb_violations_dures']}")
-    print(f"  • Violations SOUPLES: {rapport['nb_violations_souples']}")
+    # Cas spécial : aucun match planifié
+    if rapport.get('aucun_match'):
+        print_warning(f"Aucun match planifié ({rapport['nb_matchs_non_planifies']} matchs non planifiés)")
+        print_info("La validation des contraintes n'est pas applicable")
+        return
     
+    # Résumé concis
+    print_key_value("Matchs planifiés", f"{rapport['nb_matchs_planifies']} ({rapport['taux_planification']:.1f}%)")
+    if rapport['nb_matchs_non_planifies'] > 0:
+        print_key_value("Non planifiés", rapport['nb_matchs_non_planifies'])
+    
+    # Récupérer les violations sur matchs fixes (si présentes)
+    violations_fixes = rapport.get('violations_dures_fixes', [])
+    nb_fixes = rapport.get('nb_violations_dures_fixes', len(violations_fixes))
+    
+    # Statut principal
+    print_blank()
     if rapport['est_valide']:
-        print(f"\n✅ SOLUTION VALIDE - Toutes les contraintes dures sont respectées!")
+        if rapport['nb_violations_souples'] == 0 and nb_fixes == 0:
+            print_success("Solution valide - toutes les contraintes respectées")
+        elif nb_fixes > 0:
+            # Solution valide (solver OK) mais problèmes sur matchs importés
+            print_success(f"Solution valide")
+            print_warning(f"{nb_fixes} problème(s) sur matchs importés (hors contrôle solver)")
+        else:
+            print_success(f"Solution valide ({rapport['nb_violations_souples']} contrainte(s) souple(s) non optimale(s))")
     else:
-        print(f"\n❌ SOLUTION INVALIDE - {rapport['nb_violations_dures']} contrainte(s) dure(s) violée(s)")
+        print_error(f"Solution invalide - {rapport['nb_violations_dures']} contrainte(s) dure(s) violée(s)")
     
-    # Afficher les violations dures
+    # Détails des violations dures (matchs planifiés par le solver)
     if rapport['violations_dures']:
-        print("\n" + "="*60)
-        print("⚠️  VIOLATIONS DE CONTRAINTES DURES")
-        print("="*60)
+        print_subsection("Contraintes dures violées")
         
         violations_par_type = defaultdict(list)
         for v in rapport['violations_dures']:
             violations_par_type[v.type_contrainte].append(v)
         
         for type_contrainte, violations in violations_par_type.items():
-            print(f"\n🔴 {type_contrainte} ({len(violations)} violation(s)):")
-            for i, v in enumerate(violations[:5], 1):  # Limiter à 5 par type
-                print(f"  {i}. {v.description}")
-                if v.match_concerne:
-                    print(f"     Match: {v.match_concerne}")
-                if v.creneau_concerne:
-                    print(f"     Créneau: {v.creneau_concerne}")
-            
-            if len(violations) > 5:
-                print(f"  ... et {len(violations) - 5} autre(s)")
+            print_detail(f"{type_contrainte}: {len(violations)} violation(s)", 1)
+            for v in violations[:3]:
+                print_detail(f"{v.description}", 2)
+            if len(violations) > 3:
+                print_detail(f"... +{len(violations) - 3} autre(s)", 2)
     
-    # Afficher les violations souples
+    # Violations sur matchs fixes (affichage réduit, informatif)
+    if violations_fixes:
+        print_subsection("Problèmes sur matchs importés (📌)")
+        print_info("Ces matchs ont été importés manuellement - vérifiez les données sources")
+        
+        violations_par_type = defaultdict(list)
+        for v in violations_fixes:
+            violations_par_type[v.type_contrainte].append(v)
+        
+        for type_contrainte, violations in violations_par_type.items():
+            print_detail(f"{type_contrainte}: {len(violations)}", 1)
+            # Montrer seulement 2 exemples pour les matchs fixes
+            for v in violations[:2]:
+                print_detail(f"{v.description}", 2)
+            if len(violations) > 2:
+                print_detail(f"... +{len(violations) - 2} autre(s)", 2)
+    
+    # Résumé des violations souples (juste les totaux)
     if rapport['violations_souples']:
-        print("\n" + "="*60)
-        print("ℹ️  VIOLATIONS DE CONTRAINTES SOUPLES")
-        print("="*60)
+        print_subsection("Contraintes souples (pénalités)")
         
         violations_par_type = defaultdict(list)
         for v in rapport['violations_souples']:
             violations_par_type[v.type_contrainte].append(v)
         
         for type_contrainte, violations in violations_par_type.items():
-            print(f"\n🟡 {type_contrainte} ({len(violations)} violation(s)):")
-            # Juste compter pour les souples, ne pas tout afficher
             penalite_totale = sum(v.penalite for v in violations)
-            print(f"   Pénalité totale: {penalite_totale:.0f}")
+            print_detail(f"{type_contrainte}: {len(violations)} (pénalité: {penalite_totale:.0f})", 1)
     
-    # Afficher les statistiques détaillées sur les préférences d'horaires
+    # Statistiques préférences horaires (si pertinentes)
     if rapport.get('stats_preferences_horaires'):
         stats = rapport['stats_preferences_horaires']
-        print("\n" + "="*60)
-        print("⏰ STATISTIQUES PRÉFÉRENCES D'HORAIRES")
-        print("="*60)
-        
-        # Afficher la tolérance configurée
-        tolerance = stats.get('tolerance_minutes', 0)
-        if tolerance > 0:
-            print(f"\n⚙️  Tolérance configurée: {tolerance:.0f} minutes ({tolerance/60:.1f}h)")
-        
-        print(f"\n📊 Vue d'ensemble:")
-        print(f"  • Matchs avec préférences: {stats['nb_matchs_avec_preferences']}")
-        print(f"  • Matchs respectés exactement: {stats['nb_matchs_respectes']}")
-        if tolerance > 0:
-            print(f"  • Matchs dans la tolérance: {stats.get('nb_matchs_dans_tolerance', 0)}")
-            nb_total_acceptables = stats['nb_matchs_respectes'] + stats.get('nb_matchs_dans_tolerance', 0)
-            if stats['nb_matchs_avec_preferences'] > 0:
-                taux_respect_total = (nb_total_acceptables / stats['nb_matchs_avec_preferences']) * 100
-                print(f"  • Taux de respect total (exact + tolérance): {taux_respect_total:.1f}%")
-        if stats['nb_matchs_avec_preferences'] > 0:
-            taux_respect_exact = (stats['nb_matchs_respectes'] / stats['nb_matchs_avec_preferences']) * 100
-            print(f"  • Taux de respect exact: {taux_respect_exact:.1f}%")
-        
-        print(f"\n📉 Violations hors tolérance par catégorie:")
-        print(f"  • Match AVANT horaire (1 équipe): {stats['nb_violations_avant_1_equipe']} (mult. 100)")
-        print(f"  • Match AVANT horaire (2 équipes): {stats['nb_violations_avant_2_equipes']} (mult. 300)")
-        print(f"  • Match APRÈS horaire: {stats['nb_violations_apres']} (mult. 10)")
-        
-        print(f"\n📏 Distances (hors tolérance uniquement):")
-        print(f"  • Distance totale: {stats['distance_totale']:.1f}h")
-        print(f"  • Distance maximale: {stats['distance_max']:.1f}h")
-        nb_matchs_acceptables = stats['nb_matchs_respectes'] + stats.get('nb_matchs_dans_tolerance', 0)
-        if stats['nb_matchs_avec_preferences'] > nb_matchs_acceptables:
-            nb_violations = stats['nb_matchs_avec_preferences'] - nb_matchs_acceptables
-            distance_moyenne = stats['distance_totale'] / nb_violations if nb_violations > 0 else 0
-            print(f"  • Distance moyenne par violation: {distance_moyenne:.1f}h")
-        
-        print(f"\n💰 Pénalités:")
-        print(f"  • Pénalité totale: {stats['penalite_totale']:.0f}")
-    
-    print("\n" + "="*60)
+        if stats.get('nb_matchs_avec_preferences', 0) > 0:
+            print_subsection("Préférences d'horaires")
+            
+            nb_prefs = stats['nb_matchs_avec_preferences']
+            nb_respectes = stats['nb_matchs_respectes']
+            nb_tolerance = stats.get('nb_matchs_dans_tolerance', 0)
+            taux = ((nb_respectes + nb_tolerance) / nb_prefs * 100) if nb_prefs > 0 else 100
+            
+            print_detail(f"Respectées: {nb_respectes + nb_tolerance}/{nb_prefs} ({taux:.0f}%)", 1)
+            if stats.get('penalite_totale', 0) > 0:
+                print_detail(f"Pénalité: {stats['penalite_totale']:.0f}", 1)

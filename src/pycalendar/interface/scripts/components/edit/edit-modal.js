@@ -413,15 +413,20 @@ window.EditModal = class EditModal {
         
         const newSlot = { semaine, horaire, gymnase };
         
-        // Ajouter la modification
-        this.modificationManager.addModification(
-            this.currentMatch.match_id,
-            originalSlot,
-            newSlot
-        );
+        // Créer l'objet modification avec le bon format
+        const modification = {
+            match_id: this.currentMatch.match_id,
+            timestamp: new Date().toISOString(),
+            original: originalSlot,
+            new: newSlot,
+            author: 'user'
+        };
         
-        // Mettre à jour le match dans le DataManager
-        this.dataManager.updateMatch(this.currentMatch.match_id, newSlot);
+        // Ajouter la modification
+        this.modificationManager.addModification(modification);
+        
+        // Appliquer la modification via DataManager
+        this.dataManager.applyModification(this.currentMatch.match_id, newSlot);
         
         this.close();
     }
@@ -446,15 +451,21 @@ window.EditModal = class EditModal {
             gymnase: null
         };
         
-        // Ajouter la modification
-        this.modificationManager.addModification(
-            this.currentMatch.match_id,
-            originalSlot,
-            newSlot
-        );
+        // Créer l'objet modification avec le bon format
+        const modification = {
+            match_id: this.currentMatch.match_id,
+            timestamp: new Date().toISOString(),
+            original: originalSlot,
+            new: newSlot,
+            author: 'user',
+            reason: 'unscheduled'
+        };
         
-        // Mettre à jour le match
-        this.dataManager.updateMatch(this.currentMatch.match_id, newSlot);
+        // Ajouter la modification
+        this.modificationManager.addModification(modification);
+        
+        // Déplanifier le match via DataManager
+        this.dataManager.unscheduleMatch(this.currentMatch.match_id);
         
         this.close();
     }
