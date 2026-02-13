@@ -9,7 +9,7 @@ fichiers:
 
 # Paramètres de planification (seulement valeurs différentes des défauts)
 planification:
-  semaine_min: 4     # Première semaine où le planificateur peut poser de nouveaux matchs
+  semaine_min: 7     # Première semaine où le planificateur peut poser de nouveaux matchs
   nb_semaines: 14    # Nombre total de semaines de compétition (calendrier: semaine 1 à 10)
 
 

@@ -47,8 +47,7 @@ pip-delete-this-directory.txt
 # -----------------------------------------------------------------------------
 # Données Réelles (à exclure pour confidentialité)
 # -----------------------------------------------------------------------------
-data_volley/
-data_hand/
+
 !data_volley/.gitkeep
 !data_hand/.gitkeep
 
@@ -61,6 +60,8 @@ test_solutions/
 temp_poules/
 *.log
 orchestration.log
+*.pdf
+.cache/
 
 # Fichiers Excel générés
 Calendrier_Genere*.xlsx

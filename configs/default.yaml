@@ -185,3 +185,23 @@ sport:
   # niveaux: ["A1", "A2", "A3", "A4"]   # Niveaux disponibles
   # genres: ["M", "F"]                  # Genres: M(asculin), F(éminin), X(mixte)
   # types_championnat: ["Acad", "CFE", "CFU"]  # Types de compétition
+
+# ============================================================================
+# MYSPORTU — Connexion à la plateforme en ligne
+# ============================================================================
+mysportu:
+  auth:
+    username: "0838827"    # Identifiant MySportU (ou env MYSPORTU_USERNAME)
+    password: "CheeGliFFSU2!"  # Mot de passe MySportU (ou env MYSPORTU_PASSWORD)
+    base_url: "https://gestion.mysportu.com"
+  cache:
+    enabled: true
+    directory: ".cache/mysportu"
+    ttl_matches: 300       # 5 min — liste complète des matchs
+    ttl_competitions: 3600 # 1h — liste des compétitions
+    ttl_match_detail: 120  # 2 min — détail d'un match
+    ttl_participants: 120  # 2 min — joueurs/staff d'un match
+  requests:
+    delay_between_requests: 0.05  # Délai entre requêtes (secondes)
+    timeout: 30
+    max_retries: 3
