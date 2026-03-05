@@ -456,6 +456,23 @@ class SyncMatch:
     display_b: str = ""
 
 
+def normalize_state_for_sync(state: MatchState) -> MatchState:
+    """
+    Normalise l'état MySportU pour la synchronisation Excel.
+
+    Les forfaits doivent être considérés comme des matchs terminés afin
+    qu'ils restent dans la config et ne soient pas reprogrammés.
+    """
+    if state == MatchState.FORFAIT:
+        return MatchState.TERMINE
+    return state
+
+
+def is_cancelled_for_sync(state: MatchState) -> bool:
+    """Retourne True uniquement pour les états à supprimer en sync."""
+    return state in (MatchState.REPORTE, MatchState.ANNULE)
+
+
 def matches_to_sync(
     matches: list[MatchInfo],
     valid_teams: Set[Tuple[str, str]],
@@ -511,6 +528,8 @@ def matches_to_sync(
         lieu_lib = m.lieu.libelle if m.lieu else None
         gym_resolved = normalize_gymnase(lieu_lib) if lieu_lib else None
 
+        state_for_sync = normalize_state_for_sync(m.state)
+
         sync_matches.append(SyncMatch(
             eq_a_config=eq_a,
             eq_b_config=eq_b,
@@ -520,7 +539,7 @@ def matches_to_sync(
             heure=m.heure if m.heure else None,
             lieu_libelle=lieu_lib,
             score=score_str,
-            state=m.state,
+            state=state_for_sync,
             is_entente=entente,
             api_id=m.id,
             gym_resolved=gym_resolved,
@@ -574,7 +593,7 @@ def excel_to_sync(
         # État
         etat_raw = row.get('etat', '')
         etat_str = str(etat_raw).lower().strip() if not pd.isna(etat_raw) else ''
-        if 'termin' in etat_str:
+        if 'termin' in etat_str or 'forfait' in etat_str or 'ff' in etat_str or 'wo' in etat_str:
             state = MatchState.TERMINE
         elif 'report' in etat_str:
             state = MatchState.REPORTE
@@ -901,14 +920,14 @@ def sync_matches(
         # ── Avertissements pour matchs sans date/gymnase ──
         if semaine_num is None and sm.date_str:
             result.matches_kept_no_date += 1
-            if not sm.state.is_cancelled:
+            if not is_cancelled_for_sync(sm.state):
                 result.issues.append(Issue(
                     type=IssueType.DATE_MISSING,
                     message="Semaine hors calendrier",
                     mysportu_data=f"{sm.eq_a_config} vs {sm.eq_b_config} ({sm.genre}) [{sm.date_str}]",
                     severity="info",
                 ))
-        elif not sm.date_str and not sm.state.is_cancelled:
+        elif not sm.date_str and not is_cancelled_for_sync(sm.state):
             result.matches_kept_no_date += 1
 
         if gymnase is None and not sm.is_entente and sm.lieu_libelle:
@@ -1069,7 +1088,7 @@ def sync_matches(
                         ))
         else:
             # Nouveau match — n'ajouter que si pas annulé
-            if sm.state.is_cancelled:
+            if is_cancelled_for_sync(sm.state):
                 continue
 
             # Un nouveau match sans semaine ET sans gymnase n'est pas importable
@@ -1145,7 +1164,7 @@ def remove_cancelled_matches(
     """
     cancelled_keys: set[frozenset] = set()
     for sm in sync_data:
-        if sm.state.is_cancelled:
+        if is_cancelled_for_sync(sm.state):
             cancelled_keys.add(create_match_key(sm.eq_a_config, sm.eq_b_config, sm.genre))
 
     if not cancelled_keys:
